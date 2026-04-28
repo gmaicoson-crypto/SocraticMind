@@ -62,7 +62,9 @@ import Sidebar from '../components/Sidebar.vue'
 import SocraticDialogue from '../components/SocraticDialogue.vue'
 import NotesPanel from '../components/NotesPanel.vue'
 import KnowledgeGraph from '../components/KnowledgeGraph.vue'
+import { useLearningStore } from '../stores/learning'
 
+const store = useLearningStore()
 const rightPanel = ref<'graph' | 'notes'>('graph')
 const mainRef = ref<HTMLElement | null>(null)
 const leftWidth = ref(0)
@@ -77,6 +79,11 @@ onMounted(() => {
     const total = mainRef.value.clientWidth - DIVIDER_W - 28
     leftWidth.value = Math.round(total * 0.45)
   }
+})
+
+onMounted(async () => {
+  const token = localStorage.getItem('sm_token')
+  if (token) await store.fetchTopics()
 })
 
 function startDrag(e: MouseEvent) {

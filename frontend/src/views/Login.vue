@@ -226,6 +226,8 @@
 <script setup lang="ts">
 import { ref, computed, h } from 'vue'
 import { useRouter } from 'vue-router'
+import { login, register } from '../api/auth'
+import { useLearningStore } from '../stores/learning'
 
 const router = useRouter()
 const mode = ref<'login' | 'register'>('login')
@@ -233,6 +235,8 @@ const focusField = ref('')
 const showPwd = ref(false)
 const submitting = ref(false)
 const errorMsg = ref('')
+
+const store = useLearningStore()
 
 const form = ref({
   name: '',
@@ -284,12 +288,29 @@ async function handleSubmit() {
   }
 
   submitting.value = true
-  // 模拟请求（后端对接时替换）
-  await new Promise(r => setTimeout(r, 800))
-  localStorage.setItem('sm_logged_in', 'true')
-  localStorage.setItem('sm_user', form.value.email)
-  submitting.value = false
-  router.push('/')
+  try {
+    let result
+    if (mode.value === 'login') {
+      result = await login({ email: form.value.email, password: form.value.password })
+    } else {
+      result = await register({
+        username: form.value.name,
+        email: form.value.email,
+        password: form.value.password,
+      })
+    }
+    // 保存 token 和用户信息
+    localStorage.setItem('sm_token', result.access_token)
+    localStorage.setItem('sm_logged_in', 'true')
+    localStorage.setItem('sm_user', JSON.stringify(result.user))
+    store.setUserInfo(result.user)
+    await store.fetchTopics()
+    router.push('/')
+  } catch (err: any) {
+    errorMsg.value = err.response?.data?.detail || '操作失败，请重试'
+  } finally {
+    submitting.value = false
+  }
 }
 
 // 特性列表图标

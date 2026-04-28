@@ -131,10 +131,12 @@
     <!-- Profile -->
     <div class="profile-wrap" style="cursor:pointer" @click="router.push('/profile')">
       <div class="profile-info">
-        <div class="profile-name">李 · 学徒学习者</div>
+        <div class="profile-name">{{ store.userInfo?.username ?? '学习者' }}</div>
         <div class="profile-level">◆ APPRENTICE · LV 4</div>
       </div>
-      <div class="avatar">李</div>
+      <div class="avatar" :style="{ background: store.userInfo?.avatar_grad }">
+        {{ store.userInfo?.username?.slice(0,1) ?? '学' }}
+      </div>
     </div>
   </header>
 </template>

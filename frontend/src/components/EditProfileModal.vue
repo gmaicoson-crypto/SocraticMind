@@ -196,6 +196,8 @@
 <script setup lang="ts">
 import { ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
+import { useLearningStore } from '../stores/learning'
+import { updateMe } from '../api/auth'
 
 type NotificationKey = 'daily' | 'achievement' | 'streak'
 const emit = defineEmits<{ close: [] }>()
@@ -221,35 +223,53 @@ const toggles: { key: NotificationKey; label: string; sub: string }[] = [
   { key: 'streak',      label: '连续学习提醒',   sub: '即将断签时发出警告' },
 ]
 
+const store = useLearningStore()
+
 const form = reactive({
-  name: '李同学',
-  bio: '每一个问题都是通往掌握的一步',
-  email: 'li@example.com',
-  avatarGrad: avatarGrads[0],
-  dailyGoal: 5,
-  aiStyle: '标准',
+  name: store.userInfo?.username ?? '',
+  bio: store.userInfo?.bio ?? '',
+  email: store.userInfo?.email ?? '',
+  avatarGrad: store.userInfo?.avatar_grad ?? avatarGrads[0],
+  dailyGoal: store.userInfo?.daily_goal ?? 5,
+  aiStyle: store.userInfo?.ai_style ?? '标准',
   notifications: {
     daily: true,
     achievement: true,
     streak: false,
-  }as Record<NotificationKey, boolean>,
+  },
 })
 
 async function handleSave() {
   saving.value = true
-  await new Promise(r => setTimeout(r, 900))
-  saving.value = false
-  savedDone.value = true
-  setTimeout(() => {
-    savedDone.value = false
-    emit('close')
-  }, 1500)
+  try {
+    const updated = await updateMe({
+      username: form.name,
+      bio: form.bio,
+      avatar_grad: form.avatarGrad,
+      daily_goal: form.dailyGoal,
+      ai_style: form.aiStyle,
+    })
+    // 更新本地存储和 store
+    localStorage.setItem('sm_user', JSON.stringify(updated))
+    store.setUserInfo(updated)
+    savedDone.value = true
+    setTimeout(() => {
+      savedDone.value = false
+      emit('close')
+    }, 1500)
+  } catch (err: any) {
+    console.error(err)
+  } finally {
+    saving.value = false
+  }
 }
 
 function handleLogout() {
+  localStorage.removeItem('sm_token')
   localStorage.removeItem('sm_logged_in')
   localStorage.removeItem('sm_user')
   router.push('/login')
+  emit('close')
 }
 </script>
 

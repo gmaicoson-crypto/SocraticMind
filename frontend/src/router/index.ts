@@ -27,7 +27,7 @@ const router = createRouter({
 })
 
 router.beforeEach((to) => {
-  const isLoggedIn = localStorage.getItem('sm_logged_in') === 'true'
+  const isLoggedIn = !!localStorage.getItem('sm_token')
   if (to.meta.requiresAuth && !isLoggedIn) {
     return { name: 'login' }
   }
