@@ -1,0 +1,614 @@
+<template>
+  <Teleport to="body">
+    <div class="overlay" @click.self="emit('close')">
+      <div class="modal">
+
+        <!-- 头部 -->
+        <div class="modal-header">
+          <div>
+            <div class="modal-title">编辑个人资料</div>
+            <div class="modal-sub">更新你的信息与学习偏好</div>
+          </div>
+          <button class="close-btn" @click="emit('close')">✕</button>
+        </div>
+
+        <div class="modal-body">
+
+          <!-- 基本信息 -->
+          <div>
+            <div class="section-label">基本信息</div>
+            <div class="avatar-row">
+              <div class="big-avatar" :style="{ background: form.avatarGrad }">
+                {{ form.name.slice(0,1) || '李' }}
+                <div class="avatar-edit">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round">
+                    <path d="M12 20h9M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4 12.5-12.5z"/>
+                  </svg>
+                </div>
+              </div>
+              <div class="avatar-colors">
+                <div class="avatar-hint">选择头像颜色</div>
+                <div class="color-swatches">
+                  <div
+                    v-for="g in avatarGrads"
+                    :key="g"
+                    class="swatch"
+                    :class="{ active: form.avatarGrad === g }"
+                    :style="{ background: g }"
+                    @click="form.avatarGrad = g"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div class="fields">
+              <div class="field">
+                <label>用户名</label>
+                <div class="field-input" :class="{ focused: focusField === 'name' }">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13">
+                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+                  </svg>
+                  <input
+                    v-model="form.name"
+                    type="text"
+                    maxlength="20"
+                    @focus="focusField = 'name'"
+                    @blur="focusField = ''"
+                  />
+                </div>
+                <div class="char-count">{{ form.name.length }} / 20</div>
+              </div>
+
+              <div class="field">
+                <label>个性签名</label>
+                <div class="field-input" :class="{ focused: focusField === 'bio' }">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                  </svg>
+                  <input
+                    v-model="form.bio"
+                    type="text"
+                    maxlength="50"
+                    @focus="focusField = 'bio'"
+                    @blur="focusField = ''"
+                  />
+                </div>
+              </div>
+
+              <div class="field">
+                <label>邮箱地址</label>
+                <div class="field-input readonly">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13">
+                    <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
+                    <polyline points="22,6 12,13 2,6"/>
+                  </svg>
+                  <input type="email" :value="form.email" disabled />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="modal-divider" />
+
+          <!-- 学习偏好 -->
+          <div>
+            <div class="section-label">学习偏好</div>
+            <div class="fields">
+
+              <div class="field">
+                <label>每日目标节点数</label>
+                <div class="slider-row">
+                  <input
+                    type="range" min="1" max="10" step="1"
+                    v-model.number="form.dailyGoal"
+                    class="goal-slider"
+                  />
+                  <div class="slider-val">{{ form.dailyGoal }}</div>
+                </div>
+              </div>
+
+              <div class="field">
+                <label>AI 引导风格</label>
+                <div class="seg">
+                  <button
+                    v-for="s in aiStyles"
+                    :key="s"
+                    class="seg-btn"
+                    :class="{ active: form.aiStyle === s }"
+                    @click="form.aiStyle = s"
+                  >{{ s }}</button>
+                </div>
+              </div>
+
+              <div class="field">
+                <label>通知设置</label>
+                <div class="toggle-list">
+                  <div v-for="t in toggles" :key="t.key" class="toggle-row">
+                    <div>
+                      <div class="toggle-info">{{ t.label }}</div>
+                      <div class="toggle-sub">{{ t.sub }}</div>
+                    </div>
+                    <div
+                      class="toggle"
+                      :class="{ on: form.notifications[t.key] }"
+                      @click="form.notifications[t.key] = !form.notifications[t.key]"
+                    >
+                      <div class="toggle-thumb" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+          <div class="modal-divider" />
+
+          <!-- 账号安全 -->
+          <div>
+            <div class="section-label">账号安全</div>
+            <div class="danger-list">
+              <div class="danger-row">
+                <div>
+                  <div class="danger-info">修改密码</div>
+                  <div class="danger-sub">上次修改：30 天前</div>
+                </div>
+                <button class="danger-btn outline">修改密码</button>
+              </div>
+              <div class="danger-row">
+                <div>
+                  <div class="danger-info">退出登录</div>
+                  <div class="danger-sub">退出当前账号</div>
+                </div>
+                <button class="danger-btn red" @click="handleLogout">退出登录</button>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- 底部 -->
+        <div class="modal-footer">
+          <button class="cancel-btn" @click="emit('close')">取消</button>
+          <button
+            class="save-btn"
+            :class="{ loading: saving, saved: savedDone }"
+            :disabled="saving"
+            @click="handleSave"
+          >
+            <div v-if="saving" class="spinner" />
+            <svg v-else-if="savedDone" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round">
+              <path d="M20 6L9 17l-5-5"/>
+            </svg>
+            <svg v-else width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round">
+              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+              <path d="M17 21v-8H7v8M7 3v5h8"/>
+            </svg>
+            {{ saving ? '保存中…' : savedDone ? '已保存' : '保存更改' }}
+          </button>
+        </div>
+
+      </div>
+    </div>
+  </Teleport>
+</template>
+
+<script setup lang="ts">
+import { ref, reactive } from 'vue'
+import { useRouter } from 'vue-router'
+
+type NotificationKey = 'daily' | 'achievement' | 'streak'
+const emit = defineEmits<{ close: [] }>()
+const router = useRouter()
+
+const focusField = ref('')
+const saving = ref(false)
+const savedDone = ref(false)
+
+const avatarGrads = [
+  'linear-gradient(135deg,#e8c87a,#d4974a)',
+  'linear-gradient(135deg,#5BA3D9,#2E7FBB)',
+  'linear-gradient(135deg,#9FE1CB,#1D9E75)',
+  'linear-gradient(135deg,#F0997B,#D85A30)',
+  'linear-gradient(135deg,#AFA9EC,#534AB7)',
+]
+
+const aiStyles = ['温和', '标准', '严格']
+
+const toggles: { key: NotificationKey; label: string; sub: string }[] = [
+  { key: 'daily',       label: '每日学习提醒',   sub: '每天 09:00 发送提醒' },
+  { key: 'achievement', label: '成就解锁通知',   sub: '解锁新徽章时通知' },
+  { key: 'streak',      label: '连续学习提醒',   sub: '即将断签时发出警告' },
+]
+
+const form = reactive({
+  name: '李同学',
+  bio: '每一个问题都是通往掌握的一步',
+  email: 'li@example.com',
+  avatarGrad: avatarGrads[0],
+  dailyGoal: 5,
+  aiStyle: '标准',
+  notifications: {
+    daily: true,
+    achievement: true,
+    streak: false,
+  }as Record<NotificationKey, boolean>,
+})
+
+async function handleSave() {
+  saving.value = true
+  await new Promise(r => setTimeout(r, 900))
+  saving.value = false
+  savedDone.value = true
+  setTimeout(() => {
+    savedDone.value = false
+    emit('close')
+  }, 1500)
+}
+
+function handleLogout() {
+  localStorage.removeItem('sm_logged_in')
+  localStorage.removeItem('sm_user')
+  router.push('/login')
+}
+</script>
+
+<style scoped>
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(30,28,26,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  padding: 24px;
+}
+
+.modal {
+  width: 100%;
+  max-width: 520px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  overflow: hidden;
+  box-shadow: 0 24px 60px rgba(0,0,0,0.18);
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-header {
+  padding: 20px 24px 16px;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: linear-gradient(180deg, var(--bg-2), var(--surface));
+  flex-shrink: 0;
+}
+
+.modal-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+}
+
+.modal-sub {
+  font-size: 11.5px;
+  color: var(--ink-3);
+  margin-top: 2px;
+}
+
+.close-btn {
+  width: 28px; height: 28px;
+  border-radius: 8px;
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--ink-3);
+  cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all .15s;
+  font-family: var(--font-sans);
+}
+.close-btn:hover { background: var(--bg-3); color: var(--ink); }
+
+.modal-body {
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  overflow-y: auto;
+}
+
+.section-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--ink-3);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-family: var(--font-mono);
+  margin-bottom: 12px;
+}
+
+.avatar-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.big-avatar {
+  width: 64px; height: 64px;
+  border-radius: 16px;
+  flex-shrink: 0;
+  color: white;
+  font-size: 24px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  cursor: pointer;
+  transition: filter .15s;
+}
+.big-avatar:hover { filter: brightness(0.9); }
+
+.avatar-edit {
+  position: absolute;
+  bottom: -4px; right: -4px;
+  width: 20px; height: 20px;
+  border-radius: 6px;
+  background: var(--blue-2);
+  border: 2px solid var(--surface);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.avatar-edit svg { width: 10px; height: 10px; }
+
+.avatar-hint {
+  font-size: 11px;
+  color: var(--ink-3);
+  margin-bottom: 6px;
+}
+
+.color-swatches { display: flex; gap: 6px; }
+
+.swatch {
+  width: 22px; height: 22px;
+  border-radius: 6px;
+  cursor: pointer;
+  border: 2px solid transparent;
+  transition: transform .1s;
+}
+.swatch:hover { transform: scale(1.1); }
+.swatch.active { border-color: var(--ink); }
+
+.fields { display: flex; flex-direction: column; gap: 12px; }
+
+.field { display: flex; flex-direction: column; gap: 5px; }
+
+.field label {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+
+.field-input {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 0 12px;
+  height: 40px;
+  transition: all .15s;
+}
+.field-input svg { opacity: 0.4; flex-shrink: 0; }
+.field-input.focused {
+  border-color: var(--blue);
+  background: var(--surface);
+  box-shadow: 0 0 0 3px oklch(0.72 0.085 235 / 0.12);
+}
+.field-input.readonly {
+  background: var(--bg-3);
+  cursor: not-allowed;
+}
+.field-input input {
+  flex: 1;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 13px;
+  color: var(--ink);
+  font-family: var(--font-sans);
+}
+.field-input input:disabled { color: var(--ink-3); cursor: not-allowed; }
+
+.char-count {
+  font-size: 10.5px;
+  color: var(--ink-3);
+  text-align: right;
+  font-family: var(--font-mono);
+}
+
+.slider-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.goal-slider { flex: 1; accent-color: var(--blue-2); }
+.slider-val {
+  min-width: 28px;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--blue-2);
+  font-family: var(--font-mono);
+}
+
+.seg {
+  display: flex;
+  background: var(--bg-2);
+  border-radius: 9px;
+  padding: 3px;
+  border: 1px solid var(--line);
+}
+.seg-btn {
+  flex: 1;
+  padding: 7px 0;
+  font-size: 12px;
+  font-weight: 500;
+  background: transparent;
+  border: none;
+  border-radius: 7px;
+  color: var(--ink-3);
+  cursor: pointer;
+  transition: all .15s;
+  font-family: var(--font-sans);
+}
+.seg-btn.active {
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+}
+
+.toggle-list { display: flex; flex-direction: column; }
+
+.toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-bottom: 0.5px solid var(--line);
+}
+.toggle-row:last-child { border-bottom: none; }
+
+.toggle-info { font-size: 12.5px; color: var(--ink); }
+.toggle-sub { font-size: 11px; color: var(--ink-3); margin-top: 1px; }
+
+.toggle {
+  width: 36px; height: 20px;
+  border-radius: 10px;
+  background: var(--bg-3);
+  border: 1px solid var(--line);
+  position: relative;
+  cursor: pointer;
+  transition: background .2s;
+  flex-shrink: 0;
+}
+.toggle.on { background: var(--blue-2); border-color: var(--blue-2); }
+.toggle-thumb {
+  position: absolute;
+  top: 2px; left: 2px;
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  background: white;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+  transition: left .2s;
+}
+.toggle.on .toggle-thumb { left: 18px; }
+
+.modal-divider {
+  height: 0.5px;
+  background: var(--line);
+  margin: 0 -24px;
+}
+
+.danger-list { display: flex; flex-direction: column; }
+
+.danger-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-bottom: 0.5px solid var(--line);
+}
+.danger-row:last-child { border-bottom: none; }
+
+.danger-info { font-size: 12.5px; color: var(--ink); }
+.danger-sub { font-size: 11px; color: var(--ink-3); margin-top: 1px; }
+
+.danger-btn {
+  padding: 6px 14px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  transition: all .15s;
+}
+.danger-btn.outline {
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--ink-2);
+}
+.danger-btn.outline:hover { background: var(--bg-2); }
+.danger-btn.red {
+  background: #FCEBEB;
+  border: 1px solid #F7C1C1;
+  color: #E24B4A;
+}
+.danger-btn.red:hover { background: #F7C1C1; }
+
+.modal-footer {
+  padding: 16px 24px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  background: linear-gradient(0deg, var(--bg-2), var(--surface));
+  flex-shrink: 0;
+}
+
+.cancel-btn {
+  padding: 8px 18px;
+  border-radius: 9px;
+  font-size: 13px;
+  font-weight: 500;
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--ink-2);
+  cursor: pointer;
+  font-family: var(--font-sans);
+  transition: background .15s;
+}
+.cancel-btn:hover { background: var(--bg-2); }
+
+.save-btn {
+  padding: 8px 20px;
+  border-radius: 9px;
+  font-size: 13px;
+  font-weight: 600;
+  background: linear-gradient(135deg, var(--blue), var(--blue-2));
+  color: white;
+  border: none;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: opacity .15s;
+}
+.save-btn:hover:not(:disabled) { opacity: 0.88; }
+.save-btn:disabled { opacity: 0.7; cursor: not-allowed; }
+.save-btn.saved { background: linear-gradient(135deg, #1D9E75, #0F6E56); }
+
+.spinner {
+  width: 13px; height: 13px;
+  border-radius: 50%;
+  border: 2px solid rgba(255,255,255,0.4);
+  border-top-color: white;
+  animation: spin .7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+</style>
