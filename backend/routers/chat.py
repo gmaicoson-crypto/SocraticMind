@@ -73,6 +73,9 @@ def chat_stream_endpoint(
     full_reply = []
 
     def generate():
+        buffer = []
+        buffer_size = 0
+        
         for chunk in chat_stream(
             messages=history,
             node_label=node_label,
@@ -81,8 +84,10 @@ def chat_stream_endpoint(
             mode=req.mode,
         ):
             full_reply.append(chunk)
-            yield f"data: {json.dumps({'text': chunk}, ensure_ascii=False)}\n\n"
+            data = f"data: {json.dumps({'text': chunk}, ensure_ascii=False)}\n\n"
+            yield data
 
+        # 保存 AI 回复
         ai_msg = ChatMessage(
             user_id=current_user.id,
             node_key=req.node_key,
@@ -96,7 +101,12 @@ def chat_stream_endpoint(
     return StreamingResponse(
         generate(),
         media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        headers={
+            "Cache-Control": "no-cache", 
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+        
     )
 
 @router.get("/history/{node_key}", response_model=List[HistoryResponse])

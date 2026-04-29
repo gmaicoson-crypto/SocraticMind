@@ -135,6 +135,13 @@ export const useLearningStore = defineStore('learning', () => {
     document.documentElement.setAttribute('data-theme', isDark.value ? 'dark' : 'light')
   }
 
+  function clearGraph() {
+    nodes.value = []
+    edges.value = []
+    activeTopicId.value = ''
+    activeNode.value = null
+  }
+
   return {
     // 状态
     isDark, nodes, edges, topics,
@@ -146,5 +153,6 @@ export const useLearningStore = defineStore('learning', () => {
     setUserInfo, loadUserFromStorage,
     fetchTopics, fetchNodes, setActiveTopic,
     setActiveNode, masterNode, addMessage,
+    clearGraph,
   }
 })

@@ -115,7 +115,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch, h } from 'vue'
+import { ref, computed, onMounted, watch, h, nextTick } from 'vue'
 import { useLearningStore } from '../stores/learning'
 import type { KNode } from '../types'
 import GraphNode from './GraphNode.vue'
@@ -152,8 +152,24 @@ const tip = ref<{ x: number; y: number; text: string } | null>(null)
 const showScaleHint = ref(false)
 
 // 基础 viewBox 尺寸
-const VW = 760
-const VH = 720
+let VW = 900
+let VH = 720
+
+// 节点加载后检查范围，兜底扩展画布
+watch(() => store.nodes, (nodes) => {
+  if (nodes.length === 0) {
+    VW = 900
+    VH = 720
+    panX.value = 0
+    panY.value = 0
+    return
+  }
+  const maxX = Math.max(...nodes.map(n => n.x)) + 120
+  const maxY = Math.max(...nodes.map(n => n.y)) + 120
+  VW = Math.max(1200, maxX)
+  VH = Math.max(720, maxY)
+  nextTick(() => resetView())
+})
 
 // 缩放和平移
 const scale = ref(1)
@@ -171,8 +187,22 @@ const viewBoxParts = computed(() =>
 const viewBox = computed(() => {
   const w = VW / scale.value
   const h = VH / scale.value
-  const x = panX.value + (VW - w) / 2
-  const y = panY.value + (VH - h) / 2
+
+  // 计算节点实际中心
+  let offsetX = 0
+  let offsetY = 0
+  if (store.nodes.length > 0) {
+    const xs = store.nodes.map(n => n.x)
+    const ys = store.nodes.map(n => n.y)
+    const contentCX = (Math.min(...xs) + Math.max(...xs)) / 2
+    const contentCY = (Math.min(...ys) + Math.max(...ys)) / 2
+    // 内容中心偏离画布中心的距离
+    offsetX = contentCX - VW / 2
+    offsetY = contentCY - VH / 2
+  }
+
+  const x = offsetX + panX.value + (VW - w) / 2
+  const y = offsetY + panY.value + (VH - h) / 2
   return `${x} ${y} ${w} ${h}`
 })
 
@@ -209,7 +239,7 @@ function zoomOut() {
 
 function resetView() {
   scale.value = 1
-  panX.value = -80
+  panX.value = 0
   panY.value = 0
   showHint()
 }
@@ -220,13 +250,10 @@ const dragStart = ref({ x: 0, y: 0 })
 const panStart = ref({ x: 0, y: 0 })
 
 function clampPan(x: number, y: number) {
-  const w = VW / scale.value
-  const h = VH / scale.value
-  const maxPanX = (VW - w) / 2 + 150
-  const maxPanY = (VH - h) / 2 + 150
+  const limit = 300
   return {
-    x: Math.min(Math.max(x, -maxPanX), maxPanX),
-    y: Math.min(Math.max(y, -maxPanY), maxPanY),
+    x: Math.min(Math.max(x, -limit), limit),
+    y: Math.min(Math.max(y, -limit), limit),
   }
 }
 
@@ -299,9 +326,16 @@ onMounted(() => {
   window.addEventListener('mousemove', (e: MouseEvent) => {
     if (!isDragging.value || !svgRef.value) return
     const svgRect = svgRef.value.getBoundingClientRect()
-    const dx = -(e.clientX - dragStart.value.x) / svgRect.width * (VW / scale.value)
-    const dy = -(e.clientY - dragStart.value.y) / svgRect.height * (VH / scale.value)
-    const clamped = clampPan(panStart.value.x + dx, panStart.value.y + dy)
+
+    // 鼠标移动距离转换为 viewBox 坐标偏移
+    // 注意：鼠标向右移动，panX 应该减小（内容跟着向右）
+    const dx = (e.clientX - dragStart.value.x) / svgRect.width * (VW / scale.value)
+    const dy = (e.clientY - dragStart.value.y) / svgRect.height * (VH / scale.value)
+
+    const clamped = clampPan(
+      panStart.value.x - dx,
+      panStart.value.y - dy,
+    )
     panX.value = clamped.x
     panY.value = clamped.y
   })

@@ -103,9 +103,14 @@ async function doDelete() {
   try {
     await deleteTopic(Number(id))
     await store.fetchTopics()
-    // 如果删的是当前主题，切换到第一个
-    if (store.activeTopicId === id && store.topics.length > 0) {
-      await store.setActiveTopic(store.topics[0].id)
+    // 如果删的是当前主题，清空节点和图谱
+    if (store.activeTopicId === id) {
+      if (store.topics.length > 0) {
+        await store.setActiveTopic(store.topics[0].id)
+      } else {
+        // 没有主题了，清空所有数据
+        store.clearGraph()
+      }
     }
   } catch (err) {
     console.error('删除失败', err)

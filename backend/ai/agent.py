@@ -33,7 +33,7 @@ def chat_stream(
         model=settings.deepseek_model,
         messages=full_messages,
         stream=True,
-        max_tokens=1024,
+        max_tokens=4096,
         temperature=0.7,
     )
 
