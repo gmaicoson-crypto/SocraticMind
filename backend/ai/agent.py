@@ -1,6 +1,6 @@
 from openai import OpenAI
 from core.config import settings
-from .prompts import SOCRATIC_SYSTEM_PROMPT, build_user_message
+from .prompts import SOCRATIC_SYSTEM_PROMPT,NORMAL_CHAT_PROMPT, build_user_message
 from typing import Generator
 
 client = OpenAI(
@@ -13,26 +13,27 @@ def chat_stream(
     node_label: str,
     node_sub: str,
     user_input: str,
+    mode: str = "socratic",
 ) -> Generator[str, None, None]:
 
-    # 过滤掉 role 不合法的消息
-    valid_roles = {"user", "assistant", "system"}
-    filtered = [
-        m for m in messages
-        if m.get("role") in valid_roles
-    ]
+    system_prompt = SOCRATIC_SYSTEM_PROMPT if mode == "socratic" else NORMAL_CHAT_PROMPT
+
+    if mode == "socratic":
+        user_content = build_user_message(node_label, node_sub, user_input)
+    else:
+        user_content = user_input
 
     full_messages = [
-        {"role": "system", "content": SOCRATIC_SYSTEM_PROMPT},
-        *filtered,
-        {"role": "user", "content": build_user_message(node_label, node_sub, user_input)},
+        {"role": "system", "content": system_prompt},
+        *[m for m in messages if m.get("role") in {"user", "assistant"}],
+        {"role": "user", "content": user_content},
     ]
 
     stream = client.chat.completions.create(
         model=settings.deepseek_model,
         messages=full_messages,
         stream=True,
-        max_tokens=512,
+        max_tokens=1024,
         temperature=0.7,
     )
 

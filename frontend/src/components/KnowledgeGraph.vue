@@ -6,7 +6,7 @@
       <div>
         <div class="graph-label">Knowledge Graph</div>
         <div class="graph-title">
-          Python 基础知识
+          {{ currentTopicTitle }}
           <span class="graph-count">· {{ store.totalCount }} 节点</span>
         </div>
       </div>
@@ -19,9 +19,10 @@
 
     <!-- SVG Graph -->
     <svg
-      viewBox="0 0 600 720"
+      :viewBox="viewBox"
       preserveAspectRatio="xMidYMid meet"
       class="graph-svg"
+      ref="svgRef"
     >
       <defs>
         <pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse">
@@ -33,41 +34,51 @@
         </radialGradient>
       </defs>
 
-      <g :transform="`translate(${translateX}, ${translateY}) scale(${scale})`">
-        <rect width="600" height="720" fill="url(#grid)" />
+      <rect
+        :x="viewBoxParts[0]"
+        :y="viewBoxParts[1]"
+        :width="viewBoxParts[2]"
+        :height="viewBoxParts[3]"
+        fill="url(#grid)"
+      />
 
-        <circle
-          v-for="n in masteredNodes"
-          :key="`glow-${n.id}`"
-          :cx="n.x" :cy="n.y"
-          r="60"
-          fill="url(#masteredGlow)"
-        />
+      <circle
+        v-for="n in masteredNodes"
+        :key="`glow-${n.id}`"
+        :cx="n.x" :cy="n.y"
+        r="60"
+        fill="url(#masteredGlow)"
+      />
 
-        <GraphEdge
-          v-for="(edge, i) in store.edges"
-          :key="`edge-${i}`"
-          :from="nodeMap[edge.source]"
-          :to="nodeMap[edge.target]"
-        />
+      <GraphEdge
+        v-for="(edge, i) in store.edges"
+        :key="`edge-${i}`"
+        :from="nodeMap[edge.source]"
+        :to="nodeMap[edge.target]"
+      />
 
-        <GraphNode
-          v-for="n in store.nodes"
-          :key="n.id"
-          :node="n"
-          :is-selected="store.activeNode?.id === n.id"
-          @click="handleClick"
-          @hover="handleHover"
-        />
-      </g>
+      <GraphNode
+        v-for="n in store.nodes"
+        :key="n.id"
+        :node="n"
+        :is-selected="store.activeNode?.id === n.id"
+        @click="handleClick"
+        @hover="handleHover"
+      />
     </svg>
 
+    <!-- 无主题提示 -->
+    <div v-if="store.totalCount === 0" class="empty-graph">
+      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--ink-3)" stroke-width="1">
+        <circle cx="12" cy="5" r="2"/><circle cx="5" cy="19" r="2"/><circle cx="19" cy="19" r="2"/>
+        <path d="M12 7v4M12 11L5 17M12 11L19 17"/>
+      </svg>
+      <div class="empty-title">暂无知识图谱</div>
+      <div class="empty-sub">在左侧对话框告诉 AI 你想学什么</div>
+    </div>
+
     <!-- Tooltip -->
-    <div
-      v-if="tip"
-      class="tip"
-      :style="{ left: tip.x + 'px', top: tip.y + 'px' }"
-    >
+    <div v-if="tip" class="tip" :style="{ left: tip.x + 'px', top: tip.y + 'px' }">
       {{ tip.text }}
     </div>
 
@@ -110,7 +121,6 @@ import type { KNode } from '../types'
 import GraphNode from './GraphNode.vue'
 import GraphEdge from './GraphEdge.vue'
 
-// LegendItem 组件
 const LegendItem = (props: { label: string; count: number; variant: string }) => {
   const dotStyle: Record<string, { bg: string; border: string }> = {
     mastered: { bg: 'var(--blue)', border: 'var(--blue-2)' },
@@ -135,22 +145,41 @@ const LegendItem = (props: { label: string; count: number; variant: string }) =>
 }
 
 const store = useLearningStore()
-const scale = ref(1)
-const translateX = ref(0)
-const translateY = ref(0)
-const showScaleHint = ref(false)
-
-const CX = 300
-const CY = 360
-
-// 拖拽状态
-const isDragging = ref(false)
-const dragStart = ref({ x: 0, y: 0 })
-const dragStartTranslate = ref({ x: 0, y: 0 })
-
 const containerRef = ref<HTMLElement | null>(null)
+const svgRef = ref<SVGSVGElement | null>(null)
 const confettiCanvasRef = ref<HTMLCanvasElement | null>(null)
 const tip = ref<{ x: number; y: number; text: string } | null>(null)
+const showScaleHint = ref(false)
+
+// 基础 viewBox 尺寸
+const VW = 760
+const VH = 720
+
+// 缩放和平移
+const scale = ref(1)
+const panX = ref(0)
+const panY = ref(0)
+
+const MIN_SCALE = 0.85
+const MAX_SCALE = 2.5
+
+// 动态 viewBox：通过改变 viewBox 大小实现缩放，内容始终铺满容器
+const viewBoxParts = computed(() =>
+  viewBox.value.split(' ').map(Number)
+)
+
+const viewBox = computed(() => {
+  const w = VW / scale.value
+  const h = VH / scale.value
+  const x = panX.value + (VW - w) / 2
+  const y = panY.value + (VH - h) / 2
+  return `${x} ${y} ${w} ${h}`
+})
+
+const currentTopicTitle = computed(() => {
+  const t = store.topics.find(t => t.id === store.activeTopicId)
+  return t?.title ?? 'Knowledge Graph'
+})
 
 let confettiInstance: any = null
 let hintTimer: ReturnType<typeof setTimeout> | null = null
@@ -158,28 +187,66 @@ let hintTimer: ReturnType<typeof setTimeout> | null = null
 const nodeMap = computed(() =>
   Object.fromEntries(store.nodes.map(n => [n.id, n]))
 )
-
 const masteredNodes = computed(() =>
   store.nodes.filter(n => n.state === 'mastered')
 )
 
-function getNodePixelPos(node: KNode) {
-  if (!containerRef.value) return { x: 0.5, y: 0.5 }
-  const svg = containerRef.value.querySelector('svg')
-  if (!svg) return { x: 0.5, y: 0.5 }
-  const containerRect = containerRef.value.getBoundingClientRect()
-  const svgRect = svg.getBoundingClientRect()
-  const sx = svgRect.width / 600
-  const sy = svgRect.height / 720
+function showHint() {
+  showScaleHint.value = true
+  if (hintTimer) clearTimeout(hintTimer)
+  hintTimer = setTimeout(() => { showScaleHint.value = false }, 1200)
+}
+
+function zoomIn() {
+  scale.value = Math.min(scale.value + 0.15, MAX_SCALE)
+  showHint()
+}
+
+function zoomOut() {
+  scale.value = Math.max(scale.value - 0.15, MIN_SCALE)
+  showHint()
+}
+
+function resetView() {
+  scale.value = 1
+  panX.value = 0
+  panY.value = 0
+  showHint()
+}
+
+// 拖拽
+const isDragging = ref(false)
+const dragStart = ref({ x: 0, y: 0 })
+const panStart = ref({ x: 0, y: 0 })
+
+function clampPan(x: number, y: number) {
+  const w = VW / scale.value
+  const h = VH / scale.value
+  const maxPanX = (VW - w) / 2 + 150
+  const maxPanY = (VH - h) / 2 + 150
   return {
-    x: (node.x * sx + (svgRect.left - containerRect.left)) / containerRect.width,
-    y: (node.y * sy + (svgRect.top - containerRect.top)) / containerRect.height,
+    x: Math.min(Math.max(x, -maxPanX), maxPanX),
+    y: Math.min(Math.max(y, -maxPanY), maxPanY),
+  }
+}
+
+function getNodeScreenPos(node: KNode) {
+  if (!containerRef.value || !svgRef.value) return { x: 0.5, y: 0.5 }
+  const containerRect = containerRef.value.getBoundingClientRect()
+  const svgRect = svgRef.value.getBoundingClientRect()
+  const parts = viewBox.value.split(' ').map(Number)
+  const [vx, vy, vw, vh] = parts
+  const px = ((node.x - vx) / vw) * svgRect.width + (svgRect.left - containerRect.left)
+  const py = ((node.y - vy) / vh) * svgRect.height + (svgRect.top - containerRect.top)
+  return {
+    x: px / containerRect.width,
+    y: py / containerRect.height,
   }
 }
 
 function fireConfettiAt(node: KNode) {
   if (!confettiInstance) return
-  const pos = getNodePixelPos(node)
+  const pos = getNodeScreenPos(node)
   confettiInstance({
     particleCount: 38,
     spread: 65,
@@ -190,56 +257,6 @@ function fireConfettiAt(node: KNode) {
     scalar: 0.75,
     ticks: 120,
   })
-}
-
-function showHint() {
-  showScaleHint.value = true
-  if (hintTimer) clearTimeout(hintTimer)
-  hintTimer = setTimeout(() => {
-    showScaleHint.value = false
-  }, 1200)
-}
-
-function zoomIn() {
-  const newScale = Math.min(scale.value + 0.15, 2.5)
-  translateX.value = CX - (CX - translateX.value) * (newScale / scale.value)
-  translateY.value = CY - (CY - translateY.value) * (newScale / scale.value)
-  scale.value = newScale
-  showHint()
-}
-
-function zoomOut() {
-  const newScale = Math.max(scale.value - 0.15, 0.4)
-  translateX.value = CX - (CX - translateX.value) * (newScale / scale.value)
-  translateY.value = CY - (CY - translateY.value) * (newScale / scale.value)
-  scale.value = newScale
-  showHint()
-}
-
-function resetView() {
-  scale.value = 1
-  translateX.value = 0
-  translateY.value = 0
-  showHint()
-}
-
-function clampTranslate(tx: number, ty: number) {
-  if (!containerRef.value) return { x: tx, y: ty }
-  const svg = containerRef.value.querySelector('svg')
-  if (!svg) return { x: tx, y: ty }
-  const svgRect = svg.getBoundingClientRect()
-  const contentW = 600 * scale.value
-  const contentH = 720 * scale.value
-  const sx = svgRect.width / 600
-  const sy = svgRect.height / 720
-  const maxX = 100 * sx * scale.value
-  const minX = -(contentW - 600) * sx + maxX * -1
-  const maxY = 100 * sy * scale.value
-  const minY = -(contentH - 720) * sy + maxY * -1
-  return {
-    x: Math.min(Math.max(tx, minX), maxX),
-    y: Math.min(Math.max(ty, minY), maxY),
-  }
 }
 
 onMounted(() => {
@@ -256,50 +273,39 @@ onMounted(() => {
     })
   }, 600)
 
-  const svgEl = containerRef.value?.querySelector('svg')
+  const svgEl = svgRef.value
   if (!svgEl) return
 
   // 滚轮缩放
   svgEl.addEventListener('wheel', (e: WheelEvent) => {
     e.preventDefault()
     const delta = e.deltaY > 0 ? -0.1 : 0.1
-    const newScale = Math.min(Math.max(scale.value + delta, 0.4), 2.5)
-    translateX.value = CX - (CX - translateX.value) * (newScale / scale.value)
-    translateY.value = CY - (CY - translateY.value) * (newScale / scale.value)
-    scale.value = newScale
+    scale.value = Math.min(Math.max(scale.value + delta, MIN_SCALE), MAX_SCALE)
     showHint()
   }, { passive: false })
 
-  // 拖拽开始
+  // 拖拽
   svgEl.addEventListener('mousedown', (e: MouseEvent) => {
     if (e.button !== 0) return
     const target = e.target as SVGElement
     if (target.closest('g.knode') || target.tagName === 'text') return
     isDragging.value = true
     dragStart.value = { x: e.clientX, y: e.clientY }
-    dragStartTranslate.value = { x: translateX.value, y: translateY.value }
+    panStart.value = { x: panX.value, y: panY.value }
     svgEl.style.cursor = 'grabbing'
     e.preventDefault()
   })
 
-  // 拖拽移动
   window.addEventListener('mousemove', (e: MouseEvent) => {
-    if (!isDragging.value) return
-    const dx = e.clientX - dragStart.value.x
-    const dy = e.clientY - dragStart.value.y
-    const svg = containerRef.value?.querySelector('svg')
-    if (!svg) return
-    const svgRect = svg.getBoundingClientRect()
-    const sx = 600 / svgRect.width
-    const sy = 720 / svgRect.height
-    const rawX = dragStartTranslate.value.x + dx * sx
-    const rawY = dragStartTranslate.value.y + dy * sy
-    const clamped = clampTranslate(rawX, rawY)
-    translateX.value = clamped.x
-    translateY.value = clamped.y
+    if (!isDragging.value || !svgRef.value) return
+    const svgRect = svgRef.value.getBoundingClientRect()
+    const dx = -(e.clientX - dragStart.value.x) / svgRect.width * (VW / scale.value)
+    const dy = -(e.clientY - dragStart.value.y) / svgRect.height * (VH / scale.value)
+    const clamped = clampPan(panStart.value.x + dx, panStart.value.y + dy)
+    panX.value = clamped.x
+    panY.value = clamped.y
   })
 
-  // 拖拽结束
   window.addEventListener('mouseup', () => {
     if (!isDragging.value) return
     isDragging.value = false
@@ -320,25 +326,22 @@ watch(
   }
 )
 
+watch(() => store.activeTopicId, () => resetView())
+
 function handleClick(node: KNode) {
   if (node.state === 'locked') return
   store.setActiveNode(node)
 }
 
 function handleHover(payload: { node: KNode | null; event?: MouseEvent }) {
-  if (!payload.node) {
-    tip.value = null
-    return
-  }
-  if (!containerRef.value) return
-  const svg = containerRef.value.querySelector('svg')
-  if (!svg) return
+  if (!payload.node) { tip.value = null; return }
+  if (!containerRef.value || !svgRef.value) return
   const containerRect = containerRef.value.getBoundingClientRect()
-  const svgRect = svg.getBoundingClientRect()
-  const sx = svgRect.width / 600
-  const sy = svgRect.height / 720
-  const x = payload.node.x * sx + (svgRect.left - containerRect.left)
-  const y = payload.node.y * sy + (svgRect.top - containerRect.top)
+  const svgRect = svgRef.value.getBoundingClientRect()
+  const parts = viewBox.value.split(' ').map(Number)
+  const [vx, vy, vw, vh] = parts
+  const x = ((payload.node.x - vx) / vw) * svgRect.width + (svgRect.left - containerRect.left)
+  const y = ((payload.node.y - vy) / vh) * svgRect.height + (svgRect.top - containerRect.top)
   const textMap: Record<string, string> = {
     mastered: '已掌握 · 点击复习',
     available: '可学习 · 点击开始',
@@ -346,7 +349,6 @@ function handleHover(payload: { node: KNode | null; event?: MouseEvent }) {
   }
   tip.value = { x, y, text: textMap[payload.node.state] }
 }
-
 </script>
 
 <style scoped>
@@ -401,6 +403,29 @@ function handleHover(payload: { node: KNode | null; event?: MouseEvent }) {
   width: 100%;
   height: 100%;
   display: block;
+  cursor: grab;
+}
+.graph-svg:active { cursor: grabbing; }
+
+.empty-graph {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+
+.empty-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+
+.empty-sub {
+  font-size: 12.5px;
+  color: var(--ink-3);
 }
 
 .tip {
@@ -416,7 +441,6 @@ function handleHover(payload: { node: KNode | null; event?: MouseEvent }) {
   z-index: 50;
   font-weight: 500;
 }
-
 .tip::after {
   content: '';
   position: absolute;
@@ -436,8 +460,7 @@ function handleHover(payload: { node: KNode | null; event?: MouseEvent }) {
 
 .scale-hint {
   position: absolute;
-  bottom: 56px;
-  right: 14px;
+  bottom: 56px; right: 14px;
   background: oklch(0.22 0.012 250);
   color: white;
   font-size: 12px;
@@ -450,13 +473,9 @@ function handleHover(payload: { node: KNode | null; event?: MouseEvent }) {
 }
 
 .fade-enter-active,
-.fade-leave-active {
-  transition: opacity .2s ease;
-}
+.fade-leave-active { transition: opacity .2s ease; }
 .fade-enter-from,
-.fade-leave-to {
-  opacity: 0;
-}
+.fade-leave-to { opacity: 0; }
 
 .controls {
   position: absolute;
@@ -480,6 +499,5 @@ function handleHover(payload: { node: KNode | null; event?: MouseEvent }) {
   border-radius: 6px;
   cursor: pointer;
 }
-
 .ctrl-btn:hover { background: var(--bg-3); }
 </style>

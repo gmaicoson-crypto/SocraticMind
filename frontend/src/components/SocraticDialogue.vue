@@ -94,6 +94,31 @@
 
     <!-- Input -->
     <div class="input-wrap">
+      <!-- 模式切换 -->
+      <div class="mode-switch">
+        <button
+          class="mode-btn"
+          :class="{ active: chatMode === 'socratic' }"
+          @click="chatMode = 'socratic'"
+          title="学习模式：苏格拉底式引导"
+        >
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <path d="M12 2L13.5 8.5L20 10L13.5 11.5L12 18L10.5 11.5L4 10L10.5 8.5Z"/>
+          </svg>
+          学习
+        </button>
+        <button
+          class="mode-btn"
+          :class="{ active: chatMode === 'normal' }"
+          @click="chatMode = 'normal'"
+          title="普通模式：直接对话"
+        >
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+          </svg>
+          对话
+        </button>
+      </div>
       <div class="input-box">
         <textarea
           v-model="input"
@@ -103,13 +128,16 @@
         />
         <button
           class="send-btn"
-          :disabled="!input.trim()"
+          :disabled="!input.trim() || isThinking || isGenerating"
           @click="send"
         >
-          发送
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
-            <path d="M5 12 L19 12 M13 6 L19 12 L13 18"/>
-          </svg>
+          <span v-if="isGenerating">生成中…</span>
+          <template v-else>
+            发送
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+              <path d="M5 12 L19 12 M13 6 L19 12 L13 18"/>
+            </svg>
+          </template>
         </button>
       </div>
     </div>
@@ -123,18 +151,21 @@ import { useLearningStore } from '../stores/learning'
 import type { Message } from '../types'
 import InlineMarkdown from './InlineMarkdown.vue'
 import { chatStream } from '../api/chat'
+import { generateTopic } from '../api/topic'
 
 const store = useLearningStore()
 const scrollRef = ref<HTMLElement | null>(null)
 const input = ref('')
 const isThinking = ref(false)
+const isGenerating = ref(false)
 const streamingText = ref('')
 const messages = ref<Message[]>([])
 
-// 当前节点对应的 topic_id
 const currentTopicId = computed(() => Number(store.activeTopicId) || 0)
+const hasActiveTopic = computed(() => store.topics.length > 0)
+const chatMode = ref<'socratic' | 'normal'>('socratic')
 
-const chips = ['elif 和 else 的区别？', '举个三分支例子', '我能用 in 替代吗？']
+const chips = ['我想学 Python', '教我机器学习', '讲讲数据结构', '学习 Web 开发']
 
 function now() {
   return new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false })
@@ -146,14 +177,152 @@ function scrollToBottom() {
   })
 }
 
-// 初始欢迎消息
 onMounted(() => {
   messages.value = [{
     role: 'ai',
-    text: '你好，**学习者** ✦ 点击右侧图谱中的节点开始学习吧！',
+    text: '你好！我是 Socrates，你的 AI 学习导师 ✦\n\n告诉我你想学什么，我来为你生成专属知识图谱，然后引导你一步步掌握它。',
     time: now(),
   }]
 })
+
+// 判断是否是想学某个主题的意图
+function isLearnIntent(text: string): boolean {
+  const keywords = ['学', '想了解', '教我', '讲讲', '入门', '学习']
+  return keywords.some(k => text.includes(k))
+}
+
+// 提取主题名
+function extractTopic(text: string): string {
+  return text
+    .replace(/我想学|教我|学习|了解|讲讲|帮我学|入门/g, '')
+    .replace(/[，。！？,!?]/g, '')
+    .trim() || text.trim()
+}
+
+async function send() {
+  const v = input.value.trim()
+  if (!v || isThinking.value || isGenerating.value) return
+
+  messages.value.push({ role: 'user', text: v, time: now() })
+  input.value = ''
+  scrollToBottom()
+
+  // 普通对话模式：直接发送，不需要选节点
+  if (chatMode.value === 'normal') {
+    isThinking.value = true
+    streamingText.value = ''
+
+    const history = messages.value.slice(-10).map(m => ({
+      role: m.role as 'ai' | 'user',
+      content: m.text,
+    }))
+
+    chatStream(
+      'normal', 0, v, history, 'normal',
+      (chunk) => { streamingText.value += chunk; scrollToBottom() },
+      () => {
+        const finalText = streamingText.value
+        streamingText.value = ''
+        isThinking.value = false
+        if (finalText.trim()) messages.value.push({ role: 'ai', text: finalText, time: now() })
+        scrollToBottom()
+      },
+      (err) => {
+        console.error(err)
+        messages.value.push({ role: 'ai', text: '抱歉，连接失败，请重试。', time: now() })
+        streamingText.value = ''
+        isThinking.value = false
+        scrollToBottom()
+      },
+    )
+    return
+  }
+
+  // 学习模式：判断生成图谱意图
+  if (isLearnIntent(v) && !store.activeNode) {
+    const topicName = extractTopic(v)
+    await handleGenerateTopic(topicName)
+    return
+  }
+
+  // 学习模式：需要选节点
+  if (!store.activeNode) {
+    messages.value.push({
+      role: 'ai',
+      text: '请先在右侧图谱中点击一个节点，我们针对具体知识点来对话 👉',
+      time: now(),
+    })
+    scrollToBottom()
+    return
+  }
+
+  // 学习模式正常流式对话
+  isThinking.value = true
+  streamingText.value = ''
+  scrollToBottom()
+
+  const history = messages.value.slice(-10).map(m => ({
+    role: m.role as 'ai' | 'user',
+    content: m.text,
+  }))
+
+  chatStream(
+    store.activeNode.id,
+    currentTopicId.value,
+    v,
+    history,
+    'socratic',
+    (chunk) => { streamingText.value += chunk; scrollToBottom() },
+    () => {
+      const finalText = streamingText.value
+      streamingText.value = ''
+      isThinking.value = false
+      if (finalText.trim()) messages.value.push({ role: 'ai', text: finalText, time: now() })
+      scrollToBottom()
+    },
+    (err) => {
+      console.error(err)
+      messages.value.push({ role: 'ai', text: '抱歉，连接失败，请重试。', time: now() })
+      streamingText.value = ''
+      isThinking.value = false
+      scrollToBottom()
+    },
+  )
+}
+
+// 生成知识图谱
+async function handleGenerateTopic(topicName: string) {
+  isGenerating.value = true
+  messages.value.push({
+    role: 'ai',
+    text: `好的！我正在为「**${topicName}**」生成知识图谱，请稍候…`,
+    time: now(),
+  })
+  scrollToBottom()
+
+  try {
+    const topic = await generateTopic(topicName)
+    // 刷新主题列表和节点
+    await store.fetchTopics()
+    // 切换到新主题
+    await store.setActiveTopic(String(topic.id))
+
+    messages.value.push({
+      role: 'ai',
+      text: `✦ 知识图谱已生成！共 **${topic.total_nodes}** 个知识节点。\n\n右侧图谱已更新，点击蓝色节点开始你的第一个知识点学习吧！`,
+      time: now(),
+    })
+  } catch (err) {
+    messages.value.push({
+      role: 'ai',
+      text: '生成失败，请重试或换个主题名称。',
+      time: now(),
+    })
+  } finally {
+    isGenerating.value = false
+    scrollToBottom()
+  }
+}
 
 // 点击节点时 AI 响应
 watch(() => store.activeNode?.id, (id) => {
@@ -166,73 +335,25 @@ watch(() => store.activeNode?.id, (id) => {
   scrollToBottom()
 })
 
-// 发送消息（真实 SSE）
-function send() {
-  const v = input.value.trim()
-  if (!v || isThinking.value) return
-
-  const node = store.activeNode
-  if (!node) {
-    messages.value.push({
-      role: 'ai',
-      text: '请先点击右侧图谱中的一个节点，再开始对话 👉',
-      time: now(),
-    })
-    scrollToBottom()
-    return
-  }
-
-  messages.value.push({ role: 'user', text: v, time: now() })
-  input.value = ''
-  isThinking.value = true
-  streamingText.value = ''
-  scrollToBottom()
-
-  // 构建历史（最近 10 条）
-  const history = messages.value.slice(-10).map(m => ({
-    role: m.role as 'ai' | 'user',
-    content: m.text,
-  }))
-
-  chatStream(
-    node.id,
-    currentTopicId.value,
-    v,
-    history,
-    // onChunk
-    (chunk) => {
-      streamingText.value += chunk
-      scrollToBottom()
-    },
-    // onDone
-    () => {
-      const finalText = streamingText.value
-      streamingText.value = ''
-      isThinking.value = false
-      if (finalText.trim()) {
-        messages.value.push({ role: 'ai', text: finalText, time: now() })
-      }
-      scrollToBottom()
-    },
-    // onError
-    (err) => {
-      console.error('对话失败', err)
-      messages.value.push({ role: 'ai', text: '抱歉，连接失败，请重试。', time: now() })
-      streamingText.value = ''
-      isThinking.value = false
-      scrollToBottom()
-    },
-  )
-}
-
 function resetMessages() {
   messages.value = [{
     role: 'ai',
-    text: '对话已重置 ✦ 点击节点开始新的学习！',
+    text: '对话已重置 ✦ 告诉我你想学什么，我来为你生成新的知识图谱！',
     time: now(),
   }]
   streamingText.value = ''
 }
+
+watch(chatMode, (mode) => {
+  messages.value.push({
+    role: 'ai',
+    text: mode === 'socratic'
+      ? '已切换到**学习模式** ✦ 我会用苏格拉底式引导帮你深入理解知识点。'
+      : '已切换到**普通对话模式** 💬 有什么问题都可以直接问我！',
+    time: now(),
+  })
+  scrollToBottom()
+})
 </script>
 
 <style scoped>
@@ -381,6 +502,7 @@ function resetMessages() {
   font-size: 13.5px;
   line-height: 1.6;
   color: var(--ink);
+  word-break: break-word;
 }
 
 .bubble.ai {
@@ -440,6 +562,39 @@ function resetMessages() {
   background: var(--blue-tint);
   border-color: var(--blue-line);
   color: var(--blue-2);
+}
+
+.mode-switch {
+  display: flex;
+  gap: 4px;
+  padding: 0 0 8px;
+}
+
+.mode-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--ink-3);
+  cursor: pointer;
+  font-family: var(--font-sans);
+  transition: all .15s;
+}
+
+.mode-btn.active {
+  background: var(--blue-tint);
+  border-color: var(--blue-line);
+  color: var(--blue-2);
+}
+
+.mode-btn:not(.active):hover {
+  background: var(--bg-3);
+  color: var(--ink-2);
 }
 
 .input-wrap {

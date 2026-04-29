@@ -11,6 +11,7 @@ export function chatStream(
   topicId: number,
   userInput: string,
   history: ChatMessage[],
+  mode: 'socratic' | 'normal',
   onChunk: (text: string) => void,
   onDone: () => void,
   onError: (err: any) => void,
@@ -28,6 +29,7 @@ export function chatStream(
       topic_id: topicId,
       user_input: userInput,
       history: history.map(m => ({ role: m.role, content: m.content })),
+      mode,
     }),
   })
     .then(res => {

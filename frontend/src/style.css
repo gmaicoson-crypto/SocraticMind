@@ -175,6 +175,30 @@ html, body, #app {
   border-right-color: rgba(255,255,255,0.06);
 }
 [data-theme="dark"] .section-title { color: #777777; font-size: 11px; }
+
+[data-theme="dark"] .manager-panel {
+  background: #161616;
+  border-right-color: rgba(255,255,255,0.06);
+}
+[data-theme="dark"] .topic-item {
+  background: #1a1a1a;
+  border-color: rgba(255,255,255,0.06);
+}
+[data-theme="dark"] .topic-item.active {
+  background: rgba(106,169,255,0.08);
+  border-color: rgba(106,169,255,0.2);
+}
+[data-theme="dark"] .delete-btn:hover {
+  background: rgba(226,75,74,0.15);
+  border-color: rgba(226,75,74,0.3);
+  color: #F09595;
+}
+[data-theme="dark"] .confirm-bar {
+  background: rgba(226,75,74,0.12);
+  color: #F09595;
+  border-top-color: rgba(255,255,255,0.06);
+}
+
 [data-theme="dark"] .theme-btn {
   background: transparent;
   border-color: transparent;
@@ -301,6 +325,12 @@ html, body, #app {
   border-radius: 8px;
 }
 [data-theme="dark"] .dot { background: #777777; }
+
+[data-theme="dark"] .md-inline :deep(pre) {
+  background: #0D0D0D;
+  border-color: rgba(255,255,255,0.08);
+  color: #E0E0E0;
+}
 
 /* ════ Right tabs ════ */
 [data-theme="dark"] .right-tabs {

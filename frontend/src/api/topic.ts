@@ -38,3 +38,12 @@ export async function masterNode(nodeId: number) {
   const res = await api.put(`/api/nodes/${nodeId}/master`)
   return res.data as NodeData
 }
+
+export async function generateTopic(title: string, emoji: string = '📚') {
+  const res = await api.post('/api/topics/generate', { title, emoji })
+  return res.data as TopicData
+}
+
+export async function deleteTopic(topicId: number) {
+  await api.delete(`/api/topics/${topicId}`)
+}

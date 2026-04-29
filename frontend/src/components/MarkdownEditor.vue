@@ -30,7 +30,9 @@
         v-if="viewMode !== 'preview'"
         v-model="content"
         class="md-editor"
+        :placeholder="PLACEHOLDER"
         spellcheck="false"
+        @input="saveContent"
       />
       <div
         v-if="viewMode !== 'edit'"
@@ -43,43 +45,54 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { marked } from 'marked'
 
-const INITIAL_MD = `# 条件语句 · if / elif / else
+const STORAGE_KEY = 'sm_markdown_content'
 
-> 控制程序流的最基本工具。
+const PLACEHOLDER = `在这里记录你的学习笔记…
 
-## 基本语法
+支持 Markdown 语法：
+# 标题
+**粗体** *斜体* \`代码\`
 
 \`\`\`python
-if score >= 90:
-    grade = "A"
-elif score >= 75:
-    grade = "B"
-else:
-    grade = "F"
+# 代码块
+print("Hello, World!")
 \`\`\`
 
-## 关键观察
+> 引用块`
 
-- **\`elif\`** 在前面所有条件均为假时才检查
-- 每个分支*互斥*——只会执行一个
-- \`else\` 是兜底分支（可选）
-`
+// 读取上次内容，没有则为空
+const savedContent = localStorage.getItem(STORAGE_KEY)
+const content = ref(savedContent ?? '')
 
-const content = ref(INITIAL_MD)
 const viewMode = ref<'edit' | 'split' | 'preview'>('split')
 
 const views = [
-  { key: 'edit',    label: '编辑' },
-  { key: 'split',   label: '并排' },
-  { key: 'preview', label: '预览' },
+  { key: 'edit' as const,    label: '编辑' },
+  { key: 'split' as const,   label: '并排' },
+  { key: 'preview' as const, label: '预览' },
 ]
 
-const renderedHtml = computed(() =>
-  marked.parse(content.value, { breaks: true }) as string
-)
+const renderedHtml = computed(() => {
+  if (!content.value.trim()) return '<p style="color:var(--ink-3);font-size:13px;">预览区域 · 开始编辑后这里会实时渲染</p>'
+  return marked.parse(content.value, { breaks: true }) as string
+})
+
+// 自动保存到 localStorage
+function saveContent() {
+  localStorage.setItem(STORAGE_KEY, content.value)
+}
+
+// 监听内容变化自动保存（防抖）
+let saveTimer: ReturnType<typeof setTimeout> | null = null
+watch(content, () => {
+  if (saveTimer) clearTimeout(saveTimer)
+  saveTimer = setTimeout(() => {
+    localStorage.setItem(STORAGE_KEY, content.value)
+  }, 500)
+})
 
 function handleDownload() {
   const blob = new Blob([content.value], { type: 'text/markdown;charset=utf-8' })
@@ -201,6 +214,11 @@ function handleDownload() {
   background: var(--surface);
 }
 
+.md-editor::placeholder {
+  color: var(--ink-3);
+  line-height: 1.8;
+}
+
 .md-preview {
   padding: 14px 18px;
   overflow-y: auto;
@@ -263,6 +281,4 @@ function handleDownload() {
   margin: 8px 0;
   color: var(--ink-2);
 }
-
-
 </style>

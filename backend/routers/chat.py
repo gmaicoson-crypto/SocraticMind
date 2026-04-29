@@ -23,6 +23,7 @@ class ChatRequest(BaseModel):
     topic_id: int
     user_input: str
     history: List[MessageItem] = []
+    mode: str = "socratic"
 
 class HistoryResponse(BaseModel):
     id: int
@@ -38,14 +39,20 @@ def chat_stream_endpoint(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    # 验证节点
-    node = db.query(Node).join(Topic).filter(
-        Node.node_key == req.node_key,
-        Topic.id == req.topic_id,
-        Topic.user_id == current_user.id,
-    ).first()
-    if not node:
-        raise HTTPException(status_code=404, detail="节点不存在")
+    # 根据模式确定 node_label 和 node_sub
+    if req.mode == "normal":
+        node_label = "通用助手"
+        node_sub = "General Assistant"
+    else:
+        node = db.query(Node).join(Topic).filter(
+            Node.node_key == req.node_key,
+            Topic.id == req.topic_id,
+            Topic.user_id == current_user.id,
+        ).first()
+        if not node:
+            raise HTTPException(status_code=404, detail="节点不存在")
+        node_label = node.label
+        node_sub = node.sub
 
     # 保存用户消息
     db.add(ChatMessage(
@@ -57,25 +64,25 @@ def chat_stream_endpoint(
     db.commit()
 
     history = [
-    {
-        "role": "assistant" if m.role == "ai" else "user",
-        "content": m.content
-    }
-    for m in req.history
+        {
+            "role": "assistant" if m.role == "ai" else "user",
+            "content": m.content
+        }
+        for m in req.history
     ]
     full_reply = []
 
     def generate():
         for chunk in chat_stream(
             messages=history,
-            node_label=node.label,
-            node_sub=node.sub,
+            node_label=node_label,
+            node_sub=node_sub,
             user_input=req.user_input,
+            mode=req.mode,
         ):
             full_reply.append(chunk)
             yield f"data: {json.dumps({'text': chunk}, ensure_ascii=False)}\n\n"
 
-        # 保存 AI 回复
         ai_msg = ChatMessage(
             user_id=current_user.id,
             node_key=req.node_key,

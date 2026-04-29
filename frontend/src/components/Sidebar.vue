@@ -1,25 +1,31 @@
 <template>
   <aside class="sidebar">
 
+    <!-- 主题管理弹窗 -->
+    <TopicManager :show="showManager" @close="showManager = false" />
+
     <!-- 我的主题 -->
     <div class="section">
       <div class="section-header">
         <span class="section-title">我的主题</span>
-        <!-- 主题切换按钮 -->
-        <button class="theme-btn" @click="store.toggleTheme" :title="store.isDark ? '切换到明亮' : '切换到黑暗'">
-          <!-- 明亮模式图标：太阳 -->
-          <svg v-if="store.isDark" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-            <circle cx="12" cy="12" r="4"/>
-            <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>
-          </svg>
-          <!-- 黑暗模式图标：月亮 -->
-          <svg v-else width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
-          </svg>
-        </button>
+        <div class="header-btns">
+          <button class="manage-btn" title="管理主题" @click="showManager = true">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+              <path d="M12 20h9M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4 12.5-12.5z"/>
+            </svg>
+          </button>
+          <button class="theme-btn" :title="store.isDark ? '切换到明亮' : '切换到黑暗'" @click="store.toggleTheme">
+            <svg v-if="store.isDark" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+              <circle cx="12" cy="12" r="4"/>
+              <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>
+            </svg>
+            <svg v-else width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+            </svg>
+          </button>
+        </div>
       </div>
 
-      <!-- 其余内容保持不变 -->
       <div class="topic-list">
         <button
           v-for="topic in store.topics"
@@ -45,6 +51,11 @@
             />
           </div>
         </button>
+
+        <!-- 空状态 -->
+        <div v-if="store.topics.length === 0" class="empty-topics">
+          在对话框告诉 AI 你想学什么
+        </div>
       </div>
     </div>
 
@@ -93,9 +104,12 @@
 </template>
 
 <script setup lang="ts">
+import { ref } from 'vue'
 import { useLearningStore } from '../stores/learning'
+import TopicManager from './TopicManager.vue'
 
 const store = useLearningStore()
+const showManager = ref(false)
 
 const recommends = [
   { title: '概率与统计', count: 16 },
@@ -131,11 +145,35 @@ const recommends = [
   text-transform: uppercase;
   letter-spacing: 0.08em;
   font-family: var(--font-mono);
+  flex: 1;
+}
+
+.header-btns {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.manage-btn {
+  width: 26px; height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  color: var(--ink-3);
+  cursor: pointer;
+  transition: all .15s;
+}
+.manage-btn:hover {
+  background: var(--blue-tint);
+  border-color: var(--blue-line);
+  color: var(--blue-2);
 }
 
 .theme-btn {
-  width: 28px;
-  height: 28px;
+  width: 28px; height: 28px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -156,6 +194,14 @@ const recommends = [
   display: flex;
   flex-direction: column;
   gap: 3px;
+}
+
+.empty-topics {
+  font-size: 11.5px;
+  color: var(--ink-3);
+  text-align: center;
+  padding: 16px 8px;
+  line-height: 1.6;
 }
 
 .topic-row {
