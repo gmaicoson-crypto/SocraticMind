@@ -14,11 +14,17 @@ def chat_stream(
     node_sub: str,
     user_input: str,
 ) -> Generator[str, None, None]:
-    """流式调用 DeepSeek，返回 SSE 文本片段"""
+
+    # 过滤掉 role 不合法的消息
+    valid_roles = {"user", "assistant", "system"}
+    filtered = [
+        m for m in messages
+        if m.get("role") in valid_roles
+    ]
 
     full_messages = [
         {"role": "system", "content": SOCRATIC_SYSTEM_PROMPT},
-        *messages,
+        *filtered,
         {"role": "user", "content": build_user_message(node_label, node_sub, user_input)},
     ]
 

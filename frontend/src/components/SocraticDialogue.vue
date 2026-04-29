@@ -118,34 +118,23 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, nextTick, onMounted } from 'vue'
+import { ref, watch, nextTick, onMounted, computed } from 'vue'
 import { useLearningStore } from '../stores/learning'
 import type { Message } from '../types'
 import InlineMarkdown from './InlineMarkdown.vue'
+import { chatStream } from '../api/chat'
 
 const store = useLearningStore()
-
 const scrollRef = ref<HTMLElement | null>(null)
 const input = ref('')
 const isThinking = ref(false)
 const streamingText = ref('')
+const messages = ref<Message[]>([])
 
-const messages = ref<Message[]>([
-  {
-    role: 'ai',
-    text: '你好，**学习者**。我看到你已经掌握了变量与数据类型 ✦ 接下来想从「条件语句」开始吗？',
-    time: '10:42',
-  },
-  {
-    role: 'user',
-    text: '是的。我用 `if x > 0:` 检查正数，但还不熟悉 elif。',
-    time: '10:43',
-  },
-])
+// 当前节点对应的 topic_id
+const currentTopicId = computed(() => Number(store.activeTopicId) || 0)
 
 const chips = ['elif 和 else 的区别？', '举个三分支例子', '我能用 in 替代吗？']
-
-const INITIAL_STREAM = '答得不错！但你如何**应用**这个概念呢？如果我们想添加更多条件呢？想想 `if...elif...else` 可能是如何工作的——'
 
 function now() {
   return new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false })
@@ -153,28 +142,17 @@ function now() {
 
 function scrollToBottom() {
   nextTick(() => {
-    if (scrollRef.value) {
-      scrollRef.value.scrollTop = scrollRef.value.scrollHeight
-    }
+    if (scrollRef.value) scrollRef.value.scrollTop = scrollRef.value.scrollHeight
   })
 }
 
-// 初始流式输出
+// 初始欢迎消息
 onMounted(() => {
-  let i = 0
-  const id = setInterval(() => {
-    i += 2
-    streamingText.value = INITIAL_STREAM.slice(0, i)
-    scrollToBottom()
-    if (i >= INITIAL_STREAM.length) {
-      clearInterval(id)
-      setTimeout(() => {
-        messages.value.push({ role: 'ai', text: INITIAL_STREAM + ' 👇 试着写一段代码？', time: '10:43' })
-        streamingText.value = ''
-        scrollToBottom()
-      }, 400)
-    }
-  }, 35)
+  messages.value = [{
+    role: 'ai',
+    text: '你好，**学习者** ✦ 点击右侧图谱中的节点开始学习吧！',
+    time: now(),
+  }]
 })
 
 // 点击节点时 AI 响应
@@ -184,31 +162,75 @@ watch(() => store.activeNode?.id, (id) => {
   const reply = node.state === 'mastered'
     ? `让我们复习一下 **${node.label}**。你能用一句话给新手解释它吗？`
     : `让我们探索 **${node.label}**。在你看来，\`${node.sub}\` 解决了什么问题？`
-  isThinking.value = true
-  setTimeout(() => {
-    messages.value.push({ role: 'ai', text: reply, time: now() })
-    isThinking.value = false
-    scrollToBottom()
-  }, 700)
+  messages.value.push({ role: 'ai', text: reply, time: now() })
+  scrollToBottom()
 })
 
+// 发送消息（真实 SSE）
 function send() {
   const v = input.value.trim()
-  if (!v) return
+  if (!v || isThinking.value) return
+
+  const node = store.activeNode
+  if (!node) {
+    messages.value.push({
+      role: 'ai',
+      text: '请先点击右侧图谱中的一个节点，再开始对话 👉',
+      time: now(),
+    })
+    scrollToBottom()
+    return
+  }
+
   messages.value.push({ role: 'user', text: v, time: now() })
   input.value = ''
   isThinking.value = true
+  streamingText.value = ''
   scrollToBottom()
-  setTimeout(() => {
-    const reply = `**很好的尝试。** 但是——如果输入是负数会怎样？试试在你的代码里加一个 \`elif x < 0:\` 分支。`
-    messages.value.push({ role: 'ai', text: reply, time: now() })
-    isThinking.value = false
-    scrollToBottom()
-  }, 1100)
+
+  // 构建历史（最近 10 条）
+  const history = messages.value.slice(-10).map(m => ({
+    role: m.role as 'ai' | 'user',
+    content: m.text,
+  }))
+
+  chatStream(
+    node.id,
+    currentTopicId.value,
+    v,
+    history,
+    // onChunk
+    (chunk) => {
+      streamingText.value += chunk
+      scrollToBottom()
+    },
+    // onDone
+    () => {
+      const finalText = streamingText.value
+      streamingText.value = ''
+      isThinking.value = false
+      if (finalText.trim()) {
+        messages.value.push({ role: 'ai', text: finalText, time: now() })
+      }
+      scrollToBottom()
+    },
+    // onError
+    (err) => {
+      console.error('对话失败', err)
+      messages.value.push({ role: 'ai', text: '抱歉，连接失败，请重试。', time: now() })
+      streamingText.value = ''
+      isThinking.value = false
+      scrollToBottom()
+    },
+  )
 }
 
 function resetMessages() {
-  messages.value = []
+  messages.value = [{
+    role: 'ai',
+    text: '对话已重置 ✦ 点击节点开始新的学习！',
+    time: now(),
+  }]
   streamingText.value = ''
 }
 </script>

@@ -33,12 +33,12 @@ class HistoryResponse(BaseModel):
         from_attributes = True
 
 @router.post("/stream")
-async def chat_stream_endpoint(
+def chat_stream_endpoint(
     req: ChatRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    # 验证节点存在
+    # 验证节点
     node = db.query(Node).join(Topic).filter(
         Node.node_key == req.node_key,
         Topic.id == req.topic_id,
@@ -48,19 +48,21 @@ async def chat_stream_endpoint(
         raise HTTPException(status_code=404, detail="节点不存在")
 
     # 保存用户消息
-    user_msg = ChatMessage(
+    db.add(ChatMessage(
         user_id=current_user.id,
         node_key=req.node_key,
         role="user",
         content=req.user_input,
-    )
-    db.add(user_msg)
+    ))
     db.commit()
 
-    # 构建历史消息
-    history = [{"role": m.role, "content": m.content} for m in req.history]
-
-    # 收集完整回复用于保存
+    history = [
+    {
+        "role": "assistant" if m.role == "ai" else "user",
+        "content": m.content
+    }
+    for m in req.history
+    ]
     full_reply = []
 
     def generate():
@@ -71,7 +73,6 @@ async def chat_stream_endpoint(
             user_input=req.user_input,
         ):
             full_reply.append(chunk)
-            # SSE 格式
             yield f"data: {json.dumps({'text': chunk}, ensure_ascii=False)}\n\n"
 
         # 保存 AI 回复
@@ -83,16 +84,12 @@ async def chat_stream_endpoint(
         )
         db.add(ai_msg)
         db.commit()
-
         yield "data: [DONE]\n\n"
 
     return StreamingResponse(
         generate(),
         media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no",
-        }
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
 
 @router.get("/history/{node_key}", response_model=List[HistoryResponse])
