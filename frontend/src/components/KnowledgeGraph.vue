@@ -209,7 +209,7 @@ function zoomOut() {
 
 function resetView() {
   scale.value = 1
-  panX.value = 0
+  panX.value = -80
   panY.value = 0
   showHint()
 }

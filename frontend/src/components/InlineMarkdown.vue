@@ -1,60 +1,51 @@
 <template>
-  <span>
-    <template v-for="(part, i) in parts" :key="i">
-      <strong v-if="part.type === 'bold'">{{ part.text }}</strong>
-      <code v-else-if="part.type === 'code'" class="inline-code">{{ part.text }}</code>
-      <span v-else>{{ part.text }}</span>
-    </template>
-    <template>
-      <div class="md-inline">
-        <span v-html="renderedHtml" />
-        <span v-if="withCaret" class="typing-caret" />
-      </div>
-    </template>
-  </span>
+  <div class="md-inline" v-html="renderedHtml" />
+  <span v-if="withCaret" class="typing-caret" />
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue'
 import { marked } from 'marked'
+import hljs from 'highlight.js'
 
 const props = defineProps<{
   text: string
   withCaret?: boolean
 }>()
 
-const parts = computed(() => {
-  const result: { type: 'text' | 'bold' | 'code'; text: string }[] = []
-  const regex = /(\*\*[^*]+\*\*|`[^`]+`)/g
-  let last = 0
-  let m: RegExpExecArray | null
-  while ((m = regex.exec(props.text)) !== null) {
-    if (m.index > last) result.push({ type: 'text', text: props.text.slice(last, m.index) })
-    const tok = m[0]
-    if (tok.startsWith('**')) result.push({ type: 'bold', text: tok.slice(2, -2) })
-    else result.push({ type: 'code', text: tok.slice(1, -1) })
-    last = regex.lastIndex
-  }
-  if (last < props.text.length) result.push({ type: 'text', text: props.text.slice(last) })
-  return result
+// 配置 marked 使用 highlight.js 高亮代码
+marked.setOptions({
+  breaks: true,
+  gfm: true,
 })
+
+// 自定义 renderer，代码块加高亮和语言标签
+const renderer = new marked.Renderer()
+
+renderer.code = ({ text, lang }: { text: string; lang?: string }) => {
+  const language = lang && hljs.getLanguage(lang) ? lang : 'plaintext'
+  const highlighted = hljs.highlight(text, { language }).value
+  const langLabel = lang ? `<span class="code-lang">${lang}</span>` : ''
+  return `<div class="code-block">
+    <div class="code-header">
+      ${langLabel}
+      <button class="code-copy" onclick="navigator.clipboard.writeText(this.closest('.code-block').querySelector('code').innerText)">复制</button>
+    </div>
+    <pre><code class="hljs language-${language}">${highlighted}</code></pre>
+  </div>`
+}
+
+renderer.codespan = ({ text }: { text: string }) => {
+  return `<code class="inline-code">${text}</code>`
+}
 
 const renderedHtml = computed(() => {
   if (!props.text) return ''
-  return marked.parse(props.text, { breaks: true }) as string
+  return marked.parse(props.text, { renderer }) as string
 })
 </script>
 
 <style scoped>
-.inline-code {
-  font-family: var(--font-mono);
-  font-size: 0.92em;
-  background: var(--blue-tint);
-  color: var(--blue-2);
-  padding: 1px 6px;
-  border-radius: 4px;
-}
-
 .typing-caret {
   display: inline-block;
   width: 7px; height: 14px;
@@ -69,57 +60,159 @@ const renderedHtml = computed(() => {
   0%, 60% { opacity: 1; }
   70%, 100% { opacity: 0; }
 }
+</style>
 
-/* 代码块样式 */
-.md-inline :deep(pre) {
-  background: var(--bg-3);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 12px 14px;
-  overflow-x: auto;
+<style>
+/* 全局样式，影响 v-html 渲染内容 */
+.md-inline p {
+  margin: 6px 0;
+  line-height: 1.7;
+}
+.md-inline p:first-child { margin-top: 0; }
+.md-inline p:last-child { margin-bottom: 0; }
+
+.md-inline strong { font-weight: 600; }
+.md-inline em { font-style: italic; }
+
+.md-inline h1, .md-inline h2, .md-inline h3 {
+  font-weight: 600;
+  margin: 12px 0 6px;
+  line-height: 1.4;
+}
+.md-inline h1 { font-size: 17px; }
+.md-inline h2 { font-size: 15px; }
+.md-inline h3 { font-size: 13.5px; }
+
+.md-inline ul, .md-inline ol {
+  padding-left: 20px;
+  margin: 6px 0;
+}
+.md-inline li { margin: 4px 0; line-height: 1.6; }
+
+.md-inline blockquote {
+  border-left: 3px solid var(--blue-line);
+  padding-left: 12px;
   margin: 8px 0;
-  font-size: 12.5px;
-  line-height: 1.6;
+  color: var(--ink-2);
 }
 
-.md-inline :deep(pre code) {
-  background: transparent;
-  padding: 0;
-  color: var(--ink);
-  font-family: var(--font-mono);
+.md-inline hr {
+  border: none;
+  border-top: 1px solid var(--line);
+  margin: 10px 0;
 }
 
-.md-inline :deep(code) {
+/* 行内代码 */
+.md-inline .inline-code {
   font-family: var(--font-mono);
-  font-size: 0.9em;
+  font-size: 0.88em;
   background: var(--blue-tint);
   color: var(--blue-2);
   padding: 1px 6px;
   border-radius: 4px;
 }
 
-.md-inline :deep(p) {
-  margin: 4px 0;
-  line-height: 1.6;
+/* 代码块容器 */
+.md-inline .code-block {
+  margin: 10px 0;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  background: #1e1e2e;
 }
 
-.md-inline :deep(p:first-child) { margin-top: 0; }
-.md-inline :deep(p:last-child) { margin-bottom: 0; }
-
-.md-inline :deep(strong) { font-weight: 600; }
-
-.md-inline :deep(ul),
-.md-inline :deep(ol) {
-  padding-left: 20px;
-  margin: 6px 0;
+.md-inline .code-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 14px;
+  background: #2a2a3e;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
 }
 
-.md-inline :deep(li) { margin: 3px 0; }
+.md-inline .code-lang {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: #888;
+  text-transform: lowercase;
+  letter-spacing: 0.05em;
+}
 
-.md-inline :deep(blockquote) {
-  border-left: 3px solid var(--blue-line);
-  padding-left: 12px;
+.md-inline .code-copy {
+  font-size: 11px;
+  font-family: var(--font-sans);
+  color: #888;
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 5px;
+  padding: 2px 8px;
+  cursor: pointer;
+  transition: all .15s;
+}
+.md-inline .code-copy:hover {
+  color: #fff;
+  border-color: rgba(255,255,255,0.3);
+}
+
+.md-inline pre {
+  margin: 0;
+  padding: 14px 16px;
+  overflow-x: auto;
+  background: #1e1e2e;
+}
+
+.md-inline pre code {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.65;
+  background: transparent;
+  padding: 0;
+  color: #cdd6f4;
+}
+
+/* highlight.js 颜色主题（Catppuccin Mocha 风格） */
+.md-inline .hljs-keyword,
+.md-inline .hljs-selector-tag { color: #cba6f7; }
+
+.md-inline .hljs-string,
+.md-inline .hljs-attr { color: #a6e3a1; }
+
+.md-inline .hljs-number,
+.md-inline .hljs-literal { color: #fab387; }
+
+.md-inline .hljs-comment { color: #6c7086; font-style: italic; }
+
+.md-inline .hljs-function,
+.md-inline .hljs-title { color: #89b4fa; }
+
+.md-inline .hljs-variable,
+.md-inline .hljs-name { color: #cdd6f4; }
+
+.md-inline .hljs-type,
+.md-inline .hljs-class { color: #f9e2af; }
+
+.md-inline .hljs-built_in { color: #89dceb; }
+
+.md-inline .hljs-operator,
+.md-inline .hljs-punctuation { color: #89dceb; }
+
+.md-inline .hljs-property { color: #f38ba8; }
+
+/* 表格 */
+.md-inline table {
+  border-collapse: collapse;
+  width: 100%;
   margin: 8px 0;
-  color: var(--ink-2);
+  font-size: 13px;
 }
+.md-inline th, .md-inline td {
+  border: 1px solid var(--line);
+  padding: 6px 10px;
+  text-align: left;
+}
+.md-inline th {
+  background: var(--bg-3);
+  font-weight: 600;
+}
+.md-inline tr:nth-child(even) { background: var(--bg-2); }
 </style>
