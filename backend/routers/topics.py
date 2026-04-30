@@ -8,6 +8,7 @@ from models.user import User
 from models.topic import Topic
 from models.node import Node
 from ai.graph_generator import generate_graph, assign_positions
+from ai.prompts import RECOMMEND_TOPICS_PROMPT, build_recommend_prompt
 
 router = APIRouter(prefix="/api/topics", tags=["主题"])
 
@@ -118,3 +119,44 @@ def delete_topic(
     db.delete(topic)
     db.commit()
     return {"message": "删除成功"}
+
+@router.get("/recommend")
+def recommend_topics(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    topics = db.query(Topic).filter(Topic.user_id == current_user.id).all()
+
+    if topics:
+        prompt = build_recommend_prompt([t.title for t in topics])
+    else:
+        # 没有主题时让 AI 自由推荐热门学习主题
+        prompt = "该用户还没有学习任何主题，请推荐 3 个适合初学者的热门技术学习主题。"
+
+    try:
+        from openai import OpenAI
+        from core.config import settings
+        import json
+
+        client = OpenAI(
+            api_key=settings.deepseek_api_key,
+            base_url=settings.deepseek_base_url,
+        )
+        response = client.chat.completions.create(
+            model=settings.deepseek_model,
+            messages=[
+                {"role": "system", "content": RECOMMEND_TOPICS_PROMPT},
+                {"role": "user", "content": prompt},
+            ],
+            max_tokens=500,
+            temperature=0.7,
+        )
+        content = response.choices[0].message.content.strip()
+        if content.startswith("```"):
+            content = content.split("```")[1]
+            if content.startswith("json"):
+                content = content[4:]
+        content = content.strip()
+        return json.loads(content)
+    except Exception as e:
+        return {"recommendations": []}

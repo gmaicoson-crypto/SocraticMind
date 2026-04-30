@@ -20,14 +20,15 @@
       </div>
       <button
         class="master-btn"
-        :class="{ enabled: canMaster }"
-        :disabled="!canMaster"
+        :class="{ enabled: canMaster && !isMastering }"
+        :disabled="!canMaster || isMastering"
         @click="handleMaster"
       >
-        <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round">
+        <svg v-if="!isMastering" width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round">
           <path d="M3 8 L7 12 L13 4"/>
         </svg>
-        标记为已掌握
+        <span v-else class="spinner" />
+        {{ isMastering ? '保存中…' : '标记为已掌握' }}
       </button>
     </div>
 
@@ -52,11 +53,22 @@ const activeTab = ref<'md' | 'canvas'>('md')
 const canMaster = computed(() =>
   !!store.activeNode && store.activeNode.state === 'available'
 )
+const isMastering = ref(false)
 
-function handleMaster() {
-  if (!store.activeNode) return
-  store.masterNode(store.activeNode.id)
-  store.setActiveNode({ ...store.activeNode, state: 'mastered' })
+async function handleMaster() {
+  if (!store.activeNode || isMastering.value) return
+  isMastering.value = true
+  const currentTopicIdSnapshot = store.activeTopicId
+  try {
+    await store.masterNode(store.activeNode.id)
+    store.setActiveNode({ ...store.activeNode, state: 'mastered' })
+    await store.fetchTopicsOnly()
+    await store.fetchNodes(Number(currentTopicIdSnapshot))
+  } catch (err) {
+    console.error('标记失败', err)
+  } finally {
+    isMastering.value = false
+  }
 }
 
 const IconMd = () => h('svg', {
@@ -75,7 +87,7 @@ const IconCanvas = () => h('svg', {
   h('path', { d: 'M3 17L9 11L13 15L21 7' })
 ])
 
-const tabs = [
+const tabs: Array<{ key: 'md' | 'canvas', label: string, icon: any }> = [
   { key: 'md', label: 'Markdown 笔记', icon: IconMd },
   { key: 'canvas', label: '画布草图', icon: IconCanvas },
 ]
@@ -179,4 +191,15 @@ const tabs = [
   min-height: 0;
   overflow: hidden;
 }
+
+.spinner {
+  width: 11px; height: 11px;
+  border-radius: 50%;
+  border: 2px solid rgba(255,255,255,0.4);
+  border-top-color: white;
+  animation: spin .7s linear infinite;
+  display: inline-block;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
 </style>

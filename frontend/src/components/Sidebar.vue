@@ -28,7 +28,7 @@
 
       <div class="topic-list">
         <button
-          v-for="topic in store.topics"
+          v-for="topic in visibleTopics"
           :key="topic.id"
           class="topic-row"
           :class="{ active: store.activeTopicId === topic.id }"
@@ -52,6 +52,14 @@
           </div>
         </button>
 
+        <!-- 展开按钮 -->
+        <button v-if="hasMore" class="expand-btn" @click="showManager = true">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <path d="M6 9l6 6 6-6"/>
+          </svg>
+          还有 {{ store.topics.length - MAX_VISIBLE }} 个主题
+        </button>
+
         <!-- 空状态 -->
         <div v-if="store.topics.length === 0" class="empty-topics">
           在对话框告诉 AI 你想学什么
@@ -61,17 +69,42 @@
 
     <!-- 推荐 -->
     <div class="section">
-      <div class="section-title" style="padding: 0 4px 8px;">推荐</div>
-      <div class="recommend-list">
+      <div class="section-header">
+        <span class="section-title">推荐</span>
         <button
-          v-for="r in recommends"
+          class="manage-btn"
+          title="刷新推荐"
+          :disabled="isRefreshing"
+          @click="refreshRecommend"
+        >
+          <svg
+            width="13" height="13" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="2" stroke-linecap="round"
+            :style="{ animation: isRefreshing ? 'spin .7s linear infinite' : 'none' }"
+          >
+            <path d="M1 4v6h6M23 20v-6h-6"/>
+            <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/>
+          </svg>
+        </button>
+      </div>
+
+      <!-- 加载中 -->
+      <div v-if="store.recommendations.length === 0 || isRefreshing" class="rec-empty">
+        <span class="rec-loading">{{ isRefreshing ? 'AI 正在重新推荐…' : 'AI 正在分析推荐…' }}</span>
+      </div>
+
+      <div v-else class="recommend-list">
+        <button
+          v-for="r in store.recommendations"
           :key="r.title"
           class="recommend-row"
+          :disabled="!!generatingTitle"
+          @click="handleRecommend(r.title, r.emoji)"
         >
-          <span class="rec-dot" />
+          <span class="rec-emoji">{{ r.emoji }}</span>
           <div>
             <div class="rec-title">{{ r.title }}</div>
-            <div class="rec-count">{{ r.count }} 节点</div>
+            <div class="rec-reason">{{ r.reason }}</div>
           </div>
         </button>
       </div>
@@ -84,37 +117,94 @@
         <span class="streak-label">连续学习</span>
       </div>
       <div class="streak-days">
-        <span class="streak-num">14</span>
+        <span class="streak-num">{{ store.streakData.streak }}</span>
         <span class="streak-unit">天</span>
       </div>
+      <!-- 最近14天热力图 -->
       <div class="streak-bars">
         <div
-          v-for="i in 7"
+          v-for="(day, i) in store.streakData.recent"
           :key="i"
           class="streak-bar"
+          :title="day.date"
           :style="{
-            background: i < 7 ? 'var(--blue-2)' : 'var(--bg-3)',
-            opacity: i < 7 ? 0.4 + i * 0.08 : 1,
+            background: day.learned ? 'var(--blue-2)' : 'var(--bg-3)',
+            opacity: day.learned ? 1 : 0.5,
           }"
         />
       </div>
+      <div class="streak-total">累计学习 {{ store.streakData.total_days }} 天</div>
     </div>
+
+    <!-- Toast 提示 -->
+    <Transition name="toast">
+      <div v-if="showToast" class="toast">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+          <path d="M20 6L9 17l-5-5"/>
+        </svg>
+        {{ toastMsg }}
+      </div>
+    </Transition>
 
   </aside>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { useLearningStore } from '../stores/learning'
 import TopicManager from './TopicManager.vue'
+import { generateTopic } from '../api/topic'
 
 const store = useLearningStore()
 const showManager = ref(false)
+const isGenerating = ref(false)
+const generatingTitle = ref<string | null>(null)
 
-const recommends = [
-  { title: '概率与统计', count: 16 },
-  { title: '数据可视化', count: 12 },
-]
+const MAX_VISIBLE = 4
+const visibleTopics = computed(() => store.topics.slice(0, MAX_VISIBLE))
+const hasMore = computed(() => store.topics.length > MAX_VISIBLE)
+
+const toastMsg = ref('')
+const showToast = ref(false)
+let toastTimer: ReturnType<typeof setTimeout> | null = null
+const isRefreshing = ref(false)
+
+function showToastMsg(msg: string) {
+  toastMsg.value = msg
+  showToast.value = true
+  if (toastTimer) clearTimeout(toastTimer)
+  // 正在加入中不自动消失，等下一条消息替换
+  if (!msg.includes('请稍等')) {
+    toastTimer = setTimeout(() => { showToast.value = false }, 2500)
+  }
+}
+
+async function refreshRecommend() {
+  if (isRefreshing.value) return
+  isRefreshing.value = true
+  try {
+    await store.fetchRecommendations()
+  } finally {
+    isRefreshing.value = false
+  }
+}
+
+async function handleRecommend(title: string, emoji: string) {
+  if (generatingTitle.value) return
+  generatingTitle.value = title
+  showToastMsg(`正在将《${title}》加入学习计划，请稍等…`)
+  try {
+    const topic = await generateTopic(title, emoji)
+    await store.fetchTopicsOnly()
+    await store.setActiveTopic(String(topic.id))
+    showToastMsg(`已成功将《${title}》加入学习计划 ✓`)
+  } catch (err) {
+    showToastMsg(`加入失败，请重试`)
+    console.error('生成推荐主题失败', err)
+  } finally {
+    generatingTitle.value = null
+  }
+}
 </script>
 
 <style scoped>
@@ -280,6 +370,30 @@ const recommends = [
 }
 .fill-active { background: var(--blue-2); }
 
+.expand-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 7px;
+  background: transparent;
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  color: var(--ink-3);
+  font-size: 11.5px;
+  font-weight: 500;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition: all .15s;
+  margin-top: 2px;
+}
+.expand-btn:hover {
+  background: var(--blue-tint);
+  border-color: var(--blue-line);
+  color: var(--blue-2);
+}
+
 .recommend-list {
   display: flex;
   flex-direction: column;
@@ -319,6 +433,68 @@ const recommends = [
   color: var(--ink-3);
   font-family: var(--font-mono);
   margin-top: 1px;
+}
+
+.rec-emoji {
+  width: 28px; height: 28px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px; flex-shrink: 0;
+  background: var(--bg-2); border-radius: 8px;
+}
+
+.rec-reason {
+  font-size: 10px;
+  color: var(--ink-3);
+  margin-top: 1px;
+  font-family: var(--font-mono);
+}
+
+.rec-empty {
+  padding: 12px 8px;
+  text-align: center;
+}
+
+.rec-loading {
+  font-size: 11.5px;
+  color: var(--ink-3);
+}
+
+.toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: oklch(0.22 0.012 250);
+  color: white;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 10px 16px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  z-index: 999;
+  white-space: nowrap;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+  font-family: var(--font-sans);
+}
+
+.toast-enter-active,
+.toast-leave-active {
+  transition: opacity .2s ease, transform .2s ease;
+}
+.toast-enter-from,
+.toast-leave-to {
+  opacity: 0;
+  transform: translateX(-50%) translateY(10px);
+}
+
+.streak-total {
+  font-size: 10.5px;
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  margin-top: 6px;
+  text-align: right;
 }
 
 .streak-card {
@@ -371,5 +547,9 @@ const recommends = [
   height: 14px;
   border-radius: 3px;
   transition: background .3s;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 </style>

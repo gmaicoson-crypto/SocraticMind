@@ -15,6 +15,10 @@ onMounted(() => {
 onMounted(async () => {
   store.loadUserFromStorage()
   const token = localStorage.getItem('sm_token')
-  if (token) await store.fetchTopics()
+  if (token) {
+    await store.fetchTopics()
+    store.recordLearning()  // 登录后记录今日学习
+    store.fetchStreak()     // 获取连续天数
+  }
 })
 </script>

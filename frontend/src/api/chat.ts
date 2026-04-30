@@ -16,6 +16,7 @@ export function chatStream(
   onDone: () => void,
   onError: (err: any) => void,
   controllers?: AbortController,
+  onSignal?: (signal: string) => void,
 ) {
   const token = localStorage.getItem('sm_token')
 
@@ -73,6 +74,7 @@ export function chatStream(
             try {
               const json = JSON.parse(data)
               if (json.text) onChunk(json.text)
+              if (json.signal) onSignal?.(json.signal)
             } catch {}
           }
         }

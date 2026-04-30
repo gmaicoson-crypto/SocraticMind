@@ -39,7 +39,6 @@ def chat_stream_endpoint(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    # 根据模式确定 node_label 和 node_sub
     if req.mode == "normal":
         node_label = "通用助手"
         node_sub = "General Assistant"
@@ -54,7 +53,6 @@ def chat_stream_endpoint(
         node_label = node.label
         node_sub = node.sub
 
-    # 保存用户消息
     db.add(ChatMessage(
         user_id=current_user.id,
         node_key=req.node_key,
@@ -70,12 +68,10 @@ def chat_stream_endpoint(
         }
         for m in req.history
     ]
-    full_reply = []
 
     def generate():
-        buffer = []
-        buffer_size = 0
-        
+        full_text = []
+
         for chunk in chat_stream(
             messages=history,
             node_label=node_label,
@@ -83,30 +79,40 @@ def chat_stream_endpoint(
             user_input=req.user_input,
             mode=req.mode,
         ):
-            full_reply.append(chunk)
-            data = f"data: {json.dumps({'text': chunk}, ensure_ascii=False)}\n\n"
-            yield data
+            full_text.append(chunk)
+            yield f"data: {json.dumps({'text': chunk}, ensure_ascii=False)}\n\n"
 
-        # 保存 AI 回复
-        ai_msg = ChatMessage(
+        full_reply = "".join(full_text)
+
+        # 检测掌握信号
+        signal = None
+        if "[MASTERED]" in full_reply:
+            signal = "MASTERED"
+            full_reply = full_reply.replace("[MASTERED]", "").strip()
+
+        # 保存 AI 回复（去掉信号标记）
+        db.add(ChatMessage(
             user_id=current_user.id,
             node_key=req.node_key,
             role="ai",
-            content="".join(full_reply),
-        )
-        db.add(ai_msg)
+            content=full_reply,
+        ))
         db.commit()
+
+        # 发送信号给前端
+        if signal:
+            yield f"data: {json.dumps({'signal': signal}, ensure_ascii=False)}\n\n"
+
         yield "data: [DONE]\n\n"
 
     return StreamingResponse(
         generate(),
         media_type="text/event-stream",
         headers={
-            "Cache-Control": "no-cache", 
+            "Cache-Control": "no-cache",
             "X-Accel-Buffering": "no",
             "Connection": "keep-alive",
         },
-        
     )
 
 @router.get("/history/{node_key}", response_model=List[HistoryResponse])

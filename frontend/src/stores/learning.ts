@@ -2,6 +2,9 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { KNode, KEdge, Topic, Message } from '../types'
 import { getTopics, getNodes, masterNode as apiMasterNode } from '../api/topic'
+import { getRecommendations } from '../api/topic'
+import { recordToday, getStreak } from '../api/progress'
+import type { StreakData } from '../api/progress'
 
 export const useLearningStore = defineStore('learning', () => {
 
@@ -13,6 +16,8 @@ export const useLearningStore = defineStore('learning', () => {
   const activeTopicId = ref('')
   const activeNode = ref<KNode | null>(null)
   const messages = ref<Message[]>([])
+  const lastMasteredId = ref<string | null>(null)
+  const recommendations = ref<{ title: string; emoji: string; reason: string }[]>([])
 
   // ── 用户信息 ──
   const userInfo = ref<{
@@ -24,6 +29,13 @@ export const useLearningStore = defineStore('learning', () => {
     daily_goal: number
     ai_style: string
   } | null>(null)
+
+  /// ── 进度状态 ──
+  const streakData = ref<StreakData>({
+    streak: 0,
+    total_days: 0,
+    recent: [],
+  })
 
   // ── 计算属性 ──
   const masteredCount = computed(() => nodes.value.filter(n => n.state === 'mastered').length)
@@ -84,8 +96,51 @@ export const useLearningStore = defineStore('learning', () => {
         activeTopicId.value = String(data[0].id)
         await fetchNodes(data[0].id)
       }
+      fetchRecommendations()
     } catch (err) {
       console.error('加载主题失败', err)
+    }
+  }
+
+  async function fetchTopicsOnly() {
+  try {
+    const data = await getTopics()
+    topics.value = data.map(t => ({
+      id: String(t.id),
+      title: t.title,
+      emoji: t.emoji,
+      nodes: t.total_nodes,
+      mastered: t.mastered_nodes,
+    }))
+      // 不重置 activeTopicId
+    } catch (err) {
+      console.error('加载主题失败', err)
+    }
+  }
+
+  async function fetchStreak() {
+  try {
+    streakData.value = await getStreak()
+  } catch (err) {
+    console.error('获取连续学习失败', err)
+  }
+}
+
+  async function recordLearning() {
+    try {
+      await recordToday()
+      await fetchStreak()
+    } catch (err) {
+      console.error('记录学习失败', err)
+    }
+  }
+
+  async function fetchRecommendations() {
+    try {
+      const data = await getRecommendations()
+      recommendations.value = data
+    } catch (err) {
+      console.error('加载推荐失败', err)
     }
   }
 
@@ -119,8 +174,10 @@ export const useLearningStore = defineStore('learning', () => {
         }
         return n
       })
+      lastMasteredId.value = nodeId  // 触发 confetti
     } catch (err) {
       console.error('标记掌握失败', err)
+      throw err  // 抛出让 NotesPanel 捕获
     }
   }
 
@@ -146,6 +203,9 @@ export const useLearningStore = defineStore('learning', () => {
     // 状态
     isDark, nodes, edges, topics,
     activeTopicId, activeNode, messages, userInfo,
+    lastMasteredId,
+    recommendations,
+    streakData, 
     // 计算
     masteredCount, totalCount, availableCount,
     // 方法
@@ -154,5 +214,8 @@ export const useLearningStore = defineStore('learning', () => {
     fetchTopics, fetchNodes, setActiveTopic,
     setActiveNode, masterNode, addMessage,
     clearGraph,
+    fetchTopicsOnly,
+    fetchRecommendations,
+    fetchStreak, recordLearning,
   }
 })

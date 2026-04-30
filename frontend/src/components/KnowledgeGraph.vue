@@ -286,6 +286,45 @@ function fireConfettiAt(node: KNode) {
   })
 }
 
+function fireCelebration() {
+  if (!confettiInstance) return
+  // 三波彩纸屑从不同位置
+  confettiInstance({
+    particleCount: 100,
+    spread: 120,
+    origin: { x: 0.5, y: 0.3 },
+    colors: ['#9CC8E8', '#C7DFF1', '#E8DFC9', '#F4ECD8', '#7AB0D6', '#FAC775', '#F09595'],
+    startVelocity: 35,
+    gravity: 0.8,
+    scalar: 0.9,
+    ticks: 200,
+  })
+  setTimeout(() => {
+    confettiInstance({
+      particleCount: 60,
+      spread: 80,
+      origin: { x: 0.2, y: 0.4 },
+      colors: ['#9CC8E8', '#FAC775', '#9FE1CB'],
+      startVelocity: 28,
+      gravity: 0.8,
+      scalar: 0.75,
+      ticks: 160,
+    })
+  }, 250)
+  setTimeout(() => {
+    confettiInstance({
+      particleCount: 60,
+      spread: 80,
+      origin: { x: 0.8, y: 0.4 },
+      colors: ['#C7DFF1', '#F09595', '#AFA9EC'],
+      startVelocity: 28,
+      gravity: 0.8,
+      scalar: 0.75,
+      ticks: 160,
+    })
+  }, 500)
+}
+
 onMounted(() => {
   if (confettiCanvasRef.value && (window as any).confetti) {
     confettiInstance = (window as any).confetti.create(confettiCanvasRef.value, {
@@ -362,6 +401,21 @@ watch(
 
 watch(() => store.activeTopicId, () => resetView())
 
+watch(() => store.lastMasteredId, (id) => {
+  if (!id) return
+  const node = store.nodes.find(n => n.id === id)
+  if (node) {
+    fireConfettiAt(node)
+    // 检查是否全部掌握
+    const allMastered = store.nodes.length > 0 &&
+      store.nodes.every(n => n.state === 'mastered')
+    if (allMastered) {
+      // 延迟触发全屏庆祝
+      setTimeout(() => fireCelebration(), 400)
+    }
+  }
+})
+
 function handleClick(node: KNode) {
   if (node.state === 'locked') return
   store.setActiveNode(node)
@@ -383,6 +437,20 @@ function handleHover(payload: { node: KNode | null; event?: MouseEvent }) {
   }
   tip.value = { x, y, text: textMap[payload.node.state] }
 }
+
+watch(() => store.lastMasteredId, (id) => {
+  console.log('lastMasteredId changed:', id)
+  console.log('confettiInstance:', confettiInstance)
+  console.log('nodes:', store.nodes.map(n => ({ id: n.id, state: n.state })))
+  if (!id) return
+  const node = store.nodes.find(n => n.id === id)
+  console.log('found node:', node)
+  if (node) {
+    fireConfettiAt(node)
+    const allMastered = store.nodes.length > 0 && store.nodes.every(n => n.state === 'mastered')
+    if (allMastered) setTimeout(() => fireCelebration(), 400)
+  }
+})
 </script>
 
 <style scoped>

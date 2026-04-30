@@ -12,3 +12,11 @@ class ChatMessage(Base):
     role = Column(String, nullable=False)   # ai / user
     content = Column(Text, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+class LearningRecord(Base):
+    __tablename__ = "learning_records"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    date = Column(String, nullable=False)  # "2026-04-30"
+    created_at = Column(DateTime(timezone=True), server_default=func.now())

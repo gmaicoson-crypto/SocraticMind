@@ -19,6 +19,12 @@ export interface NodeData {
   parent_keys: string
 }
 
+export interface Recommendation {
+  title: string
+  emoji: string
+  reason: string
+}
+
 export async function getTopics() {
   const res = await api.get('/api/topics')
   return res.data as TopicData[]
@@ -46,4 +52,9 @@ export async function generateTopic(title: string, emoji: string = '📚') {
 
 export async function deleteTopic(topicId: number) {
   await api.delete(`/api/topics/${topicId}`)
+}
+
+export async function getRecommendations() {
+  const res = await api.get('/api/topics/recommend')
+  return res.data.recommendations as Recommendation[]
 }
