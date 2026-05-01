@@ -18,6 +18,7 @@ export function chatStream(
   onError: (err: any) => void,
   controllers?: AbortController,
   onSignal?: (signal: string) => void,
+  onMsgIds?: (userMsgId: number, aiMsgId: number) => void,
 ) {
   const token = localStorage.getItem('sm_token')
 
@@ -77,6 +78,7 @@ export function chatStream(
               const json = JSON.parse(data)
               if (json.text) onChunk(json.text)
               if (json.signal) onSignal?.(json.signal)
+              if (json.msg_ids) onMsgIds?.(json.msg_ids.user, json.msg_ids.ai)
             } catch {}
           }
         }
@@ -112,6 +114,11 @@ export function chatStream(
 export async function getChatHistory(nodeKey: string) {
   const res = await api.get(`/api/chat/history/${nodeKey}`)
   return res.data as { id: number; role: string; content: string }[]
+}
+
+export async function deleteMessages(ids: number[]) {
+  if (ids.length === 0) return
+  await api.delete('/api/chat/messages', { data: { ids } })
 }
 
 export async function getSuggestions(mode: 'socratic' | 'normal') {

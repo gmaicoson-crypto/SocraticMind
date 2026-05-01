@@ -289,7 +289,7 @@ import { ref, watch, nextTick, computed, onMounted } from 'vue'
 import { useLearningStore } from '../stores/learning'
 import type { Message } from '../types'
 import InlineMarkdown from './InlineMarkdown.vue'
-import { chatStream, getSuggestions } from '../api/chat'
+import { chatStream, getSuggestions, deleteMessages } from '../api/chat'
 import { generateTopic } from '../api/topic'
 
 // ── 会话类型 ──
@@ -317,6 +317,7 @@ const editingName = ref('')
 
 let abortController: AbortController | null = null
 let saveTimer: ReturnType<typeof setTimeout> | null = null
+let pendingMsgIds: { user: number; ai: number } | null = null
 
 const userInitial = computed(() => (store.userInfo?.username ?? '学').slice(0, 1))
 const currentTopicId = computed(() => Number(store.activeTopicId) || 0)
@@ -332,6 +333,19 @@ const STORAGE_KEY_SOCRATIC_CUR = 'sm_session_cur_socratic'
 const STORAGE_KEY_NORMAL_CUR = 'sm_session_cur_normal'
 const STORAGE_KEY_CHIPS_SOCRATIC = 'sm_chips_socratic'
 const STORAGE_KEY_CHIPS_NORMAL = 'sm_chips_normal'
+const STORAGE_VERSION_KEY = 'sm_data_version'
+const CURRENT_DATA_VERSION = '2'  // v2: 引入 db_id 同步，清除不带 db_id 的旧数据
+
+// 版本迁移：旧数据无 db_id，删除时无法同步后端，直接清除
+if (localStorage.getItem(STORAGE_VERSION_KEY) !== CURRENT_DATA_VERSION) {
+  localStorage.removeItem(STORAGE_KEY_SOCRATIC_SESSIONS)
+  localStorage.removeItem(STORAGE_KEY_NORMAL_SESSIONS)
+  localStorage.removeItem(STORAGE_KEY_SOCRATIC_CUR)
+  localStorage.removeItem(STORAGE_KEY_NORMAL_CUR)
+  localStorage.removeItem(STORAGE_KEY_CHIPS_SOCRATIC)
+  localStorage.removeItem(STORAGE_KEY_CHIPS_NORMAL)
+  localStorage.setItem(STORAGE_VERSION_KEY, CURRENT_DATA_VERSION)
+}
 
 const socraticSessions = ref<Session[]>(loadSessions(STORAGE_KEY_SOCRATIC_SESSIONS, 'socratic'))
 const normalSessions = ref<Session[]>(loadSessions(STORAGE_KEY_NORMAL_SESSIONS, 'normal'))
@@ -516,6 +530,15 @@ watch(chatMode, () => {
 
 // 删除会话
 function deleteSession(id: string) {
+  const sessions = chatMode.value === 'socratic' ? socraticSessions.value : normalSessions.value
+  const session = sessions.find(s => s.id === id)
+  if (session) {
+    const ids = session.messages.flatMap(m =>
+      [m.db_id, m.paired_db_id].filter((x): x is number => x !== undefined)
+    )
+    if (ids.length > 0) deleteMessages(ids).catch(() => {})
+  }
+
   if (chatMode.value === 'socratic') {
     if (socraticSessions.value.length <= 1) {
       // 最后一个不删，重置
@@ -584,6 +607,9 @@ function quoteMessage(msg: Message) {
 function deleteMessage(index: number) {
   if (!currentSession.value) return
   if (index === 0) return  // 第一条欢迎消息不允许删除
+  const msg = currentSession.value.messages[index]
+  const ids = [msg.db_id, msg.paired_db_id].filter((id): id is number => id !== undefined)
+  if (ids.length > 0) deleteMessages(ids).catch(() => {})
   currentSession.value.messages.splice(index, 1)
   saveSessions()
 }
@@ -726,6 +752,7 @@ async function send() {
   streamingText.value = ''
   scrollToBottom()
   const history = messages.value.slice(-10).map(m => ({ role: m.role as 'ai' | 'user', content: m.text }))
+  const userMsgRef = currentSession.value!.messages[currentSession.value!.messages.length - 1]
 
   chatStream(
     store.activeNode.id, currentTopicId.value, userInput, history, 'socratic', aiStyle.value,
@@ -737,7 +764,15 @@ async function send() {
     () => {
       const t = streamingText.value.replace(/\[MASTERED\]/g, '').replace(/\[CONFIRM_MASTER\]/g, '').trim()
       streamingText.value = ''; isThinking.value = false
-      if (t) pushMessage({ role: 'ai', text: t, time: now() })
+      if (t) {
+        const aiMsg: Message = { role: 'ai', text: t, time: now() }
+        if (pendingMsgIds) {
+          userMsgRef.db_id = pendingMsgIds.user
+          aiMsg.db_id = pendingMsgIds.ai
+          pendingMsgIds = null
+        }
+        pushMessage(aiMsg)
+      }
       scrollToBottom()
     },
     (err) => {
@@ -747,6 +782,7 @@ async function send() {
     },
     abortController,
     handleSignal,
+    (userMsgId, aiMsgId) => { pendingMsgIds = { user: userMsgId, ai: aiMsgId } },
   )
 }
 
@@ -848,7 +884,15 @@ watch(() => store.activeNode?.id, async (id) => {
         .trim()
       streamingText.value = ''
       isThinking.value = false
-      if (t) pushMessage({ role: 'ai', text: t, time: now() })
+      if (t) {
+        const aiMsg: Message = { role: 'ai', text: t, time: now() }
+        if (pendingMsgIds) {
+          aiMsg.db_id = pendingMsgIds.ai
+          aiMsg.paired_db_id = pendingMsgIds.user // invisible system prompt record
+          pendingMsgIds = null
+        }
+        pushMessage(aiMsg)
+      }
       scrollToBottom()
     },
     (err) => {
@@ -858,6 +902,7 @@ watch(() => store.activeNode?.id, async (id) => {
     },
     abortController,
     handleSignal,
+    (userMsgId, aiMsgId) => { pendingMsgIds = { user: userMsgId, ai: aiMsgId } },
   )
 })
 

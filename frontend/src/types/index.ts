@@ -28,4 +28,6 @@ export interface Message {
   text: string
   time: string
   quote?: string
+  db_id?: number        // DB primary key for this message record
+  paired_db_id?: number // for AI messages auto-triggered by an invisible system prompt
 }

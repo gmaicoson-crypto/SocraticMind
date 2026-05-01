@@ -54,13 +54,16 @@ def chat_stream_endpoint(
         node_label = node.label
         node_sub = node.sub
 
-    db.add(ChatMessage(
+    user_msg = ChatMessage(
         user_id=current_user.id,
         node_key=req.node_key,
         role="user",
         content=req.user_input,
         mode=req.mode,
-    ))
+    )
+    db.add(user_msg)
+    db.flush()
+    user_msg_id = user_msg.id
     db.commit()
 
     history = [
@@ -94,18 +97,24 @@ def chat_stream_endpoint(
             full_reply = full_reply.replace("[MASTERED]", "").strip()
 
         # 保存 AI 回复（去掉信号标记）
-        db.add(ChatMessage(
+        ai_msg = ChatMessage(
             user_id=current_user.id,
             node_key=req.node_key,
             role="ai",
             content=full_reply,
             mode=req.mode,
-        ))
+        )
+        db.add(ai_msg)
+        db.flush()
+        ai_msg_id = ai_msg.id
         db.commit()
 
         # 发送信号给前端
         if signal:
             yield f"data: {json.dumps({'signal': signal}, ensure_ascii=False)}\n\n"
+
+        # 发送消息 ID，让前端可将 DB 记录与 UI 消息关联，以便删除时同步
+        yield f"data: {json.dumps({'msg_ids': {'user': user_msg_id, 'ai': ai_msg_id}}, ensure_ascii=False)}\n\n"
 
         yield "data: [DONE]\n\n"
 
@@ -129,6 +138,24 @@ def get_history(
         ChatMessage.user_id == current_user.id,
         ChatMessage.node_key == node_key,
     ).order_by(ChatMessage.id).limit(50).all()
+
+class DeleteMessagesRequest(BaseModel):
+    ids: List[int]
+
+@router.delete("/messages")
+def delete_messages_endpoint(
+    req: DeleteMessagesRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    if not req.ids:
+        return {"deleted": 0}
+    deleted = db.query(ChatMessage).filter(
+        ChatMessage.id.in_(req.ids),
+        ChatMessage.user_id == current_user.id,
+    ).delete(synchronize_session=False)
+    db.commit()
+    return {"deleted": deleted}
 
 @router.get("/suggestions")
 def get_suggestions(
