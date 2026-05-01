@@ -1,6 +1,6 @@
 from openai import OpenAI
 from core.config import settings
-from .prompts import SOCRATIC_SYSTEM_PROMPT,NORMAL_CHAT_PROMPT, build_user_message
+from .prompts import get_socratic_prompt, NORMAL_CHAT_PROMPT, build_user_message
 from typing import Generator
 
 client = OpenAI(
@@ -14,9 +14,10 @@ def chat_stream(
     node_sub: str,
     user_input: str,
     mode: str = "socratic",
+    ai_style: str = "标准",
 ) -> Generator[str, None, None]:
 
-    system_prompt = SOCRATIC_SYSTEM_PROMPT if mode == "socratic" else NORMAL_CHAT_PROMPT
+    system_prompt = get_socratic_prompt(ai_style) if mode == "socratic" else NORMAL_CHAT_PROMPT
 
     if mode == "socratic":
         user_content = build_user_message(node_label, node_sub, user_input)

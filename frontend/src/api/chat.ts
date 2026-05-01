@@ -12,6 +12,7 @@ export function chatStream(
   userInput: string,
   history: ChatMessage[],
   mode: 'socratic' | 'normal',
+  aiStyle: string,
   onChunk: (text: string) => void,
   onDone: () => void,
   onError: (err: any) => void,
@@ -47,6 +48,7 @@ export function chatStream(
       user_input: userInput,
       history: history.map(m => ({ role: m.role, content: m.content })),
       mode,
+      ai_style: aiStyle,
     }),
     signal: controller.signal,
   })

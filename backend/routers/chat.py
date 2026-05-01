@@ -24,6 +24,7 @@ class ChatRequest(BaseModel):
     user_input: str
     history: List[MessageItem] = []
     mode: str = "socratic"
+    ai_style: str = "标准"
 
 class HistoryResponse(BaseModel):
     id: int
@@ -79,6 +80,7 @@ def chat_stream_endpoint(
             node_sub=node_sub,
             user_input=req.user_input,
             mode=req.mode,
+            ai_style=req.ai_style,
         ):
             full_text.append(chunk)
             yield f"data: {json.dumps({'text': chunk}, ensure_ascii=False)}\n\n"

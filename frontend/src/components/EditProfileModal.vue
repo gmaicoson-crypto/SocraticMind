@@ -7,7 +7,7 @@
         <div class="modal-header">
           <div>
             <div class="modal-title">编辑个人资料</div>
-            <div class="modal-sub">更新你的信息与学习偏好</div>
+            <div class="modal-sub">更新你的个人信息</div>
           </div>
           <button class="close-btn" @click="emit('close')">✕</button>
         </div>
@@ -90,60 +90,6 @@
 
           <div class="modal-divider" />
 
-          <!-- 学习偏好 -->
-          <div>
-            <div class="section-label">学习偏好</div>
-            <div class="fields">
-
-              <div class="field">
-                <label>每日目标节点数</label>
-                <div class="slider-row">
-                  <input
-                    type="range" min="1" max="10" step="1"
-                    v-model.number="form.dailyGoal"
-                    class="goal-slider"
-                  />
-                  <div class="slider-val">{{ form.dailyGoal }}</div>
-                </div>
-              </div>
-
-              <div class="field">
-                <label>AI 引导风格</label>
-                <div class="seg">
-                  <button
-                    v-for="s in aiStyles"
-                    :key="s"
-                    class="seg-btn"
-                    :class="{ active: form.aiStyle === s }"
-                    @click="form.aiStyle = s"
-                  >{{ s }}</button>
-                </div>
-              </div>
-
-              <div class="field">
-                <label>通知设置</label>
-                <div class="toggle-list">
-                  <div v-for="t in toggles" :key="t.key" class="toggle-row">
-                    <div>
-                      <div class="toggle-info">{{ t.label }}</div>
-                      <div class="toggle-sub">{{ t.sub }}</div>
-                    </div>
-                    <div
-                      class="toggle"
-                      :class="{ on: form.notifications[t.key] }"
-                      @click="form.notifications[t.key] = !form.notifications[t.key]"
-                    >
-                      <div class="toggle-thumb" />
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-            </div>
-          </div>
-
-          <div class="modal-divider" />
-
           <!-- 账号安全 -->
           <div>
             <div class="section-label">账号安全</div>
@@ -199,7 +145,6 @@ import { useRouter } from 'vue-router'
 import { useLearningStore } from '../stores/learning'
 import { updateMe } from '../api/auth'
 
-type NotificationKey = 'daily' | 'achievement' | 'streak'
 const emit = defineEmits<{ close: [] }>()
 const router = useRouter()
 
@@ -215,14 +160,6 @@ const avatarGrads = [
   'linear-gradient(135deg,#AFA9EC,#534AB7)',
 ]
 
-const aiStyles = ['温和', '标准', '严格']
-
-const toggles: { key: NotificationKey; label: string; sub: string }[] = [
-  { key: 'daily',       label: '每日学习提醒',   sub: '每天 09:00 发送提醒' },
-  { key: 'achievement', label: '成就解锁通知',   sub: '解锁新徽章时通知' },
-  { key: 'streak',      label: '连续学习提醒',   sub: '即将断签时发出警告' },
-]
-
 const store = useLearningStore()
 
 const form = reactive({
@@ -230,13 +167,6 @@ const form = reactive({
   bio: store.userInfo?.bio ?? '',
   email: store.userInfo?.email ?? '',
   avatarGrad: store.userInfo?.avatar_grad ?? avatarGrads[0],
-  dailyGoal: store.userInfo?.daily_goal ?? 5,
-  aiStyle: store.userInfo?.ai_style ?? '标准',
-  notifications: {
-    daily: true,
-    achievement: true,
-    streak: false,
-  },
 })
 
 async function handleSave() {
@@ -246,8 +176,6 @@ async function handleSave() {
       username: form.name,
       bio: form.bio,
       avatar_grad: form.avatarGrad,
-      daily_goal: form.dailyGoal,
-      ai_style: form.aiStyle,
     })
     // 更新本地存储和 store
     localStorage.setItem('sm_user', JSON.stringify(updated))

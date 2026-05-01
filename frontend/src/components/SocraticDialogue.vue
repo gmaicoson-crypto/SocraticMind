@@ -221,25 +221,38 @@
 
     <!-- Input -->
     <div class="input-wrap">
-      <div class="mode-switch">
-        <button class="mode-btn" :class="{ active: chatMode === 'socratic' }" @click="chatMode = 'socratic'" title="学习模式">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-            <path d="M12 2L13.5 8.5L20 10L13.5 11.5L12 18L10.5 11.5L4 10L10.5 8.5Z"/>
-          </svg>
-          学习
-          <span v-if="socraticSessions.length > 0 && currentSocraticSession.messages.length > 1" class="mode-badge">
-            {{ currentSocraticSession.messages.length - 1 }}
-          </span>
-        </button>
-        <button class="mode-btn" :class="{ active: chatMode === 'normal' }" @click="chatMode = 'normal'" title="普通对话">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-          </svg>
-          对话
-          <span v-if="normalSessions.length > 0 && currentNormalSession.messages.length > 1" class="mode-badge">
-            {{ currentNormalSession.messages.length - 1 }}
-          </span>
-        </button>
+      <div class="input-toolbar">
+        <div class="mode-switch">
+          <button class="mode-btn" :class="{ active: chatMode === 'socratic' }" @click="chatMode = 'socratic'" title="学习模式">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+              <path d="M12 2L13.5 8.5L20 10L13.5 11.5L12 18L10.5 11.5L4 10L10.5 8.5Z"/>
+            </svg>
+            学习
+            <span v-if="socraticSessions.length > 0 && currentSocraticSession.messages.length > 1" class="mode-badge">
+              {{ currentSocraticSession.messages.length - 1 }}
+            </span>
+          </button>
+          <button class="mode-btn" :class="{ active: chatMode === 'normal' }" @click="chatMode = 'normal'" title="普通对话">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+            </svg>
+            对话
+            <span v-if="normalSessions.length > 0 && currentNormalSession.messages.length > 1" class="mode-badge">
+              {{ currentNormalSession.messages.length - 1 }}
+            </span>
+          </button>
+        </div>
+        <Transition name="fade-slide">
+          <div v-if="chatMode === 'socratic'" class="style-switch">
+            <button
+              v-for="s in aiStyleOptions"
+              :key="s"
+              class="style-btn"
+              :class="{ active: aiStyle === s }"
+              @click="aiStyle = s"
+            >{{ s }}</button>
+          </div>
+        </Transition>
       </div>
 
       <div class="input-box">
@@ -308,6 +321,8 @@ let saveTimer: ReturnType<typeof setTimeout> | null = null
 const userInitial = computed(() => (store.userInfo?.username ?? '学').slice(0, 1))
 const currentTopicId = computed(() => Number(store.activeTopicId) || 0)
 const chatMode = ref<'socratic' | 'normal'>('socratic')
+const aiStyleOptions = ['温和', '标准', '严格'] as const
+const aiStyle = ref<string>(store.userInfo?.ai_style ?? '标准')
 const chips = ref<string[]>(loadCachedChips('socratic'))
 const chipsLoading = ref(false)
 
@@ -671,7 +686,7 @@ async function send() {
     streamingText.value = ''
     const history = messages.value.slice(-10).map(m => ({ role: m.role as 'ai' | 'user', content: m.text }))
     chatStream(
-      'normal', 0, userInput, history, 'normal',
+      'normal', 0, userInput, history, 'normal', '标准',
       (chunk) => {
         streamingText.value += chunk
         streamingText.value = streamingText.value.replace(/\[MASTERED\]/g, '').replace(/\[CONFIRM_MASTER\]/g, '')
@@ -713,7 +728,7 @@ async function send() {
   const history = messages.value.slice(-10).map(m => ({ role: m.role as 'ai' | 'user', content: m.text }))
 
   chatStream(
-    store.activeNode.id, currentTopicId.value, userInput, history, 'socratic',
+    store.activeNode.id, currentTopicId.value, userInput, history, 'socratic', aiStyle.value,
     (chunk) => {
       streamingText.value += chunk
       streamingText.value = streamingText.value.replace(/\[MASTERED\]/g, '').replace(/\[CONFIRM_MASTER\]/g, '')
@@ -755,7 +770,7 @@ async function retryAt(aiIndex: number) {
   const history = msgs.slice(0, aiIndex).map(m => ({ role: m.role as 'ai' | 'user', content: m.text })).slice(-10)
 
   chatStream(
-    store.activeNode?.id ?? 'normal', currentTopicId.value, userMsg.text, history, chatMode.value,
+    store.activeNode?.id ?? 'normal', currentTopicId.value, userMsg.text, history, chatMode.value, aiStyle.value,
     (chunk) => {
       streamingText.value += chunk
       streamingText.value = streamingText.value.replace(/\[MASTERED\]/g, '').replace(/\[CONFIRM_MASTER\]/g, '')
@@ -818,7 +833,7 @@ watch(() => store.activeNode?.id, async (id) => {
   chatStream(
     node.id, currentTopicId.value, prompt,
     [], // 不带历史，这是新节点的开场
-    'socratic',
+    'socratic', aiStyle.value,
     (chunk) => {
       streamingText.value += chunk
       streamingText.value = streamingText.value
@@ -1031,7 +1046,8 @@ watch(() => store.activeNode?.id, async (id) => {
 .chip-refresh:hover { background: var(--blue-tint); border-color: var(--blue-line); color: var(--blue-2); }
 .chip { font-size: 11.5px; padding: 5px 10px; background: var(--bg-2); border: 1px solid var(--line); border-radius: 999px; color: var(--ink-2); cursor: pointer; font-weight: 500; font-family: var(--font-sans); transition: all .15s; }
 .chip:hover { background: var(--blue-tint); border-color: var(--blue-line); color: var(--blue-2); }
-.mode-switch { display: flex; gap: 4px; padding: 0 0 8px; }
+.input-toolbar { display: flex; align-items: center; justify-content: space-between; padding: 0 0 8px; gap: 8px; }
+.mode-switch { display: flex; gap: 4px; }
 .mode-btn { display: inline-flex; align-items: center; gap: 5px; padding: 5px 12px; font-size: 12px; font-weight: 500; background: var(--bg-2); border: 1px solid var(--line); border-radius: 999px; color: var(--ink-3); cursor: pointer; font-family: var(--font-sans); transition: all .15s; }
 .mode-btn.active { background: var(--blue-tint); border-color: var(--blue-line); color: var(--blue-2); }
 .mode-btn:not(.active):hover { background: var(--bg-3); color: var(--ink-2); }
@@ -1049,6 +1065,12 @@ watch(() => store.activeNode?.id, async (id) => {
 .send-btn:not(:disabled):hover { opacity: 0.85; }
 .abort-btn { background: #FCEBEB; color: #E24B4A; border: 1px solid #F7C1C1; border-radius: 8px; padding: 7px 12px; font-size: 12.5px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; font-family: var(--font-sans); flex-shrink: 0; transition: all .15s; }
 .abort-btn:hover { background: #F7C1C1; }
+.style-switch { display: flex; gap: 2px; background: var(--bg-3); border: 1px solid var(--line); border-radius: 999px; padding: 2px; flex-shrink: 0; }
+.style-btn { padding: 3px 10px; font-size: 11.5px; font-weight: 500; background: transparent; border: none; border-radius: 999px; color: var(--ink-3); cursor: pointer; font-family: var(--font-sans); transition: all .15s; white-space: nowrap; }
+.style-btn.active { background: var(--surface); color: var(--ink); box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+.style-btn:not(.active):hover { color: var(--ink-2); }
+.fade-slide-enter-active, .fade-slide-leave-active { transition: opacity .18s ease, transform .18s ease; }
+.fade-slide-enter-from, .fade-slide-leave-to { opacity: 0; transform: translateX(6px); }
 .fade-enter-active, .fade-leave-active { transition: opacity .2s ease; }
 .fade-enter-from, .fade-leave-to { opacity: 0; }
 </style>
