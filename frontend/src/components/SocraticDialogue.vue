@@ -10,7 +10,7 @@
         </div>
         <div class="history-list">
           <div
-            v-for="(session, i) in currentSessions"
+            v-for="(session) in currentSessions"
             :key="session.id"
             class="history-item"
             :class="{ active: currentSessionId === session.id }"
@@ -198,7 +198,25 @@
 
     <!-- 快捷建议 -->
     <div class="chips-wrap">
-      <button v-for="chip in chips" :key="chip" class="chip" @click="input = chip">{{ chip }}</button>
+      <template v-if="chipsLoading">
+        <div class="chips-loading">
+          <span class="chip-skeleton" v-for="i in 4" :key="i" />
+        </div>
+      </template>
+      <template v-else>
+        <button
+          v-for="chip in chips"
+          :key="chip"
+          class="chip"
+          @click="input = chip"
+        >{{ chip }}</button>
+        <button class="chip-refresh" title="换一批" @click="loadSuggestions(true)">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <path d="M1 4v6h6M23 20v-6h-6"/>
+            <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/>
+          </svg>
+        </button>
+      </template>
     </div>
 
     <!-- Input -->
@@ -254,11 +272,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, nextTick, computed } from 'vue'
+import { ref, watch, nextTick, computed, onMounted } from 'vue'
 import { useLearningStore } from '../stores/learning'
 import type { Message } from '../types'
 import InlineMarkdown from './InlineMarkdown.vue'
-import { chatStream } from '../api/chat'
+import { chatStream, getSuggestions } from '../api/chat'
 import { generateTopic } from '../api/topic'
 
 // ── 会话类型 ──
@@ -290,12 +308,58 @@ let saveTimer: ReturnType<typeof setTimeout> | null = null
 const userInitial = computed(() => (store.userInfo?.username ?? '学').slice(0, 1))
 const currentTopicId = computed(() => Number(store.activeTopicId) || 0)
 const chatMode = ref<'socratic' | 'normal'>('socratic')
-const chips = ['我想学 Python', '教我机器学习', '讲讲数据结构', '学习 Web 开发']
+const chips = ref<string[]>(loadCachedChips('socratic'))
+const chipsLoading = ref(false)
 
 const STORAGE_KEY_SOCRATIC_SESSIONS = 'sm_sessions_socratic'
 const STORAGE_KEY_NORMAL_SESSIONS = 'sm_sessions_normal'
 const STORAGE_KEY_SOCRATIC_CUR = 'sm_session_cur_socratic'
 const STORAGE_KEY_NORMAL_CUR = 'sm_session_cur_normal'
+const STORAGE_KEY_CHIPS_SOCRATIC = 'sm_chips_socratic'
+const STORAGE_KEY_CHIPS_NORMAL = 'sm_chips_normal'
+
+const socraticSessions = ref<Session[]>(loadSessions(STORAGE_KEY_SOCRATIC_SESSIONS, 'socratic'))
+const normalSessions = ref<Session[]>(loadSessions(STORAGE_KEY_NORMAL_SESSIONS, 'normal'))
+
+const socraticCurrentId = ref<string>(loadCurrentId(STORAGE_KEY_SOCRATIC_CUR, socraticSessions.value))
+const normalCurrentId = ref<string>(loadCurrentId(STORAGE_KEY_NORMAL_CUR, normalSessions.value))
+
+const currentSessionId = computed(() =>
+  chatMode.value === 'socratic' ? socraticCurrentId.value : normalCurrentId.value
+)
+
+const currentSessions = computed(() =>
+  chatMode.value === 'socratic' ? socraticSessions.value : normalSessions.value
+)
+
+const currentSocraticSession = computed(() =>
+  socraticSessions.value.find(s => s.id === socraticCurrentId.value) ?? socraticSessions.value[0]
+)
+
+const currentNormalSession = computed(() =>
+  normalSessions.value.find(s => s.id === normalCurrentId.value) ?? normalSessions.value[0]
+)
+
+const currentSession = computed(() =>
+  chatMode.value === 'socratic' ? currentSocraticSession.value : currentNormalSession.value
+)
+
+const currentSessionName = computed(() => currentSession.value?.name ?? '苏格拉底式对话')
+
+const messages = computed({
+  get: () => currentSession.value?.messages ?? [],
+  set: (val) => {
+    if (!currentSession.value) return
+    currentSession.value.messages = val
+    currentSession.value.updatedAt = nowDate()
+    saveSessions()
+  }
+})
+
+const defaultChips = {
+  socratic: ['我想学 Python', '教我机器学习', '讲讲数据结构', '学习 Web 开发'],
+  normal: ['今天天气怎么样', '推荐一部电影', '给我讲个笑话', '聊聊最近的新闻'],
+}
 
 function now() {
   return new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false })
@@ -343,43 +407,38 @@ function loadCurrentId(key: string, sessions: Session[]): string {
   return sessions[0].id
 }
 
-const socraticSessions = ref<Session[]>(loadSessions(STORAGE_KEY_SOCRATIC_SESSIONS, 'socratic'))
-const normalSessions = ref<Session[]>(loadSessions(STORAGE_KEY_NORMAL_SESSIONS, 'normal'))
+function loadCachedChips(mode: 'socratic' | 'normal'): string[] {
+  const key = mode === 'socratic' ? STORAGE_KEY_CHIPS_SOCRATIC : STORAGE_KEY_CHIPS_NORMAL
+  try {
+    const raw = localStorage.getItem(key)
+    if (raw) return JSON.parse(raw)
+  } catch {}
+  return []
+}
 
-const socraticCurrentId = ref<string>(loadCurrentId(STORAGE_KEY_SOCRATIC_CUR, socraticSessions.value))
-const normalCurrentId = ref<string>(loadCurrentId(STORAGE_KEY_NORMAL_CUR, normalSessions.value))
+function saveCachedChips(mode: 'socratic' | 'normal', chips: string[]) {
+  const key = mode === 'socratic' ? STORAGE_KEY_CHIPS_SOCRATIC : STORAGE_KEY_CHIPS_NORMAL
+  localStorage.setItem(key, JSON.stringify(chips))
+}
 
-const currentSessionId = computed(() =>
-  chatMode.value === 'socratic' ? socraticCurrentId.value : normalCurrentId.value
-)
-
-const currentSessions = computed(() =>
-  chatMode.value === 'socratic' ? socraticSessions.value : normalSessions.value
-)
-
-const currentSocraticSession = computed(() =>
-  socraticSessions.value.find(s => s.id === socraticCurrentId.value) ?? socraticSessions.value[0]
-)
-
-const currentNormalSession = computed(() =>
-  normalSessions.value.find(s => s.id === normalCurrentId.value) ?? normalSessions.value[0]
-)
-
-const currentSession = computed(() =>
-  chatMode.value === 'socratic' ? currentSocraticSession.value : currentNormalSession.value
-)
-
-const currentSessionName = computed(() => currentSession.value?.name ?? '苏格拉底式对话')
-
-const messages = computed({
-  get: () => currentSession.value?.messages ?? [],
-  set: (val) => {
-    if (!currentSession.value) return
-    currentSession.value.messages = val
-    currentSession.value.updatedAt = nowDate()
-    saveSessions()
+async function loadSuggestions(force = false) {
+  const cached = loadCachedChips(chatMode.value)
+  // 有缓存且不是强制刷新，直接用缓存
+  if (cached.length > 0 && !force) {
+    chips.value = cached
+    return
   }
-})
+  chipsLoading.value = true
+  try {
+    const result = await getSuggestions(chatMode.value)
+    chips.value = result
+    saveCachedChips(chatMode.value, result)
+  } catch {
+    chips.value = defaultChips[chatMode.value]
+  } finally {
+    chipsLoading.value = false
+  }
+}
 
 function saveSessions() {
   if (saveTimer) clearTimeout(saveTimer)
@@ -425,6 +484,20 @@ function newSession() {
   saveSessions()
   scrollToBottom()
 }
+
+// 初始加载
+onMounted(() => {
+  // 只读缓存，不请求 AI
+  const cached = loadCachedChips(chatMode.value)
+  chips.value = cached.length > 0 ? cached : defaultChips[chatMode.value]
+})
+
+// 切换模式也用缓存的 chips，避免每次切换都请求 AI
+watch(chatMode, () => {
+  const cached = loadCachedChips(chatMode.value)
+  chips.value = cached.length > 0 ? cached : defaultChips[chatMode.value]
+  scrollToBottom()
+})
 
 // 删除会话
 function deleteSession(id: string) {
@@ -726,19 +799,53 @@ async function handleGenerateTopic(topicName: string) {
   }
 }
 
-watch(() => store.activeNode?.id, (id) => {
+watch(() => store.activeNode?.id, async (id) => {
   if (!id) return
-  if (chatMode.value !== 'socratic') return  // 普通模式不触发
+  if (chatMode.value !== 'socratic') return
   const node = store.activeNode!
-  const reply = node.state === 'mastered'
-    ? `让我们复习一下 **${node.label}**。你能用一句话给新手解释它吗？`
-    : `让我们探索 **${node.label}**。在你看来，\`${node.sub}\` 解决了什么问题？`
-  pushMessage({ role: 'ai', text: reply, time: now() })
+
+  // 用 AI 自由发挥提问，而不是固定模板
+  isThinking.value = true
+  streamingText.value = ''
   scrollToBottom()
+
+  const prompt = node.state === 'mastered'
+    ? `用户想复习「${node.label}」（${node.sub}），请用苏格拉底式提问引导用户回顾这个知识点的核心内容。`
+    : `用户开始学习「${node.label}」（${node.sub}），请用苏格拉底式提问引导用户思考这个知识点，从用户已有的生活经验或常识出发。`
+
+  abortController = new AbortController()
+
+  chatStream(
+    node.id, currentTopicId.value, prompt,
+    [], // 不带历史，这是新节点的开场
+    'socratic',
+    (chunk) => {
+      streamingText.value += chunk
+      streamingText.value = streamingText.value
+        .replace(/\[MASTERED\]/g, '')
+        .replace(/\[CONFIRM_MASTER\]/g, '')
+      scrollToBottom()
+    },
+    () => {
+      const t = streamingText.value
+        .replace(/\[MASTERED\]/g, '')
+        .replace(/\[CONFIRM_MASTER\]/g, '')
+        .trim()
+      streamingText.value = ''
+      isThinking.value = false
+      if (t) pushMessage({ role: 'ai', text: t, time: now() })
+      scrollToBottom()
+    },
+    (err) => {
+      if (err?.name === 'AbortError') return
+      streamingText.value = ''
+      isThinking.value = false
+    },
+    abortController,
+    handleSignal,
+  )
 })
 
-
-watch(chatMode, () => { scrollToBottom() })
 </script>
 
 <style scoped>
@@ -903,7 +1010,25 @@ watch(chatMode, () => { scrollToBottom() })
 /* ── Dots / Chips / Mode ── */
 .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--blue-2); display: inline-block; animation: blink 1.2s ease-in-out infinite; }
 @keyframes blink { 0%, 60%, 100% { opacity: 1; transform: translateY(0); } 30% { opacity: 0.4; transform: translateY(-3px); } }
-.chips-wrap { display: flex; gap: 6px; padding: 0 18px 10px; flex-wrap: wrap; flex-shrink: 0; }
+.chips-wrap { display: flex; gap: 6px; padding: 10px 18px 10px; flex-wrap: wrap; flex-shrink: 0; align-items: center; }
+.chips-loading { display: flex; gap: 6px; }
+.chip-skeleton {
+  height: 28px; width: 80px;
+  background: var(--bg-3); border-radius: 999px;
+  animation: shimmer 1.2s ease-in-out infinite;
+}
+@keyframes shimmer {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+.chip-refresh {
+  width: 28px; height: 28px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--bg-2); border: 1px solid var(--line);
+  border-radius: 999px; color: var(--ink-3);
+  cursor: pointer; transition: all .15s; flex-shrink: 0;
+}
+.chip-refresh:hover { background: var(--blue-tint); border-color: var(--blue-line); color: var(--blue-2); }
 .chip { font-size: 11.5px; padding: 5px 10px; background: var(--bg-2); border: 1px solid var(--line); border-radius: 999px; color: var(--ink-2); cursor: pointer; font-weight: 500; font-family: var(--font-sans); transition: all .15s; }
 .chip:hover { background: var(--blue-tint); border-color: var(--blue-line); color: var(--blue-2); }
 .mode-switch { display: flex; gap: 4px; padding: 0 0 8px; }

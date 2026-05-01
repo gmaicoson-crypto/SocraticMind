@@ -57,6 +57,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { addStudyMinutes, loadTodayProgress } from '../utils/dailyGoal'
 import TopBar from '../components/TopBar.vue'
 import Sidebar from '../components/Sidebar.vue'
 import SocraticDialogue from '../components/SocraticDialogue.vue'
@@ -66,6 +67,7 @@ import { useLearningStore } from '../stores/learning'
 
 const store = useLearningStore()
 const rightPanel = ref<'graph' | 'notes'>('graph')
+
 const mainRef = ref<HTMLElement | null>(null)
 const leftWidth = ref(0)
 const dragging = ref(false)
@@ -73,6 +75,65 @@ const dragging = ref(false)
 const MIN_LEFT = 320
 const MIN_RIGHT = 380
 const DIVIDER_W = 10
+
+// 学习时长计时
+let studyTimer: ReturnType<typeof setInterval> | null = null
+let inactiveTimer: ReturnType<typeof setTimeout> | null = null
+let studySeconds = 0
+let isActive = ref(true)
+
+const INACTIVE_TIMEOUT = 2 * 60 * 1000
+const ACTIVE_EVENTS = ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll']
+
+function startStudyTimer() {
+  if (studyTimer) return
+  studyTimer = setInterval(() => {
+    if (!isActive.value) return  // 不活跃时不计时
+    studySeconds++
+    if (studySeconds % 60 === 0 && store.userInfo?.id) {
+      addStudyMinutes(store.userInfo.id, 1)
+    }
+  }, 1000)
+}
+
+function stopStudyTimer() {
+  if (!studyTimer) return
+  clearInterval(studyTimer)
+  studyTimer = null
+  // 保存剩余秒数
+  const remaining = Math.floor(studySeconds % 60)
+  if (remaining >= 30 && store.userInfo?.id) {
+    // 超过30秒算1分钟
+    addStudyMinutes(store.userInfo.id, 1)
+  }
+}
+
+// 用户活跃时重置无操作计时器
+function onUserActive() {
+  isActive.value = true
+  if (inactiveTimer) clearTimeout(inactiveTimer)
+  inactiveTimer = setTimeout(() => {
+    isActive.value = false  // 2分钟无操作，暂停计时
+  }, INACTIVE_TIMEOUT)
+}
+
+// 页面可见性变化时暂停/恢复计时
+function handleVisibilityChange() {
+  if (document.hidden) {
+    isActive.value = false
+    if (inactiveTimer) clearTimeout(inactiveTimer)
+  } else {
+    onUserActive()  // 重新可见时重置活跃状态
+  }
+}
+
+
+onMounted(() => {
+  startStudyTimer()
+  onUserActive()  // 初始化活跃状态
+  document.addEventListener('visibilitychange', handleVisibilityChange)
+  ACTIVE_EVENTS.forEach(e => window.addEventListener(e, onUserActive, { passive: true }))
+})
 
 onMounted(() => {
   if (mainRef.value) {
@@ -84,6 +145,13 @@ onMounted(() => {
 onMounted(async () => {
   const token = localStorage.getItem('sm_token')
   if (token) await store.fetchTopics()
+})
+
+onBeforeUnmount(() => {
+  stopStudyTimer()
+  if (inactiveTimer) clearTimeout(inactiveTimer)
+  document.removeEventListener('visibilitychange', handleVisibilityChange)
+  ACTIVE_EVENTS.forEach(e => window.removeEventListener(e, onUserActive))
 })
 
 function startDrag(e: MouseEvent) {

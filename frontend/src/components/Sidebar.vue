@@ -123,14 +123,11 @@
       <!-- 最近14天热力图 -->
       <div class="streak-bars">
         <div
-          v-for="(day, i) in store.streakData.recent"
+          v-for="i in 31"
           :key="i"
           class="streak-bar"
-          :title="day.date"
-          :style="{
-            background: day.learned ? 'var(--blue-2)' : 'var(--bg-3)',
-            opacity: day.learned ? 1 : 0.5,
-          }"
+          :title="getBarTitle(i)"
+          :style="getBarStyle(i)"
         />
       </div>
       <div class="streak-total">累计学习 {{ store.streakData.total_days }} 天</div>
@@ -204,6 +201,38 @@ async function handleRecommend(title: string, emoji: string) {
   } finally {
     generatingTitle.value = null
   }
+}
+
+function getBarStyle(i: number) {
+  const streak = store.streakData.streak
+  // 当前循环内已点亮的格数（streak % 31，满31清零）
+  const lit = streak % 31 === 0 && streak > 0 ? 31 : streak % 31
+  const isLit = i <= lit
+
+  if (!isLit) {
+    return { background: 'var(--bg-3)', opacity: '0.4' }
+  }
+
+  // 颜色随天数变化：天数越多越深
+  const ratio = i / 31  // 0~1
+  // 用 oklch 从浅蓝到深蓝
+  const l = 0.78 - ratio * 0.25   // 亮度：0.78 → 0.53
+  const c = 0.07 + ratio * 0.08   // 饱和度：0.07 → 0.15
+  return {
+    background: `oklch(${l.toFixed(2)} ${c.toFixed(2)} 235)`,
+    opacity: '1',
+  }
+}
+
+function getBarTitle(i: number) {
+  const streak = store.streakData.streak
+  const lit = streak % 31 === 0 && streak > 0 ? 31 : streak % 31
+  if (i > lit) return `未达到第 ${i} 天`
+
+  // 计算这格对应的实际连续天数
+  const cycleStart = Math.floor(streak / 31) * 31
+  const actualDay = cycleStart + i
+  return `连续学习第 ${actualDay} 天`
 }
 </script>
 
@@ -538,15 +567,16 @@ async function handleRecommend(title: string, emoji: string) {
 
 .streak-bars {
   display: flex;
-  gap: 3px;
+  gap: 2px;
   margin-top: 8px;
 }
 
 .streak-bar {
   flex: 1;
-  height: 14px;
-  border-radius: 3px;
-  transition: background .3s;
+  height: 12px;
+  border-radius: 2px;
+  transition: background .3s, opacity .3s;
+  cursor: default;
 }
 
 @keyframes spin {

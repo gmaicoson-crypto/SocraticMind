@@ -14,3 +14,24 @@ export async function getStreak() {
   const res = await api.get('/api/progress/streak')
   return res.data as StreakData
 }
+
+export interface ProfileStats {
+  chat_count: number
+  mastered_count: number
+  streak: number
+  heatmap: { date: string; count: number }[]
+  timeline: { type: string; title: string; sub: string; time: string }[]
+  badges: { icon: string; name: string; unlocked: boolean }[]
+  weekly?: {
+    chat_count: number
+    mastered_count: number
+    peak_hour: string
+    avg_daily: number
+    days_learned: number
+  }
+}
+
+export async function getProfileStats() {
+  const res = await api.get('/api/progress/stats')
+  return res.data as ProfileStats
+}

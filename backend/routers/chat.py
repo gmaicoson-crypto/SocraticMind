@@ -58,6 +58,7 @@ def chat_stream_endpoint(
         node_key=req.node_key,
         role="user",
         content=req.user_input,
+        mode=req.mode,
     ))
     db.commit()
 
@@ -96,6 +97,7 @@ def chat_stream_endpoint(
             node_key=req.node_key,
             role="ai",
             content=full_reply,
+            mode=req.mode,
         ))
         db.commit()
 
@@ -125,3 +127,56 @@ def get_history(
         ChatMessage.user_id == current_user.id,
         ChatMessage.node_key == node_key,
     ).order_by(ChatMessage.id).limit(50).all()
+
+@router.get("/suggestions")
+def get_suggestions(
+    mode: str = "socratic",
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """根据模式返回 AI 推荐的快捷建议"""
+    from openai import OpenAI
+    from core.config import settings
+    import json
+
+    client = OpenAI(
+        api_key=settings.deepseek_api_key,
+        base_url=settings.deepseek_base_url,
+    )
+
+    if mode == "socratic":
+        # 获取用户最近学习的节点
+        from models.node import Node
+        from models.topic import Topic
+        recent_nodes = db.query(Node).join(Topic).filter(
+            Topic.user_id == current_user.id,
+            Node.state == "available"
+        ).limit(3).all()
+        context = "、".join([n.label for n in recent_nodes]) if recent_nodes else "编程基础"
+        prompt = f"""用户正在学习：{context}。
+生成4个简短的学习对话建议，帮助用户继续学习。
+严格返回JSON：{{"suggestions": ["建议1", "建议2", "建议3", "建议4"]}}
+每条建议不超过12个字，像用户说话的口吻。只返回JSON。"""
+    else:
+        prompt = """生成4个日常对话的快捷建议，涵盖不同话题。
+严格返回JSON：{"suggestions": ["建议1", "建议2", "建议3", "建议4"]}
+每条建议不超过12个字，像用户说话的口吻。只返回JSON。"""
+
+    try:
+        response = client.chat.completions.create(
+            model=settings.deepseek_model,
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=200,
+            temperature=0.8,
+        )
+        content = response.choices[0].message.content.strip()
+        if content.startswith("```"):
+            content = content.split("```")[1]
+            if content.startswith("json"):
+                content = content[4:]
+        return json.loads(content.strip())
+    except Exception:
+        if mode == "socratic":
+            return {"suggestions": ["我想学 Python", "教我机器学习", "讲讲数据结构", "学习 Web 开发"]}
+        else:
+            return {"suggestions": ["今天天气怎么样", "推荐一部电影", "给我讲个笑话", "聊聊最近的新闻"]}

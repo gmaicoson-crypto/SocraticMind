@@ -111,3 +111,8 @@ export async function getChatHistory(nodeKey: string) {
   const res = await api.get(`/api/chat/history/${nodeKey}`)
   return res.data as { id: number; role: string; content: string }[]
 }
+
+export async function getSuggestions(mode: 'socratic' | 'normal') {
+  const res = await api.get(`/api/chat/suggestions?mode=${mode}`)
+  return res.data.suggestions as string[]
+}

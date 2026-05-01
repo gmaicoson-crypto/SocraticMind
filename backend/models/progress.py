@@ -11,6 +11,7 @@ class ChatMessage(Base):
     node_key = Column(String, nullable=False)
     role = Column(String, nullable=False)   # ai / user
     content = Column(Text, nullable=False)
+    mode = Column(String, default="socratic")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 class LearningRecord(Base):
@@ -20,3 +21,4 @@ class LearningRecord(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     date = Column(String, nullable=False)  # "2026-04-30"
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
