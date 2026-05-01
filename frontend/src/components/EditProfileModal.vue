@@ -18,24 +18,48 @@
           <div>
             <div class="section-label">基本信息</div>
             <div class="avatar-row">
-              <div class="big-avatar" :style="{ background: form.avatarGrad }">
-                {{ form.name.slice(0,1) || '李' }}
+              <div
+                class="big-avatar"
+                :style="hasImage ? {} : { background: form.avatarGrad }"
+                @click="triggerUpload"
+              >
+                <img v-if="hasImage" :src="avatarPreview" alt="avatar" class="avatar-img" />
+                <template v-else>{{ form.name.slice(0,1) || '李' }}</template>
                 <div class="avatar-edit">
                   <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round">
                     <path d="M12 20h9M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4 12.5-12.5z"/>
                   </svg>
                 </div>
               </div>
+              <input
+                ref="fileInput"
+                type="file"
+                accept="image/png,image/jpeg,image/gif,image/webp"
+                style="display:none"
+                @change="onFileChange"
+              />
               <div class="avatar-colors">
-                <div class="avatar-hint">选择头像颜色</div>
-                <div class="color-swatches">
+                <div class="avatar-actions">
+                  <button class="avatar-action-btn" :disabled="uploading" @click="triggerUpload">
+                    {{ uploading ? '上传中…' : '上传图片' }}
+                  </button>
+                  <button
+                    class="avatar-action-btn ghost"
+                    :disabled="uploading || !hasImage"
+                    @click="handleResetAvatar"
+                  >
+                    使用默认
+                  </button>
+                </div>
+                <div class="avatar-hint">{{ hasImage ? '已使用自定义图片' : '选择头像颜色' }}</div>
+                <div class="color-swatches" :class="{ disabled: hasImage }">
                   <div
                     v-for="g in avatarGrads"
                     :key="g"
                     class="swatch"
-                    :class="{ active: form.avatarGrad === g }"
+                    :class="{ active: !hasImage && form.avatarGrad === g }"
                     :style="{ background: g }"
-                    @click="form.avatarGrad = g"
+                    @click="hasImage ? null : (form.avatarGrad = g)"
                   />
                 </div>
               </div>
@@ -97,9 +121,39 @@
               <div class="danger-row">
                 <div>
                   <div class="danger-info">修改密码</div>
-                  <div class="danger-sub">上次修改：30 天前</div>
+                  <div class="danger-sub">建议使用至少 6 位的强密码</div>
                 </div>
-                <button class="danger-btn outline">修改密码</button>
+                <button class="danger-btn outline" @click="showPwdPanel = !showPwdPanel">
+                  {{ showPwdPanel ? '收起' : '修改密码' }}
+                </button>
+              </div>
+
+              <div v-if="showPwdPanel" class="pwd-panel">
+                <div class="field">
+                  <label>原密码</label>
+                  <div class="field-input">
+                    <input v-model="pwdForm.old" type="password" autocomplete="current-password" />
+                  </div>
+                </div>
+                <div class="field">
+                  <label>新密码</label>
+                  <div class="field-input">
+                    <input v-model="pwdForm.next" type="password" autocomplete="new-password" minlength="6" />
+                  </div>
+                </div>
+                <div class="field">
+                  <label>确认新密码</label>
+                  <div class="field-input">
+                    <input v-model="pwdForm.confirm" type="password" autocomplete="new-password" minlength="6" />
+                  </div>
+                </div>
+                <div v-if="pwdMsg" class="pwd-msg" :class="{ ok: pwdMsgType === 'ok' }">{{ pwdMsg }}</div>
+                <div class="pwd-actions">
+                  <button class="cancel-btn" @click="cancelPwd">取消</button>
+                  <button class="save-btn" :disabled="pwdSaving" @click="submitPassword">
+                    {{ pwdSaving ? '提交中…' : '保存新密码' }}
+                  </button>
+                </div>
               </div>
               <div class="danger-row">
                 <div>
@@ -140,10 +194,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
+import { ref, reactive, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useLearningStore } from '../stores/learning'
-import { updateMe } from '../api/auth'
+import { updateMe, uploadAvatar, resetAvatar, changePassword } from '../api/auth'
+import { avatarSrc } from '../utils/avatar'
 
 const emit = defineEmits<{ close: [] }>()
 const router = useRouter()
@@ -151,6 +206,113 @@ const router = useRouter()
 const focusField = ref('')
 const saving = ref(false)
 const savedDone = ref(false)
+
+// 头像上传
+const fileInput = ref<HTMLInputElement | null>(null)
+const uploading = ref(false)
+const localPreview = ref<string | null>(null) // 选完图片后的本地预览（dataURL）
+const avatarUrl = ref<string | null>(null)    // 后端返回的相对路径
+
+const hasImage = computed(() => !!(localPreview.value || avatarUrl.value))
+const avatarPreview = computed(() => localPreview.value ?? avatarSrc(avatarUrl.value))
+
+function triggerUpload() {
+  fileInput.value?.click()
+}
+
+async function onFileChange(e: Event) {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+  if (file.size > 5 * 1024 * 1024) {
+    alert('图片大小不能超过 5MB')
+    return
+  }
+  // 本地即时预览
+  const reader = new FileReader()
+  reader.onload = () => { localPreview.value = String(reader.result) }
+  reader.readAsDataURL(file)
+
+  uploading.value = true
+  try {
+    const updated = await uploadAvatar(file)
+    avatarUrl.value = updated.avatar_url
+    localPreview.value = null
+    localStorage.setItem('sm_user', JSON.stringify(updated))
+    store.setUserInfo(updated)
+  } catch (err: any) {
+    alert(err?.response?.data?.detail ?? '上传失败')
+    localPreview.value = null
+  } finally {
+    uploading.value = false
+  }
+}
+
+async function handleResetAvatar() {
+  if (!hasImage.value) return
+  uploading.value = true
+  try {
+    const updated = await resetAvatar()
+    avatarUrl.value = null
+    localPreview.value = null
+    localStorage.setItem('sm_user', JSON.stringify(updated))
+    store.setUserInfo(updated)
+  } catch (err: any) {
+    alert(err?.response?.data?.detail ?? '重置失败')
+  } finally {
+    uploading.value = false
+  }
+}
+
+// 修改密码
+const showPwdPanel = ref(false)
+const pwdSaving = ref(false)
+const pwdMsg = ref('')
+const pwdMsgType = ref<'err' | 'ok'>('err')
+const pwdForm = reactive({ old: '', next: '', confirm: '' })
+
+function cancelPwd() {
+  showPwdPanel.value = false
+  pwdForm.old = ''
+  pwdForm.next = ''
+  pwdForm.confirm = ''
+  pwdMsg.value = ''
+}
+
+async function submitPassword() {
+  pwdMsg.value = ''
+  if (!pwdForm.old || !pwdForm.next) {
+    pwdMsg.value = '请填写完整'
+    pwdMsgType.value = 'err'
+    return
+  }
+  if (pwdForm.next.length < 6) {
+    pwdMsg.value = '新密码至少 6 个字符'
+    pwdMsgType.value = 'err'
+    return
+  }
+  if (pwdForm.next !== pwdForm.confirm) {
+    pwdMsg.value = '两次输入的新密码不一致'
+    pwdMsgType.value = 'err'
+    return
+  }
+  pwdSaving.value = true
+  try {
+    await changePassword(pwdForm.old, pwdForm.next)
+    pwdMsg.value = '密码修改成功'
+    pwdMsgType.value = 'ok'
+    pwdForm.old = ''
+    pwdForm.next = ''
+    pwdForm.confirm = ''
+    setTimeout(() => { showPwdPanel.value = false; pwdMsg.value = '' }, 1200)
+  } catch (err: any) {
+    pwdMsg.value = err?.response?.data?.detail ?? '修改失败'
+    pwdMsgType.value = 'err'
+  } finally {
+    pwdSaving.value = false
+  }
+}
 
 const avatarGrads = [
   'linear-gradient(135deg,#e8c87a,#d4974a)',
@@ -168,6 +330,8 @@ const form = reactive({
   email: store.userInfo?.email ?? '',
   avatarGrad: store.userInfo?.avatar_grad ?? avatarGrads[0],
 })
+
+avatarUrl.value = store.userInfo?.avatar_url ?? null
 
 async function handleSave() {
   saving.value = true
@@ -307,6 +471,48 @@ function handleLogout() {
   transition: filter .15s;
 }
 .big-avatar:hover { filter: brightness(0.9); }
+.avatar-img {
+  width: 100%; height: 100%;
+  object-fit: cover;
+  border-radius: 16px;
+}
+
+.avatar-actions {
+  display: flex; gap: 6px; margin-bottom: 6px;
+}
+.avatar-action-btn {
+  font-size: 11.5px;
+  padding: 5px 10px;
+  border-radius: 7px;
+  background: var(--blue-2);
+  color: white;
+  border: none;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  transition: opacity .15s;
+}
+.avatar-action-btn:hover:not(:disabled) { opacity: 0.85; }
+.avatar-action-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.avatar-action-btn.ghost {
+  background: transparent;
+  color: var(--ink-2);
+  border: 1px solid var(--line);
+}
+.color-swatches.disabled { opacity: 0.4; pointer-events: none; }
+
+.pwd-panel {
+  margin-top: 10px;
+  padding: 12px;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.pwd-msg { font-size: 11.5px; color: #E24B4A; }
+.pwd-msg.ok { color: #1D9E75; }
+.pwd-actions {
+  display: flex; justify-content: flex-end; gap: 8px;
+}
 
 .avatar-edit {
   position: absolute;

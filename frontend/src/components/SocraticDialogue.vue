@@ -96,6 +96,33 @@
       </div>
     </div>
 
+    <!-- 主题栏：当前对话已绑定主题时显示 -->
+    <div v-if="chatMode === 'socratic' && currentSession?.topicId" class="topic-bar">
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+      </svg>
+      <template v-if="editingTopicName">
+        <input
+          ref="topicEditInputRef"
+          v-model="editingTopicInput"
+          class="topic-name-input"
+          @keydown.enter="saveTopicName"
+          @keydown.escape="editingTopicName = false"
+        />
+        <button class="topic-ctrl-btn confirm" @click="saveTopicName">✓</button>
+        <button class="topic-ctrl-btn cancel" @click="editingTopicName = false">✕</button>
+      </template>
+      <template v-else>
+        <span class="topic-bar-name">{{ currentSession?.topicTitle }}</span>
+        <button class="topic-edit-btn" title="修改主题名称" @click="startTopicEdit">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+          </svg>
+        </button>
+      </template>
+    </div>
+
     <!-- Messages -->
     <div ref="scrollRef" class="dlg-messages">
       <div
@@ -290,7 +317,7 @@ import { useLearningStore } from '../stores/learning'
 import type { Message } from '../types'
 import InlineMarkdown from './InlineMarkdown.vue'
 import { chatStream, getSuggestions, deleteMessages } from '../api/chat'
-import { generateTopic } from '../api/topic'
+import { generateTopic, updateTopicTitle } from '../api/topic'
 
 // ── 会话类型 ──
 interface Session {
@@ -298,6 +325,8 @@ interface Session {
   name: string
   messages: Message[]
   updatedAt: string
+  topicId?: number
+  topicTitle?: string
 }
 
 const store = useLearningStore()
@@ -318,6 +347,11 @@ const editingName = ref('')
 let abortController: AbortController | null = null
 let saveTimer: ReturnType<typeof setTimeout> | null = null
 let pendingMsgIds: { user: number; ai: number } | null = null
+
+const pendingTopicName = ref('')
+const editingTopicName = ref(false)
+const editingTopicInput = ref('')
+const topicEditInputRef = ref<HTMLInputElement | null>(null)
 
 const userInitial = computed(() => (store.userInfo?.username ?? '学').slice(0, 1))
 const currentTopicId = computed(() => Number(store.activeTopicId) || 0)
@@ -668,9 +702,10 @@ function handleSignal(signal: string) {
 }
 
 function extractTopic(text: string): string {
+  // 长短语优先：JS alternation 是按顺序匹配，必须把更长的放前面，避免 “我想学习X” 被先匹成 “我想学”
   const cleaned = text
-    .replace(/我想学|教我|学习|了解|讲讲|帮我学|入门|想了解/g, '')
-    .replace(/[，。！？,!?一下]/g, '')
+    .replace(/想要学习|我想学习|我想了解|我想入门|帮我学习|帮我学|教教我|教我|想学习|想了解|想入门|学一下|学一学|了解一下|讲一讲|讲讲|我想学|想学|学习|了解|入门/g, '')
+    .replace(/[的吧呢啊呀嘛么，。！？,!?\s]/g, '')
     .trim()
   return cleaned.length >= 2 ? cleaned : text.trim()
 }
@@ -685,7 +720,35 @@ function buildUserInput(v: string): string {
 }
 
 function isNewTopicIntent(text: string): boolean {
-  return ['我想学', '教我', '帮我学', '学习', '想了解', '入门'].some(k => text.includes(k))
+  const keywords = ['我想学', '帮我学', '想学习', '想了解', '想入门', '学一下', '学一学']
+  return keywords.some(k => text.includes(k)) && extractTopic(text).length >= 2
+}
+
+function isConfirmation(text: string): boolean {
+  const t = text.trim().toLowerCase()
+  return ['确认', '确定', '好的', '好', '是的', '是', '生成', '开始', 'ok', 'yes', '要', '可以', '行'].some(k => t.includes(k))
+}
+
+function startTopicEdit() {
+  editingTopicInput.value = currentSession.value?.topicTitle ?? ''
+  editingTopicName.value = true
+  nextTick(() => topicEditInputRef.value?.focus())
+}
+
+async function saveTopicName() {
+  const newTitle = editingTopicInput.value.trim()
+  const topicId = currentSession.value?.topicId
+  if (!newTitle || !topicId) { editingTopicName.value = false; return }
+  try {
+    await updateTopicTitle(topicId, newTitle)
+    if (currentSession.value) {
+      currentSession.value.topicTitle = newTitle
+      currentSession.value.name = newTitle.slice(0, 12)
+      saveSessions()
+    }
+    await store.fetchTopicsOnly()
+  } catch {}
+  editingTopicName.value = false
 }
 
 async function send() {
@@ -734,10 +797,29 @@ async function send() {
     return
   }
 
-  if (isNewTopicIntent(v)) {
+  // 同一对话只能绑定一个主题
+  if (currentSession.value?.topicId && isNewTopicIntent(v)) {
+    pushMessage({ role: 'ai', text: `本对话已绑定「**${currentSession.value.topicTitle}**」主题，每个学习对话只能学习一个主题。\n\n如需学习新主题，请点击右上角「＋」新建对话。`, time: now() })
+    scrollToBottom()
+    return
+  }
+
+  // 待确认的主题
+  if (pendingTopicName.value) {
+    if (isConfirmation(v)) {
+      const topicName = pendingTopicName.value
+      pendingTopicName.value = ''
+      await handleGenerateTopic(topicName)
+      return
+    }
+    // 用户未确认，取消挂起，继续正常对话
+    pendingTopicName.value = ''
+  } else if (isNewTopicIntent(v)) {
     const topicName = extractTopic(v)
     if (topicName.length >= 2) {
-      await handleGenerateTopic(topicName)
+      pendingTopicName.value = topicName
+      pushMessage({ role: 'ai', text: `好的！我将为你生成「**${topicName}**」的专属知识图谱，确认生成吗？\n\n回复**"确认"**开始生成，或直接继续聊天取消。`, time: now() })
+      scrollToBottom()
       return
     }
   }
@@ -836,12 +918,15 @@ async function handleGenerateTopic(topicName: string) {
     const topic = await generateTopic(topicName)
     await store.fetchTopics()
     await store.setActiveTopic(String(topic.id))
-    pushMessage({ role: 'ai', text: `✦ 知识图谱已生成！共 **${topic.total_nodes}** 个知识节点。\n\n右侧图谱已更新，点击蓝色节点开始学习吧！`, time: now() })
-    // 更新会话名为主题名
-    if (currentSession.value?.name.startsWith('新')) {
-      currentSession.value.name = topicName.slice(0, 12)
+    if (currentSession.value) {
+      currentSession.value.topicId = topic.id
+      currentSession.value.topicTitle = topic.title
+      if (currentSession.value.name.startsWith('新')) {
+        currentSession.value.name = topicName.slice(0, 12)
+      }
       saveSessions()
     }
+    pushMessage({ role: 'ai', text: `✦ 知识图谱已生成！共 **${topic.total_nodes}** 个知识节点。\n\n右侧图谱已更新，点击蓝色节点开始学习吧！`, time: now() })
   } catch {
     pushMessage({ role: 'ai', text: '生成失败，请重试或换个主题名称。', time: now() })
   } finally {
@@ -915,6 +1000,34 @@ watch(() => store.activeNode?.id, async (id) => {
   border-radius: var(--radius); overflow: hidden;
   min-height: 0; height: 100%; flex: 1; position: relative;
 }
+
+/* ── 主题栏 ── */
+.topic-bar {
+  display: flex; align-items: center; gap: 6px;
+  padding: 5px 14px; flex-shrink: 0;
+  background: var(--blue-tint); border-bottom: 1px solid var(--blue-line);
+  font-size: 11.5px; color: var(--ink-2);
+}
+.topic-bar-name { font-weight: 500; color: var(--ink); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.topic-name-input {
+  flex: 1; font-size: 12px; padding: 2px 8px;
+  border: 1px solid var(--blue); border-radius: 4px;
+  outline: none; background: var(--surface); color: var(--ink);
+  font-family: var(--font-sans);
+}
+.topic-edit-btn {
+  background: transparent; border: none; color: var(--ink-3);
+  cursor: pointer; padding: 2px 4px; border-radius: 4px;
+  display: flex; align-items: center; flex-shrink: 0;
+}
+.topic-edit-btn:hover { background: var(--blue-line); color: var(--blue); }
+.topic-ctrl-btn {
+  border: none; border-radius: 4px; padding: 2px 7px;
+  cursor: pointer; font-size: 12px; flex-shrink: 0;
+}
+.topic-ctrl-btn.confirm { background: var(--blue-2); color: white; }
+.topic-ctrl-btn.cancel { background: transparent; color: var(--ink-3); border: 1px solid var(--line); }
+.topic-ctrl-btn.cancel:hover { background: var(--bg-2); }
 
 /* ── 历史面板 ── */
 .history-panel {

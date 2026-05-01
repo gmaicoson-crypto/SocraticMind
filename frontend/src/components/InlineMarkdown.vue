@@ -39,9 +39,39 @@ renderer.codespan = ({ text }: { text: string }) => {
   return `<code class="inline-code">${text}</code>`
 }
 
+// CommonMark 规定：** 后紧跟 Unicode 标点（如引号、括号）时不构成左侧定界符，
+// 导致 **”text”** 无法渲染为粗体。插入零宽空格 U+200B（Cf 类，非标点非空白）
+// 使 ** 重新满足定界条件，且不影响可见输出。
+// 全部通过 fromCodePoint 构造，源码中不出现任何 Unicode 特殊字符
+function preprocessMarkdown(md: string): string {
+  // U+200B ZERO WIDTH SPACE
+  const zwsp = String.fromCodePoint(0x200B)
+  // 中英文引号及常用括号（码位列表，纯 ASCII 数字）
+  const quoteCPs = [
+    0x0022, 0x0027, // ASCII double/single quote
+    0x201C, 0x201D, // left/right double quotation mark
+    0x2018, 0x2019, // left/right single quotation mark
+    0x300C, 0x300D, // corner brackets
+    0x300E, 0x300F, // white corner brackets
+    0x300A, 0x300B, // double angle brackets
+    0x3008, 0x3009, // angle brackets
+    0x3010, 0x3011, // black lenticular brackets
+    0x2039, 0x203A, // single guillemets
+    0x00AB, 0x00BB, // double guillemets
+  ]
+  const quotes = quoteCPs.map(function(cp) { return String.fromCodePoint(cp) }).join("")
+  const cls = "([" + quotes + "])"
+  const delim = "(\\*{1,2}|_{1,2})"
+  // ** 紧跟引号/括号 → 插零宽空格，修复左侧定界符
+  md = md.replace(new RegExp(delim + cls, "g"), "$1" + zwsp + "$2")
+  // 引号/括号 紧跟 ** → 插零宽空格，修复右侧定界符
+  md = md.replace(new RegExp(cls + delim, "g"), "$1" + zwsp + "$2")
+  return md
+}
+
 const renderedHtml = computed(() => {
   if (!props.text) return ''
-  return marked.parse(props.text, { renderer }) as string
+  return marked.parse(preprocessMarkdown(props.text), { renderer }) as string
 })
 </script>
 

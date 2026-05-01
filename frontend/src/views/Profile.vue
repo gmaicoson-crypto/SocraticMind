@@ -5,9 +5,12 @@
 
       <!-- 个人信息 Hero -->
       <div class="hero-card">
-        <div class="big-avatar" :style="{ background: store.userInfo?.avatar_grad }">
-          {{ userName.slice(0, 1) }}
-          <div class="level-badge">LV 4 · APPRENTICE</div>
+        <div
+          class="big-avatar"
+          :style="store.userInfo?.avatar_url ? {} : { background: store.userInfo?.avatar_grad }"
+        >
+          <img v-if="store.userInfo?.avatar_url" :src="avatarSrc(store.userInfo.avatar_url)" alt="avatar" class="big-avatar-img" />
+          <template v-else>{{ userName.slice(0, 1) }}</template>
         </div>
         <div class="hero-info">
           <div class="hero-name">{{ userName }}</div>
@@ -318,6 +321,7 @@ import { useLearningStore } from '../stores/learning'
 import TopBar from '../components/TopBar.vue'
 import EditProfileModal from '../components/EditProfileModal.vue'
 import { getProfileStats } from '../api/progress'
+import { avatarSrc } from '../utils/avatar'
 import {
   loadGoalConfig, saveGoalConfig, getDefaultGoal, loadTodayProgress,
   type DailyGoalConfig
@@ -630,16 +634,10 @@ function topicColor(index: number) {
   color: white; font-size: 26px; font-weight: 700;
   display: flex; align-items: center; justify-content: center;
   flex-shrink: 0; position: relative;
+  overflow: hidden;
 }
-
-.level-badge {
-  position: absolute; bottom: -10px; left: 50%;
-  transform: translateX(-50%);
-  background: var(--blue-2); color: white;
-  font-size: 9px; font-weight: 600; padding: 2px 8px;
-  border-radius: 99px; white-space: nowrap;
-  font-family: var(--font-mono); letter-spacing: 0.04em;
-  border: 2px solid var(--surface);
+.big-avatar-img {
+  width: 100%; height: 100%; object-fit: cover;
 }
 
 .hero-info { flex: 1; }

@@ -11,6 +11,7 @@ class User(Base):
     email = Column(String, unique=True, index=True, nullable=False)
     hashed_password = Column(String, nullable=False)
     avatar_grad = Column(String, default="linear-gradient(135deg,#e8c87a,#d4974a)")
+    avatar_url = Column(String, nullable=True)
     bio = Column(String, default="每一个问题都是通往掌握的一步")
     daily_goal = Column(Integer, default=5)
     ai_style = Column(String, default="标准")

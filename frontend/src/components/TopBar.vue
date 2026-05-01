@@ -132,10 +132,14 @@
     <div class="profile-wrap" style="cursor:pointer" @click="router.push('/profile')">
       <div class="profile-info">
         <div class="profile-name">{{ store.userInfo?.username ?? '学习者' }}</div>
-        <div class="profile-level">◆ APPRENTICE · LV 4</div>
+        <div class="profile-level">LV {{ userLevel }}</div>
       </div>
-      <div class="avatar" :style="{ background: store.userInfo?.avatar_grad }">
-        {{ store.userInfo?.username?.slice(0,1) ?? '学' }}
+      <div
+        class="avatar"
+        :style="store.userInfo?.avatar_url ? {} : { background: store.userInfo?.avatar_grad }"
+      >
+        <img v-if="store.userInfo?.avatar_url" :src="avatarSrc(store.userInfo.avatar_url)" alt="avatar" class="avatar-img" />
+        <template v-else>{{ store.userInfo?.username?.slice(0,1) ?? '学' }}</template>
       </div>
     </div>
   </header>
@@ -146,9 +150,14 @@ import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { useLearningStore } from '../stores/learning'
 import type { KNode, Topic } from '../types'
+import { getProfileStats } from '../api/progress'
+import { computeLevel } from '../utils/level'
+import { avatarSrc } from '../utils/avatar'
 
 const store = useLearningStore()
 const router = useRouter()
+const chatCount = ref(0)
+const userLevel = computed(() => computeLevel(chatCount.value))
 const query = ref('')
 const focused = ref(false)
 const showDropdown = ref(false)
@@ -252,7 +261,13 @@ function handleKeydown(e: KeyboardEvent) {
   }
 }
 
-onMounted(() => window.addEventListener('keydown', handleKeydown))
+onMounted(async () => {
+  window.addEventListener('keydown', handleKeydown)
+  try {
+    const stats = await getProfileStats()
+    chatCount.value = stats.chat_count
+  } catch {}
+})
 onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown))
 </script>
 
@@ -531,5 +546,9 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown))
   align-items: center;
   justify-content: center;
   border-radius: 10px;
+  overflow: hidden;
+}
+.avatar .avatar-img {
+  width: 100%; height: 100%; object-fit: cover;
 }
 </style>

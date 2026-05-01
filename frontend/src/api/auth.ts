@@ -16,6 +16,7 @@ export interface UserInfo {
   username: string
   email: string
   avatar_grad: string
+  avatar_url: string | null
   bio: string
   daily_goal: number
   ai_style: string
@@ -46,4 +47,28 @@ export async function getMe() {
 export async function updateMe(data: Partial<UserInfo>) {
   const res = await api.put('/api/auth/me', data)
   return res.data as UserInfo
+}
+
+// 上传头像图片
+export async function uploadAvatar(file: File) {
+  const form = new FormData()
+  form.append('file', file)
+  const res = await api.post('/api/auth/avatar', form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })
+  return res.data as UserInfo
+}
+
+// 重置为默认头像（清除上传的图片）
+export async function resetAvatar() {
+  const res = await api.delete('/api/auth/avatar')
+  return res.data as UserInfo
+}
+
+// 修改密码
+export async function changePassword(oldPassword: string, newPassword: string) {
+  await api.put('/api/auth/password', {
+    old_password: oldPassword,
+    new_password: newPassword,
+  })
 }

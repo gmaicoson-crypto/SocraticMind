@@ -18,18 +18,6 @@
           </button>
         </div>
       </div>
-      <button
-        class="master-btn"
-        :class="{ enabled: canMaster && !isMastering }"
-        :disabled="!canMaster || isMastering"
-        @click="handleMaster"
-      >
-        <svg v-if="!isMastering" width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round">
-          <path d="M3 8 L7 12 L13 4"/>
-        </svg>
-        <span v-else class="spinner" />
-        {{ isMastering ? '保存中…' : '标记为已掌握' }}
-      </button>
     </div>
 
     <!-- Body -->
@@ -42,34 +30,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, h } from 'vue'
-import { useLearningStore } from '../stores/learning'
+import { ref, h } from 'vue'
 import MarkdownEditor from './MarkdownEditor.vue'
 import CanvasSketch from './CanvasSketch.vue'
 
-const store = useLearningStore()
 const activeTab = ref<'md' | 'canvas'>('md')
-
-const canMaster = computed(() =>
-  !!store.activeNode && store.activeNode.state === 'available'
-)
-const isMastering = ref(false)
-
-async function handleMaster() {
-  if (!store.activeNode || isMastering.value) return
-  isMastering.value = true
-  const currentTopicIdSnapshot = store.activeTopicId
-  try {
-    await store.masterNode(store.activeNode.id)
-    store.setActiveNode({ ...store.activeNode, state: 'mastered' })
-    await store.fetchTopicsOnly()
-    await store.fetchNodes(Number(currentTopicIdSnapshot))
-  } catch (err) {
-    console.error('标记失败', err)
-  } finally {
-    isMastering.value = false
-  }
-}
 
 const IconMd = () => h('svg', {
   width: 13, height: 13, viewBox: '0 0 24 24',
@@ -159,32 +124,6 @@ const tabs: Array<{ key: 'md' | 'canvas', label: string, icon: any }> = [
   border-color: var(--blue-line);
 }
 
-.master-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 5px 11px;
-  font-size: 11.5px;
-  font-weight: 600;
-  background: var(--bg-3);
-  color: var(--ink-3);
-  border: none;
-  border-radius: 7px;
-  cursor: not-allowed;
-  font-family: var(--font-sans);
-  transition: all .15s;
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-
-.master-btn.enabled {
-  background: var(--blue-2);
-  color: white;
-  cursor: pointer;
-}
-
-.master-btn.enabled:hover { opacity: 0.85; }
-
 .notes-body {
   flex: 1;
   padding: 12px;
@@ -192,14 +131,4 @@ const tabs: Array<{ key: 'md' | 'canvas', label: string, icon: any }> = [
   overflow: hidden;
 }
 
-.spinner {
-  width: 11px; height: 11px;
-  border-radius: 50%;
-  border: 2px solid rgba(255,255,255,0.4);
-  border-top-color: white;
-  animation: spin .7s linear infinite;
-  display: inline-block;
-}
-
-@keyframes spin { to { transform: rotate(360deg); } }
 </style>

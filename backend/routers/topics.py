@@ -120,6 +120,34 @@ def delete_topic(
     db.commit()
     return {"message": "删除成功"}
 
+class UpdateTopicRequest(BaseModel):
+    title: str
+
+@router.patch("/{topic_id}")
+def update_topic_title(
+    topic_id: int,
+    req: UpdateTopicRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    topic = db.query(Topic).filter(
+        Topic.id == topic_id,
+        Topic.user_id == current_user.id
+    ).first()
+    if not topic:
+        raise HTTPException(status_code=404, detail="主题不存在")
+    topic.title = req.title
+    db.commit()
+    db.refresh(topic)
+    nodes = db.query(Node).filter(Node.topic_id == topic.id).all()
+    return TopicResponse(
+        id=topic.id,
+        title=topic.title,
+        emoji=topic.emoji,
+        total_nodes=len(nodes),
+        mastered_nodes=len([n for n in nodes if n.state == "mastered"]),
+    )
+
 @router.get("/recommend")
 def recommend_topics(
     current_user: User = Depends(get_current_user),

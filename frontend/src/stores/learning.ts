@@ -25,6 +25,7 @@ export const useLearningStore = defineStore('learning', () => {
     username: string
     email: string
     avatar_grad: string
+    avatar_url: string | null
     bio: string
     daily_goal: number
     ai_style: string

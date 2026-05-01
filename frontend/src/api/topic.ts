@@ -54,6 +54,11 @@ export async function deleteTopic(topicId: number) {
   await api.delete(`/api/topics/${topicId}`)
 }
 
+export async function updateTopicTitle(topicId: number, title: string) {
+  const res = await api.patch(`/api/topics/${topicId}`, { title })
+  return res.data as TopicData
+}
+
 export async function getRecommendations() {
   const res = await api.get('/api/topics/recommend')
   return res.data.recommendations as Recommendation[]

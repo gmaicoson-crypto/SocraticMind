@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException
+import uuid
+from pathlib import Path
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
@@ -8,6 +10,10 @@ from core.deps import get_current_user
 from models.user import User
 from models.topic import Topic
 from models.node import Node
+
+UPLOAD_DIR = Path(__file__).resolve().parent.parent / "uploads" / "avatars"
+ALLOWED_AVATAR_EXT = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
+MAX_AVATAR_SIZE = 5 * 1024 * 1024  # 5MB
 
 router = APIRouter(prefix="/api/auth", tags=["认证"])
 
@@ -21,6 +27,7 @@ class UserResponse(BaseModel):
     username: str
     email: str
     avatar_grad: str
+    avatar_url: str | None = None
     bio: str
     daily_goal: int
     ai_style: str
@@ -39,6 +46,11 @@ class UpdateProfileRequest(BaseModel):
     avatar_grad: str | None = None
     daily_goal: int | None = None
     ai_style: str | None = None
+
+
+class ChangePasswordRequest(BaseModel):
+    old_password: str
+    new_password: str
 
 
 def init_default_topic(db: Session, user_id: int):
@@ -125,3 +137,71 @@ def update_me(
     db.commit()
     db.refresh(current_user)
     return current_user
+
+
+def _delete_old_avatar(user: User):
+    if not user.avatar_url:
+        return
+    fname = user.avatar_url.rsplit("/", 1)[-1]
+    fpath = UPLOAD_DIR / fname
+    if fpath.exists():
+        try:
+            fpath.unlink()
+        except OSError:
+            pass
+
+
+@router.post("/avatar", response_model=UserResponse)
+async def upload_avatar(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    suffix = Path(file.filename or "").suffix.lower()
+    if suffix not in ALLOWED_AVATAR_EXT:
+        raise HTTPException(status_code=400, detail="不支持的图片格式")
+
+    data = await file.read()
+    if len(data) > MAX_AVATAR_SIZE:
+        raise HTTPException(status_code=400, detail="图片大小不能超过 5MB")
+    if not data:
+        raise HTTPException(status_code=400, detail="文件为空")
+
+    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    _delete_old_avatar(current_user)
+
+    fname = f"{current_user.id}_{uuid.uuid4().hex}{suffix}"
+    fpath = UPLOAD_DIR / fname
+    fpath.write_bytes(data)
+
+    current_user.avatar_url = f"/static/avatars/{fname}"
+    db.commit()
+    db.refresh(current_user)
+    return current_user
+
+
+@router.delete("/avatar", response_model=UserResponse)
+def reset_avatar(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _delete_old_avatar(current_user)
+    current_user.avatar_url = None
+    db.commit()
+    db.refresh(current_user)
+    return current_user
+
+
+@router.put("/password")
+def change_password(
+    req: ChangePasswordRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if not verify_password(req.old_password, current_user.hashed_password):
+        raise HTTPException(status_code=400, detail="原密码错误")
+    if len(req.new_password) < 6:
+        raise HTTPException(status_code=400, detail="新密码至少 6 个字符")
+    current_user.hashed_password = hash_password(req.new_password)
+    db.commit()
+    return {"message": "密码修改成功"}
