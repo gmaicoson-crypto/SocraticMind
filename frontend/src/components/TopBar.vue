@@ -70,7 +70,10 @@
               </div>
               <div class="item-content">
                 <div class="item-title" v-html="highlight(item.label, query)" />
-                <div class="item-sub">{{ item.sub }} · {{ stateLabel(item.state) }}</div>
+                <div class="item-sub">
+                  <span v-html="highlight(item.sub || item.topic_title, query)" />
+                  · {{ item.topic_emoji }} {{ item.topic_title }} · {{ stateLabel(item.state) }}
+                </div>
               </div>
               <div class="item-arrow">→</div>
             </div>
@@ -146,13 +149,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useLearningStore } from '../stores/learning'
-import type { KNode, Topic } from '../types'
+import type { Topic } from '../types'
 import { getProfileStats } from '../api/progress'
 import { computeLevel } from '../utils/level'
 import { avatarSrc } from '../utils/avatar'
+import { searchNodes, type SearchedNode } from '../api/topic'
 
 const store = useLearningStore()
 const router = useRouter()
@@ -166,13 +170,28 @@ const inputRef = ref<HTMLInputElement | null>(null)
 
 const pct = computed(() => Math.round((store.masteredCount / store.totalCount) * 100))
 
-// 搜索结果
-const nodeResults = computed(() => {
-  if (!query.value.trim()) return []
-  const q = query.value.toLowerCase()
-  return store.nodes.filter(n =>
-    n.label.toLowerCase().includes(q) || n.sub.toLowerCase().includes(q)
-  ).slice(0, 5)
+// 搜索结果（节点跨主题，从后端获取，带 200ms 防抖）
+const nodeResults = ref<SearchedNode[]>([])
+let searchTimer: ReturnType<typeof setTimeout> | null = null
+let searchSeq = 0
+
+watch(query, (q) => {
+  if (searchTimer) clearTimeout(searchTimer)
+  activeIndex.value = -1
+  const keyword = q.trim()
+  if (!keyword) {
+    nodeResults.value = []
+    return
+  }
+  const seq = ++searchSeq
+  searchTimer = setTimeout(async () => {
+    try {
+      const data = await searchNodes(keyword, 8)
+      if (seq === searchSeq) nodeResults.value = data
+    } catch {
+      if (seq === searchSeq) nodeResults.value = []
+    }
+  }, 200)
 })
 
 const topicResults = computed(() => {
@@ -183,7 +202,7 @@ const topicResults = computed(() => {
   ).slice(0, 3)
 })
 
-const results = computed(() => [...nodeResults.value, ...topicResults.value])
+const results = computed<(SearchedNode | Topic)[]>(() => [...nodeResults.value, ...topicResults.value])
 
 // 高亮匹配文字
 function highlight(text: string, q: string) {
@@ -215,19 +234,22 @@ function selectCurrent() {
   }
 }
 
-// 选择节点
-function selectNode(node: KNode) {
-  store.setActiveNode(node)
-  store.setActiveTopic('py') // 跳转到对应主题
-  router.push('/')
+// 选择节点：切换到对应主题 → 找到本地 KNode → 激活节点（触发对话跳转）
+async function selectNode(item: SearchedNode) {
   closeSearch()
+  router.push('/')
+  if (store.activeTopicId !== String(item.topic_id)) {
+    await store.setActiveTopic(String(item.topic_id))
+  }
+  const localNode = store.nodes.find(n => n.id === item.node_key)
+  if (localNode) store.setActiveNode(localNode)
 }
 
 // 选择主题
-function selectTopic(topic: Topic) {
-  store.setActiveTopic(topic.id)
-  router.push('/')
+async function selectTopic(topic: Topic) {
   closeSearch()
+  router.push('/')
+  await store.setActiveTopic(topic.id)
 }
 
 function closeSearch() {

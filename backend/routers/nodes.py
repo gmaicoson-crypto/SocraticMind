@@ -1,5 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
+from sqlalchemy import or_
 from pydantic import BaseModel
 from typing import List
 from datetime import datetime, timezone
@@ -10,6 +11,52 @@ from models.topic import Topic
 from models.node import Node
 
 router = APIRouter(prefix="/api/nodes", tags=["节点"])
+
+
+class SearchedNodeResponse(BaseModel):
+    id: int
+    node_key: str
+    label: str
+    sub: str
+    state: str
+    topic_id: int
+    topic_title: str
+    topic_emoji: str
+
+    class Config:
+        from_attributes = True
+
+
+@router.get("/search", response_model=List[SearchedNodeResponse])
+def search_nodes(
+    q: str = Query(..., min_length=1),
+    limit: int = Query(10, ge=1, le=30),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """跨主题搜索当前用户的节点（按 label / sub 匹配，不区分大小写）。"""
+    pattern = f"%{q.strip()}%"
+    rows = (
+        db.query(Node, Topic)
+        .join(Topic, Node.topic_id == Topic.id)
+        .filter(Topic.user_id == current_user.id)
+        .filter(or_(Node.label.ilike(pattern), Node.sub.ilike(pattern)))
+        .limit(limit)
+        .all()
+    )
+    return [
+        SearchedNodeResponse(
+            id=n.id,
+            node_key=n.node_key,
+            label=n.label,
+            sub=n.sub or "",
+            state=n.state,
+            topic_id=t.id,
+            topic_title=t.title,
+            topic_emoji=t.emoji,
+        )
+        for n, t in rows
+    ]
 
 class NodeResponse(BaseModel):
     id: int

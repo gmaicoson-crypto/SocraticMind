@@ -59,6 +59,22 @@ export async function updateTopicTitle(topicId: number, title: string) {
   return res.data as TopicData
 }
 
+export interface SearchedNode {
+  id: number
+  node_key: string
+  label: string
+  sub: string
+  state: 'mastered' | 'available' | 'locked'
+  topic_id: number
+  topic_title: string
+  topic_emoji: string
+}
+
+export async function searchNodes(q: string, limit = 10) {
+  const res = await api.get('/api/nodes/search', { params: { q, limit } })
+  return res.data as SearchedNode[]
+}
+
 export async function getRecommendations() {
   const res = await api.get('/api/topics/recommend')
   return res.data.recommendations as Recommendation[]
