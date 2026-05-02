@@ -1,15 +1,19 @@
 <template>
   <aside class="sidebar">
 
-    <!-- 主题管理弹窗 -->
-    <TopicManager :show="showManager" @close="showManager = false" />
+    <!-- 主题管理弹窗：用 v-if 配合 hasOpenedManager，使弹窗代码只在首次点击后才下载 -->
+    <TopicManager
+      v-if="hasOpenedManager"
+      :show="showManager"
+      @close="showManager = false"
+    />
 
     <!-- 我的主题 -->
     <div class="section">
       <div class="section-header">
         <span class="section-title">我的主题</span>
         <div class="header-btns">
-          <button class="manage-btn" title="管理主题" @click="showManager = true">
+          <button class="manage-btn" title="管理主题" @click="openManager()">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
               <path d="M12 20h9M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4 12.5-12.5z"/>
             </svg>
@@ -53,7 +57,7 @@
         </button>
 
         <!-- 展开按钮 -->
-        <button v-if="hasMore" class="expand-btn" @click="showManager = true">
+        <button v-if="hasMore" class="expand-btn" @click="openManager()">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
             <path d="M6 9l6 6 6-6"/>
           </svg>
@@ -147,13 +151,21 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onBeforeUnmount } from 'vue'
+import { ref, computed, onBeforeUnmount, defineAsyncComponent } from 'vue'
 import { useLearningStore } from '../stores/learning'
-import TopicManager from './TopicManager.vue'
+// TopicManager 仅在点击"管理主题"按钮时打开，async 化让侧栏首屏不带它
+const TopicManager = defineAsyncComponent(() => import('./TopicManager.vue'))
 import { generateTopic } from '../api/topic'
 
 const store = useLearningStore()
 const showManager = ref(false)
+// 一旦打开过就保持挂载，避免反复 import；首次打开前根本不会加载组件
+const hasOpenedManager = ref(false)
+
+function openManager() {
+  hasOpenedManager.value = true
+  showManager.value = true
+}
 const generatingTitle = ref<string | null>(null)
 
 const MAX_VISIBLE = 4

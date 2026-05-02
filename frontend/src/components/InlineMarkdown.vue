@@ -4,7 +4,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { ref, watch, onBeforeUnmount } from 'vue'
 import { marked } from 'marked'
 import hljs from 'highlight.js'
 
@@ -69,9 +69,29 @@ function preprocessMarkdown(md: string): string {
   return md
 }
 
-const renderedHtml = computed(() => {
-  if (!props.text) return ''
-  return marked.parse(preprocessMarkdown(props.text), { renderer }) as string
+// rAF 节流的渲染：流式追加 chunk 时不再每次都跑完整 marked.parse + 代码高亮，
+// 而是合并成每帧最多一次。withCaret=true（流式态）才节流；静态消息直接同步渲染
+const renderedHtml = ref('')
+let pendingFrame: number | null = null
+
+function compileNow(text: string) {
+  renderedHtml.value = text ? (marked.parse(preprocessMarkdown(text), { renderer }) as string) : ''
+}
+
+watch(() => props.text, (text) => {
+  if (props.withCaret) {
+    if (pendingFrame !== null) return
+    pendingFrame = requestAnimationFrame(() => {
+      pendingFrame = null
+      compileNow(props.text)
+    })
+  } else {
+    compileNow(text)
+  }
+}, { immediate: true })
+
+onBeforeUnmount(() => {
+  if (pendingFrame !== null) cancelAnimationFrame(pendingFrame)
 })
 </script>
 

@@ -14,9 +14,12 @@
   </Transition>
 
   <div ref="scrollRef" class="dlg-messages" @scroll="onMessagesScroll">
+    <!-- v-memo：消息内容、悬浮态、复制态没变就跳过 vnode diff -->
+    <!-- 流式输出 stream chunk 触发父级重渲染时，已完成的旧消息行直接复用 -->
     <div
       v-for="(msg, i) in messages"
-      :key="msg.db_id ?? `${msg.role}-${msg.time}-${i}`"
+      :key="(msg.db_id ?? `${msg.role}-${msg.time}-${i}`)"
+      v-memo="[msg.text, msg.quote, msg.time, hoveredIndex === i, copiedIndex === i, isThinking]"
       class="msg-row"
       :class="msg.role"
       @mouseenter="hoveredIndex = i"

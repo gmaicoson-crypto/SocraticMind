@@ -102,11 +102,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, shallowRef, computed, onMounted, defineAsyncComponent } from 'vue'
 import { useRouter } from 'vue-router'
 import { useLearningStore } from '../stores/learning'
 import TopBar from '../components/TopBar.vue'
-import EditProfileModal from '../components/EditProfileModal.vue'
+// 编辑资料弹窗只在用户点"编辑"时显示，做成 async 避免首次进入 Profile 页就拉取 ~360 行的弹窗代码
+const EditProfileModal = defineAsyncComponent(() => import('../components/EditProfileModal.vue'))
 import { getProfileStats } from '../api/progress'
 import { loadTodayProgress } from '../utils/dailyGoal'
 import type { ProfileStats } from '../api/progress'
@@ -120,7 +121,9 @@ const showEditModal = ref(false)
 const store = useLearningStore()
 const router = useRouter()
 
-const stats = ref<ProfileStats>({
+// shallowRef：stats.heatmap 365 个对象、timeline / badges 数组都是整体替换，
+// 不需要每个数组项都被 Proxy 包裹，避免大对象 reactive walk 的开销
+const stats = shallowRef<ProfileStats>({
   chat_count: 0,
   mastered_count: 0,
   streak: 0,

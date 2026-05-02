@@ -25,6 +25,8 @@ class ChatRequest(BaseModel):
     history: List[MessageItem] = []
     mode: str = "socratic"
     ai_style: str = "标准"
+    # qa（默认 Q&A）/ topic_overview（500 字主题概览）/ node_overview（100 字节点概览）
+    kind: str = "qa"
 
 class HistoryResponse(BaseModel):
     id: int
@@ -40,7 +42,11 @@ def chat_stream_endpoint(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    if req.mode == "normal":
+    if req.kind == "topic_overview":
+        # node_key 此时承载主题名（前端传来），不查节点表
+        node_label = req.node_key
+        node_sub = ""
+    elif req.mode == "normal":
         node_label = "通用助手"
         node_sub = "General Assistant"
     else:
@@ -84,6 +90,7 @@ def chat_stream_endpoint(
             user_input=req.user_input,
             mode=req.mode,
             ai_style=req.ai_style,
+            kind=req.kind,
         ):
             full_text.append(chunk)
             yield f"data: {json.dumps({'text': chunk}, ensure_ascii=False)}\n\n"

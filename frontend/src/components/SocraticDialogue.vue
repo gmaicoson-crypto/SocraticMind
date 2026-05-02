@@ -301,6 +301,28 @@ function saveSessions() {
   }, 300)
 }
 
+// 主题 ↔ 学习对话 1:1 绑定：找不到就懒创建一个，名字默认取主题名
+function findOrCreateTopicSession(topicId: number): Session {
+  const existing = socraticSessions.value.find(s => s.topicId === topicId)
+  if (existing) return existing
+  const topic = store.topics.find(t => Number(t.id) === topicId)
+  const title = topic?.title ?? '新学习对话'
+  const session: Session = {
+    id: genId(),
+    name: title.slice(0, 12),
+    messages: [{
+      role: 'ai',
+      text: `这是关于「**${title}**」的专属学习对话 ✦\n\n点击右侧知识图谱中的节点开始学习，或继续提问深入这个主题。`,
+      time: now(),
+    }],
+    updatedAt: nowDate(),
+    topicId,
+    topicTitle: topic?.title,
+  }
+  socraticSessions.value = [session, ...socraticSessions.value]
+  return session
+}
+
 function pushMessage(msg: Message) {
   if (!currentSession.value) return
   currentSession.value.messages.push(msg)
@@ -347,6 +369,59 @@ watch(chatMode, () => {
   const cached = loadCachedChips(chatMode.value)
   chips.value = cached.length > 0 ? cached : defaultChips[chatMode.value]
   scrollToBottom()
+})
+
+// 主题 → 会话自动切换：activeTopicId 或 chatMode 变化都重新对齐
+// 用 Sidebar 点击主题、TopBar 搜索跳转、生成新主题等都会触发 setActiveTopic
+watch([() => store.activeTopicId, chatMode], () => {
+  if (chatMode.value !== 'socratic') return
+  const numId = Number(store.activeTopicId)
+  if (!numId) return
+  const session = findOrCreateTopicSession(numId)
+  if (socraticCurrentId.value !== session.id) {
+    socraticCurrentId.value = session.id
+    showHistory.value = false
+    saveSessions()
+    scrollToBottom()
+  }
+}, { immediate: true })
+
+// 主题列表变化时同步会话名 + 清理已删除主题对应的孤儿会话
+watch(() => store.topics, (topics) => {
+  const validIds = new Set(topics.map(t => Number(t.id)))
+  let mutated = false
+  const next: Session[] = []
+  for (const s of socraticSessions.value) {
+    if (s.topicId == null) {
+      next.push(s)
+      continue
+    }
+    if (!validIds.has(s.topicId)) {
+      // 主题被删除 → 同步删除其绑定会话
+      mutated = true
+      continue
+    }
+    const t = topics.find(x => Number(x.id) === s.topicId)
+    if (t && (s.topicTitle !== t.title || s.name !== t.title.slice(0, 12))) {
+      // 主题改名 → 会话名同步
+      s.topicTitle = t.title
+      s.name = t.title.slice(0, 12)
+      mutated = true
+    }
+    next.push(s)
+  }
+  // 至少留一个会话兜底（未绑定主题的默认对话）
+  if (next.length === 0) {
+    next.push(defaultSession('socratic'))
+    mutated = true
+  }
+  if (mutated) {
+    socraticSessions.value = next
+    if (!next.find(s => s.id === socraticCurrentId.value)) {
+      socraticCurrentId.value = next[0].id
+    }
+    saveSessions()
+  }
 })
 
 function deleteSession(id: string) {
@@ -563,7 +638,22 @@ async function send() {
   }
 
   if (!store.activeNode) {
-    pushMessage({ role: 'ai', text: '请先在右侧图谱中点击一个节点，我们针对具体知识点来对话 👉', time: now() })
+    const boundTitle = currentSession.value?.topicTitle
+    const hint = boundTitle
+      ? `这是「**${boundTitle}**」的专属对话。请在右侧图谱中点击一个节点，针对该主题的具体知识点来对话 👉`
+      : '请先在右侧图谱中点击一个节点，我们针对具体知识点来对话 👉'
+    pushMessage({ role: 'ai', text: hint, time: now() })
+    scrollToBottom()
+    return
+  }
+
+  // 节点必须属于当前会话绑定的主题；否则提示用户先选对主题的节点
+  if (currentSession.value?.topicId && !store.nodes.some(n => n.id === store.activeNode!.id)) {
+    pushMessage({
+      role: 'ai',
+      text: `当前对话绑定的是「**${currentSession.value.topicTitle}**」主题，请在该主题的图谱里选一个节点继续。`,
+      time: now(),
+    })
     scrollToBottom()
     return
   }
@@ -652,17 +742,19 @@ async function handleGenerateTopic(topicName: string) {
   scrollToBottom()
   try {
     const topic = await generateTopic(topicName)
-    await store.fetchTopics()
-    await store.setActiveTopic(String(topic.id))
-    if (currentSession.value) {
+    // 先把当前未绑定的会话"认领"为新主题的会话，再 setActiveTopic 触发 watcher
+    if (currentSession.value && currentSession.value.topicId == null) {
       currentSession.value.topicId = topic.id
       currentSession.value.topicTitle = topic.title
-      if (currentSession.value.name.startsWith('新')) {
-        currentSession.value.name = topicName.slice(0, 12)
-      }
+      currentSession.value.name = topic.title.slice(0, 12)
       saveSessions()
     }
-    pushMessage({ role: 'ai', text: `✦ 知识图谱已生成！共 **${topic.total_nodes}** 个知识节点。\n\n右侧图谱已更新，点击蓝色节点开始学习吧！`, time: now() })
+    await store.fetchTopics()
+    await store.setActiveTopic(String(topic.id))
+    pushMessage({ role: 'ai', text: `✦ 知识图谱已生成！共 **${topic.total_nodes}** 个知识节点。\n\n下面我先给你一个整体介绍 👇`, time: now() })
+    scrollToBottom()
+    // 主题概览（500 字）：让 AI 先讲清楚是什么 / 为什么学 / 学完会得到什么
+    await streamOverview('topic', topic.title, '')
   } catch {
     pushMessage({ role: 'ai', text: '生成失败，请重试或换个主题名称。', time: now() })
   } finally {
@@ -671,54 +763,103 @@ async function handleGenerateTopic(topicName: string) {
   }
 }
 
+// 统一的概览流：复用现有 chatStream，仅传 kind 改变 prompt
+function streamOverview(
+  kind: 'topic' | 'node',
+  label: string,
+  sub: string,
+): Promise<void> {
+  return new Promise((resolve) => {
+    isThinking.value = true
+    streamingText.value = ''
+    abortController = new AbortController()
+    const apiKind = kind === 'topic' ? 'topic_overview' : 'node_overview'
+    chatStream(
+      label, currentTopicId.value, '',
+      [],
+      'socratic', aiStyle.value,
+      (chunk) => {
+        streamingText.value = stripSignals(streamingText.value + chunk)
+        scrollToBottom()
+      },
+      () => {
+        const t = stripSignals(streamingText.value).trim()
+        streamingText.value = ''
+        isThinking.value = false
+        if (t) pushMessage({ role: 'ai', text: t, time: now() })
+        scrollToBottom()
+        resolve()
+      },
+      (err) => {
+        if (err?.name !== 'AbortError') {
+          pushMessage({ role: 'ai', text: '加载概览失败，但你仍可以正常学习。', time: now() })
+        }
+        streamingText.value = ''
+        isThinking.value = false
+        scrollToBottom()
+        resolve()
+      },
+      abortController,
+      undefined,
+      undefined,
+      apiKind,
+    )
+    // 后端在 topic_overview 模式下不查节点表，sub 不会用到，无需传
+    void sub
+  })
+}
+
 watch(() => store.activeNode?.id, async (id) => {
-  // 节点切换：用 AI 自由发挥提问，比固定模板更灵活
+  // 节点切换：先给 100 字概览，再衔接苏格拉底引导问题（已掌握节点直接走复习提问）
   if (!id) return
   if (chatMode.value !== 'socratic') return
   const node = store.activeNode!
 
-  isThinking.value = true
-  streamingText.value = ''
-  scrollToBottom()
+  if (node.state === 'mastered') {
+    // 已掌握 → 走复习提问，不再走概览
+    isThinking.value = true
+    streamingText.value = ''
+    scrollToBottom()
 
-  const prompt = node.state === 'mastered'
-    ? `用户想复习「${node.label}」（${node.sub}），请用苏格拉底式提问引导用户回顾这个知识点的核心内容。`
-    : `用户开始学习「${node.label}」（${node.sub}），请用苏格拉底式提问引导用户思考这个知识点，从用户已有的生活经验或常识出发。`
-
-  abortController = new AbortController()
-
-  chatStream(
-    node.id, currentTopicId.value, prompt,
-    [], // 不带历史，新节点开场
-    'socratic', aiStyle.value,
-    (chunk) => {
-      streamingText.value = stripSignals(streamingText.value + chunk)
-      scrollToBottom()
-    },
-    () => {
-      const t = stripSignals(streamingText.value).trim()
-      streamingText.value = ''
-      isThinking.value = false
-      if (t) {
-        const aiMsg: Message = { role: 'ai', text: t, time: now() }
-        if (pendingMsgIds) {
-          aiMsg.db_id = pendingMsgIds.ai
-          aiMsg.paired_db_id = pendingMsgIds.user  // 关联隐式系统提问的 db 记录
-          pendingMsgIds = null
+    const prompt = `用户想复习「${node.label}」（${node.sub}），请用苏格拉底式提问引导用户回顾这个知识点的核心内容。`
+    abortController = new AbortController()
+    chatStream(
+      node.id, currentTopicId.value, prompt,
+      [],
+      'socratic', aiStyle.value,
+      (chunk) => {
+        streamingText.value = stripSignals(streamingText.value + chunk)
+        scrollToBottom()
+      },
+      () => {
+        const t = stripSignals(streamingText.value).trim()
+        streamingText.value = ''
+        isThinking.value = false
+        if (t) {
+          const aiMsg: Message = { role: 'ai', text: t, time: now() }
+          if (pendingMsgIds) {
+            aiMsg.db_id = pendingMsgIds.ai
+            aiMsg.paired_db_id = pendingMsgIds.user
+            pendingMsgIds = null
+          }
+          pushMessage(aiMsg)
         }
-        pushMessage(aiMsg)
-      }
-      scrollToBottom()
-    },
-    (err) => {
-      if (err?.name === 'AbortError') return
-      streamingText.value = ''
-      isThinking.value = false
-    },
-    abortController,
-    handleSignal,
-    (userMsgId, aiMsgId) => { pendingMsgIds = { user: userMsgId, ai: aiMsgId } },
-  )
+        scrollToBottom()
+      },
+      (err) => {
+        if (err?.name === 'AbortError') return
+        streamingText.value = ''
+        isThinking.value = false
+      },
+      abortController,
+      handleSignal,
+      (userMsgId, aiMsgId) => { pendingMsgIds = { user: userMsgId, ai: aiMsgId } },
+    )
+    return
+  }
+
+  // 未掌握 → 节点概览（100 字 + 一个引导问题）
+  await streamOverview('node', node.label, node.sub)
 })
 
 onBeforeUnmount(() => {

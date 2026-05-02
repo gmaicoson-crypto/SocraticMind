@@ -5,6 +5,8 @@ export interface ChatMessage {
   content: string
 }
 
+export type ChatKind = 'qa' | 'topic_overview' | 'node_overview'
+
 // SSE 流式对话
 export function chatStream(
   nodeKey: string,
@@ -19,6 +21,7 @@ export function chatStream(
   controllers?: AbortController,
   onSignal?: (signal: string) => void,
   onMsgIds?: (userMsgId: number, aiMsgId: number) => void,
+  kind: ChatKind = 'qa',
 ) {
   const token = localStorage.getItem('sm_token')
 
@@ -50,6 +53,7 @@ export function chatStream(
       history: history.map(m => ({ role: m.role, content: m.content })),
       mode,
       ai_style: aiStyle,
+      kind,
     }),
     signal: controller.signal,
   })

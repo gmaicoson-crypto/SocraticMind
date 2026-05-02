@@ -24,7 +24,7 @@
             <button
               class="right-tab"
               :class="{ active: rightPanel === 'graph' }"
-              @click="rightPanel = 'graph'"
+              @click="setRightPanel('graph')"
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
                 <circle cx="12" cy="5" r="2"/><circle cx="5" cy="19" r="2"/><circle cx="19" cy="19" r="2"/>
@@ -35,7 +35,7 @@
             <button
               class="right-tab"
               :class="{ active: rightPanel === 'notes' }"
-              @click="rightPanel = 'notes'"
+              @click="setRightPanel('notes')"
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
                 <path d="M4 6H20M4 12H20M4 18H14"/>
@@ -45,8 +45,11 @@
           </div>
 
           <div class="right-panel">
-            <KnowledgeGraph v-show="rightPanel === 'graph'" />
-            <NotesPanel v-show="rightPanel === 'notes'" />
+            <!-- v-if + 异步组件：首次显示时才下载/挂载，KeepAlive 缓存已加载的实例 -->
+            <KeepAlive>
+              <KnowledgeGraph v-if="rightPanel === 'graph'" />
+              <NotesPanel v-else-if="rightPanel === 'notes'" />
+            </KeepAlive>
           </div>
         </div>
 
@@ -56,17 +59,23 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { ref, onMounted, onBeforeUnmount, defineAsyncComponent } from 'vue'
 import { addStudyMinutes } from '../utils/dailyGoal'
 import TopBar from '../components/TopBar.vue'
 import Sidebar from '../components/Sidebar.vue'
 import SocraticDialogue from '../components/SocraticDialogue.vue'
-import NotesPanel from '../components/NotesPanel.vue'
-import KnowledgeGraph from '../components/KnowledgeGraph.vue'
+// KnowledgeGraph 含 confetti + 大量 SVG 计算；NotesPanel 含 marked + 画布
+// 异步加载让首屏 JS 体积下降，并配合 keep-alive 切 tab 时不重复加载
+const KnowledgeGraph = defineAsyncComponent(() => import('../components/KnowledgeGraph.vue'))
+const NotesPanel = defineAsyncComponent(() => import('../components/NotesPanel.vue'))
 import { useLearningStore } from '../stores/learning'
 
 const store = useLearningStore()
 const rightPanel = ref<'graph' | 'notes'>('graph')
+
+function setRightPanel(panel: 'graph' | 'notes') {
+  rightPanel.value = panel
+}
 
 const mainRef = ref<HTMLElement | null>(null)
 const leftWidth = ref(0)

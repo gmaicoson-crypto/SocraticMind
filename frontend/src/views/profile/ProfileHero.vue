@@ -1,7 +1,7 @@
 <template>
   <div class="hero-card">
     <div class="big-avatar" :style="userInfo?.avatar_url ? {} : { background: userInfo?.avatar_grad }">
-      <img v-if="userInfo?.avatar_url" :src="avatarSrc(userInfo.avatar_url)" alt="avatar" class="big-avatar-img" />
+      <img v-if="userInfo?.avatar_url" :src="avatarSrc(userInfo.avatar_url)" alt="avatar" class="big-avatar-img" decoding="async" />
       <template v-else>{{ userName.slice(0, 1) }}</template>
     </div>
     <div class="hero-info">

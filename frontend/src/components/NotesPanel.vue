@@ -30,9 +30,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, h } from 'vue'
-import MarkdownEditor from './MarkdownEditor.vue'
-import CanvasSketch from './CanvasSketch.vue'
+import { ref, h, defineAsyncComponent } from 'vue'
+// MarkdownEditor 内部用 marked，CanvasSketch 操作 canvas；按 tab 异步加载
+// 用户切到对应 tab 才下载相关代码，且模板中已配合 v-if 让闲置 tab 不实例化
+const MarkdownEditor = defineAsyncComponent(() => import('./MarkdownEditor.vue'))
+const CanvasSketch = defineAsyncComponent(() => import('./CanvasSketch.vue'))
 
 const activeTab = ref<'md' | 'canvas'>('md')
 

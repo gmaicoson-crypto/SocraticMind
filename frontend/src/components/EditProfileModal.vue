@@ -23,7 +23,7 @@
                 :style="hasImage ? {} : { background: form.avatarGrad }"
                 @click="triggerUpload"
               >
-                <img v-if="hasImage" :src="avatarPreview" alt="avatar" class="avatar-img" />
+                <img v-if="hasImage" :src="avatarPreview" alt="avatar" class="avatar-img" decoding="async" />
                 <template v-else>{{ form.name.slice(0,1) || '李' }}</template>
                 <div class="avatar-edit">
                   <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round">

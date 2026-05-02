@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref, shallowRef, computed } from 'vue'
 import type { KNode, KEdge, Topic, Message } from '../types'
 import { getTopics, getNodes, masterNode as apiMasterNode } from '../api/topic'
 import { getRecommendations } from '../api/topic'
@@ -9,15 +9,17 @@ import type { StreakData } from '../api/progress'
 export const useLearningStore = defineStore('learning', () => {
 
   // ── 主题状态 ──
+  // shallowRef 仅追踪 .value 引用替换；这些数组都是整体替换（fetchNodes/fetchTopics/masterNode），
+  // 不存在按索引修改，shallowRef 省去深层 reactive Proxy 包装，节点/主题数变多时收益明显
   const isDark = ref(false)
-  const nodes = ref<KNode[]>([])
-  const edges = ref<KEdge[]>([])
-  const topics = ref<Topic[]>([])
+  const nodes = shallowRef<KNode[]>([])
+  const edges = shallowRef<KEdge[]>([])
+  const topics = shallowRef<Topic[]>([])
   const activeTopicId = ref('')
-  const activeNode = ref<KNode | null>(null)
-  const messages = ref<Message[]>([])
+  const activeNode = shallowRef<KNode | null>(null)
+  const messages = shallowRef<Message[]>([])
   const lastMasteredId = ref<string | null>(null)
-  const recommendations = ref<{ title: string; emoji: string; reason: string }[]>([])
+  const recommendations = shallowRef<{ title: string; emoji: string; reason: string }[]>([])
 
   // ── 用户信息 ──
   const userInfo = ref<{
@@ -149,6 +151,10 @@ export const useLearningStore = defineStore('learning', () => {
 
   // ── 主题切换 ──
   async function setActiveTopic(id: string) {
+    // 切到不同主题时清空 activeNode，否则会指向上一主题的节点导致对话错位
+    if (activeTopicId.value !== id) {
+      activeNode.value = null
+    }
     activeTopicId.value = id
     const numId = Number(id)
     if (!isNaN(numId)) await fetchNodes(numId)

@@ -141,7 +141,7 @@
         class="avatar"
         :style="store.userInfo?.avatar_url ? {} : { background: store.userInfo?.avatar_grad }"
       >
-        <img v-if="store.userInfo?.avatar_url" :src="avatarSrc(store.userInfo.avatar_url)" alt="avatar" class="avatar-img" />
+        <img v-if="store.userInfo?.avatar_url" :src="avatarSrc(store.userInfo.avatar_url)" alt="avatar" class="avatar-img" decoding="async" />
         <template v-else>{{ store.userInfo?.username?.slice(0,1) ?? '学' }}</template>
       </div>
     </div>
