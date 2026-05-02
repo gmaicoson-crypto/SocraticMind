@@ -32,7 +32,7 @@
             </div>
             <div class="stat-div" />
             <div class="stat">
-              <div class="stat-num">{{ stats.streak }}</div>
+              <div class="stat-num">{{ store.streakData.streak }}</div>
               <div class="stat-label">连续天数</div>
             </div>
           </div>
@@ -45,7 +45,7 @@
             返回对话
           </button>
           <button class="edit-btn" @click="showEditModal = true">编辑资料</button>
-          <div class="streak-chip">✦ 连续学习 {{ stats.streak }} 天</div>
+          <div class="streak-chip">✦ 连续学习 {{ store.streakData.streak }} 天</div>
         </div>
       </div>
 
@@ -349,6 +349,11 @@ const stats = ref<ProfileStats>({
 })
 
 onMounted(async () => {
+  // 先确保今日学习记录已写入，再拉取统计；同时刷新 store 的 streak，
+  // 让主页 Sidebar 与本页显示同源
+  try {
+    await store.recordLearning()
+  } catch {}
   try {
     stats.value = await getProfileStats()
   } catch (err) {

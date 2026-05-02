@@ -17,8 +17,9 @@ onMounted(async () => {
   const token = localStorage.getItem('sm_token')
   if (token) {
     await store.fetchTopics()
-    store.recordLearning()  // 登录后记录今日学习
-    store.fetchStreak()     // 获取连续天数
+    // recordLearning 内部会先 POST 今日学习记录，再调用 fetchStreak，
+    // 必须 await 以避免与其他 streak 读取竞速导致拿到过期值
+    await store.recordLearning()
   }
 })
 </script>
