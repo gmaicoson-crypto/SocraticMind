@@ -373,7 +373,7 @@ watch(chatMode, () => {
 
 // 主题 → 会话自动切换：activeTopicId 或 chatMode 变化都重新对齐
 // 用 Sidebar 点击主题、TopBar 搜索跳转、生成新主题等都会触发 setActiveTopic
-watch([() => store.activeTopicId, chatMode], () => {
+watch([() => store.activeTopicId, chatMode], async () => {
   if (chatMode.value !== 'socratic') return
   const numId = Number(store.activeTopicId)
   if (!numId) return
@@ -383,6 +383,12 @@ watch([() => store.activeTopicId, chatMode], () => {
     showHistory.value = false
     saveSessions()
     scrollToBottom()
+  }
+  // 消费"待概览"标记：刚生成 / 加入推荐主题时由发起方设置；首屏挂载不会带 flag
+  if (store.pendingTopicOverviewId === numId) {
+    const title = store.topics.find(t => Number(t.id) === numId)?.title
+    store.requestTopicOverview(null)  // 先清，避免重复触发
+    if (title) await streamOverview('topic', title)
   }
 }, { immediate: true })
 
@@ -749,12 +755,12 @@ async function handleGenerateTopic(topicName: string) {
       currentSession.value.name = topic.title.slice(0, 12)
       saveSessions()
     }
+    // 先标记这个主题需要概览，再切主题；watcher 切完会话后会消费这个标记
+    store.requestTopicOverview(topic.id)
     await store.fetchTopics()
     await store.setActiveTopic(String(topic.id))
     pushMessage({ role: 'ai', text: `✦ 知识图谱已生成！共 **${topic.total_nodes}** 个知识节点。\n\n下面我先给你一个整体介绍 👇`, time: now() })
     scrollToBottom()
-    // 主题概览（500 字）：让 AI 先讲清楚是什么 / 为什么学 / 学完会得到什么
-    await streamOverview('topic', topic.title, '')
   } catch {
     pushMessage({ role: 'ai', text: '生成失败，请重试或换个主题名称。', time: now() })
   } finally {
@@ -764,18 +770,17 @@ async function handleGenerateTopic(topicName: string) {
 }
 
 // 统一的概览流：复用现有 chatStream，仅传 kind 改变 prompt
-function streamOverview(
-  kind: 'topic' | 'node',
-  label: string,
-  sub: string,
-): Promise<void> {
+// identifier 含义因 kind 而异：
+//   topic → 主题标题（后端 topic_overview 分支直接读 req.node_key 当主题名）
+//   node  → 节点的 node_key（后端走 DB 查询取出 label/sub 给 NODE_OVERVIEW prompt）
+function streamOverview(kind: 'topic' | 'node', identifier: string): Promise<void> {
   return new Promise((resolve) => {
     isThinking.value = true
     streamingText.value = ''
     abortController = new AbortController()
     const apiKind = kind === 'topic' ? 'topic_overview' : 'node_overview'
     chatStream(
-      label, currentTopicId.value, '',
+      identifier, currentTopicId.value, '',
       [],
       'socratic', aiStyle.value,
       (chunk) => {
@@ -804,8 +809,6 @@ function streamOverview(
       undefined,
       apiKind,
     )
-    // 后端在 topic_overview 模式下不查节点表，sub 不会用到，无需传
-    void sub
   })
 }
 
@@ -859,7 +862,8 @@ watch(() => store.activeNode?.id, async (id) => {
   }
 
   // 未掌握 → 节点概览（100 字 + 一个引导问题）
-  await streamOverview('node', node.label, node.sub)
+  // 后端按 node_key 查 DB 拿到 label/sub，所以这里传 node.id（前端的 KNode.id 即 node_key）
+  await streamOverview('node', node.id)
 })
 
 onBeforeUnmount(() => {

@@ -21,6 +21,13 @@ export const useLearningStore = defineStore('learning', () => {
   const lastMasteredId = ref<string | null>(null)
   const recommendations = shallowRef<{ title: string; emoji: string; reason: string }[]>([])
 
+  // 跨组件传递信号：新生成主题（无论从对话框还是侧栏推荐）需要触发一次概览推送
+  // SocraticDialogue 看到匹配的 topicId 后消费并清零
+  const pendingTopicOverviewId = ref<number | null>(null)
+  function requestTopicOverview(topicId: number | null) {
+    pendingTopicOverviewId.value = topicId
+  }
+
   // ── 用户信息 ──
   const userInfo = ref<{
     id: number
@@ -214,7 +221,8 @@ export const useLearningStore = defineStore('learning', () => {
     activeTopicId, activeNode, messages, userInfo,
     lastMasteredId,
     recommendations,
-    streakData, 
+    streakData,
+    pendingTopicOverviewId,
     // 计算
     masteredCount, totalCount, availableCount,
     // 方法
@@ -226,5 +234,6 @@ export const useLearningStore = defineStore('learning', () => {
     fetchTopicsOnly,
     fetchRecommendations,
     fetchStreak, recordLearning,
+    requestTopicOverview,
   }
 })

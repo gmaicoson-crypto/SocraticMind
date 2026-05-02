@@ -204,6 +204,8 @@ async function handleRecommend(title: string, emoji: string) {
   try {
     const topic = await generateTopic(title, emoji)
     await store.fetchTopicsOnly()
+    // 先标记新主题需要概览，再切主题；SocraticDialogue 切到该会话后会自动推送概览
+    store.requestTopicOverview(topic.id)
     await store.setActiveTopic(String(topic.id))
     showToastMsg(`已成功将《${title}》加入学习计划 ✓`)
   } catch (err) {
