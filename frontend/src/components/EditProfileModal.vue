@@ -194,11 +194,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed } from 'vue'
+import { ref, reactive, computed, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { useLearningStore } from '../stores/learning'
 import { updateMe, uploadAvatar, resetAvatar, changePassword } from '../api/auth'
 import { avatarSrc } from '../utils/avatar'
+import { avatarGrads } from '../utils/avatarGrads'
 
 const emit = defineEmits<{ close: [] }>()
 const router = useRouter()
@@ -220,9 +221,11 @@ function triggerUpload() {
   fileInput.value?.click()
 }
 
+// FileReader 仅用作本地预览，真实文件通过 uploadAvatar 上传，后端返回的 url 才是持久来源
 async function onFileChange(e: Event) {
   const input = e.target as HTMLInputElement
   const file = input.files?.[0]
+  // 立刻清空 input，否则连续选择同一张图不会触发 change 事件
   input.value = ''
   if (!file) return
   if (file.size > 5 * 1024 * 1024) {
@@ -305,7 +308,7 @@ async function submitPassword() {
     pwdForm.old = ''
     pwdForm.next = ''
     pwdForm.confirm = ''
-    setTimeout(() => { showPwdPanel.value = false; pwdMsg.value = '' }, 1200)
+    pwdHideTimer = setTimeout(() => { showPwdPanel.value = false; pwdMsg.value = '' }, 1200)
   } catch (err: any) {
     pwdMsg.value = err?.response?.data?.detail ?? '修改失败'
     pwdMsgType.value = 'err'
@@ -314,13 +317,14 @@ async function submitPassword() {
   }
 }
 
-const avatarGrads = [
-  'linear-gradient(135deg,#e8c87a,#d4974a)',
-  'linear-gradient(135deg,#5BA3D9,#2E7FBB)',
-  'linear-gradient(135deg,#9FE1CB,#1D9E75)',
-  'linear-gradient(135deg,#F0997B,#D85A30)',
-  'linear-gradient(135deg,#AFA9EC,#534AB7)',
-]
+// 持有定时器引用，保证组件提前关闭时不会回写已销毁的状态
+let pwdHideTimer: ReturnType<typeof setTimeout> | null = null
+let savedCloseTimer: ReturnType<typeof setTimeout> | null = null
+
+onBeforeUnmount(() => {
+  if (pwdHideTimer) clearTimeout(pwdHideTimer)
+  if (savedCloseTimer) clearTimeout(savedCloseTimer)
+})
 
 const store = useLearningStore()
 
@@ -345,7 +349,7 @@ async function handleSave() {
     localStorage.setItem('sm_user', JSON.stringify(updated))
     store.setUserInfo(updated)
     savedDone.value = true
-    setTimeout(() => {
+    savedCloseTimer = setTimeout(() => {
       savedDone.value = false
       emit('close')
     }, 1500)

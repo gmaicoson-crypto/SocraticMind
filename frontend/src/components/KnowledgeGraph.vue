@@ -115,7 +115,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch, h, nextTick } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch, h, nextTick } from 'vue'
 import { useLearningStore } from '../stores/learning'
 import type { KNode } from '../types'
 import GraphNode from './GraphNode.vue'
@@ -185,20 +185,23 @@ const viewBoxParts = computed(() =>
 )
 
 const viewBox = computed(() => {
+  // viewBox 中心对齐节点包围盒中心，缩放从原点不会让图飘出可视区
   const w = VW / scale.value
   const h = VH / scale.value
 
-  // 计算节点实际中心
   let offsetX = 0
   let offsetY = 0
   if (store.nodes.length > 0) {
-    const xs = store.nodes.map(n => n.x)
-    const ys = store.nodes.map(n => n.y)
-    const contentCX = (Math.min(...xs) + Math.max(...xs)) / 2
-    const contentCY = (Math.min(...ys) + Math.max(...ys)) / 2
-    // 内容中心偏离画布中心的距离
-    offsetX = contentCX - VW / 2
-    offsetY = contentCY - VH / 2
+    // 一遍 reduce 求 min/max，避免 Math.min(...arr) 在节点数千时栈溢出
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity
+    for (const n of store.nodes) {
+      if (n.x < minX) minX = n.x
+      if (n.x > maxX) maxX = n.x
+      if (n.y < minY) minY = n.y
+      if (n.y > maxY) maxY = n.y
+    }
+    offsetX = (minX + maxX) / 2 - VW / 2
+    offsetY = (minY + maxY) / 2 - VH / 2
   }
 
   const x = offsetX + panX.value + (VW - w) / 2
@@ -250,6 +253,7 @@ const dragStart = ref({ x: 0, y: 0 })
 const panStart = ref({ x: 0, y: 0 })
 
 function clampPan(x: number, y: number) {
+  // 限制平移幅度，避免拖到屏幕外丢失图形可见性
   const limit = 300
   return {
     x: Math.min(Math.max(x, -limit), limit),
@@ -258,6 +262,7 @@ function clampPan(x: number, y: number) {
 }
 
 function getNodeScreenPos(node: KNode) {
+  // 把 SVG 用户坐标换算到容器归一化坐标，给 confetti 当 origin 用
   if (!containerRef.value || !svgRef.value) return { x: 0.5, y: 0.5 }
   const containerRect = containerRef.value.getBoundingClientRect()
   const svgRect = svgRef.value.getBoundingClientRect()
@@ -333,69 +338,99 @@ onMounted(() => {
     })
   }
 
-  setTimeout(() => {
+  initialConfettiTimer = setTimeout(() => {
     masteredNodes.value.forEach((n, i) => {
-      setTimeout(() => fireConfettiAt(n), i * 220)
+      const t = setTimeout(() => fireConfettiAt(n), i * 220)
+      pendingConfettiTimers.push(t)
     })
   }, 600)
 
   const svgEl = svgRef.value
   if (!svgEl) return
 
-  // 滚轮缩放
-  svgEl.addEventListener('wheel', (e: WheelEvent) => {
-    e.preventDefault()
-    const delta = e.deltaY > 0 ? -0.1 : 0.1
-    scale.value = Math.min(Math.max(scale.value + delta, MIN_SCALE), MAX_SCALE)
-    showHint()
-  }, { passive: false })
-
-  // 拖拽
-  svgEl.addEventListener('mousedown', (e: MouseEvent) => {
-    if (e.button !== 0) return
-    const target = e.target as SVGElement
-    if (target.closest('g.knode') || target.tagName === 'text') return
-    isDragging.value = true
-    dragStart.value = { x: e.clientX, y: e.clientY }
-    panStart.value = { x: panX.value, y: panY.value }
-    svgEl.style.cursor = 'grabbing'
-    e.preventDefault()
-  })
-
-  window.addEventListener('mousemove', (e: MouseEvent) => {
-    if (!isDragging.value || !svgRef.value) return
-    const svgRect = svgRef.value.getBoundingClientRect()
-
-    // 鼠标移动距离转换为 viewBox 坐标偏移
-    // 注意：鼠标向右移动，panX 应该减小（内容跟着向右）
-    const dx = (e.clientX - dragStart.value.x) / svgRect.width * (VW / scale.value)
-    const dy = (e.clientY - dragStart.value.y) / svgRect.height * (VH / scale.value)
-
-    const clamped = clampPan(
-      panStart.value.x - dx,
-      panStart.value.y - dy,
-    )
-    panX.value = clamped.x
-    panY.value = clamped.y
-  })
-
-  window.addEventListener('mouseup', () => {
-    if (!isDragging.value) return
-    isDragging.value = false
-    if (svgEl) svgEl.style.cursor = 'grab'
-  })
+  svgEl.addEventListener('wheel', onWheel, { passive: false })
+  svgEl.addEventListener('mousedown', onMouseDown)
+  window.addEventListener('mousemove', onMouseMove)
+  window.addEventListener('mouseup', onMouseUp)
 
   svgEl.style.cursor = 'grab'
 })
 
+// 滚轮缩放
+function onWheel(e: WheelEvent) {
+  e.preventDefault()
+  const delta = e.deltaY > 0 ? -0.1 : 0.1
+  scale.value = Math.min(Math.max(scale.value + delta, MIN_SCALE), MAX_SCALE)
+  showHint()
+}
+
+function onMouseDown(e: MouseEvent) {
+  if (e.button !== 0 || !svgRef.value) return
+  const target = e.target as SVGElement
+  if (target.closest('g.knode') || target.tagName === 'text') return
+  isDragging.value = true
+  dragStart.value = { x: e.clientX, y: e.clientY }
+  panStart.value = { x: panX.value, y: panY.value }
+  svgRef.value.style.cursor = 'grabbing'
+  e.preventDefault()
+}
+
+// rAF 节流：原生 mousemove 触发率高，无节流时每帧多次更新 panX/panY 会反复触发 viewBox 重算
+let panFrame: number | null = null
+let lastMouseEvent: MouseEvent | null = null
+function onMouseMove(e: MouseEvent) {
+  if (!isDragging.value) return
+  lastMouseEvent = e
+  if (panFrame !== null) return
+  panFrame = requestAnimationFrame(() => {
+    panFrame = null
+    const ev = lastMouseEvent
+    if (!ev || !svgRef.value) return
+    const svgRect = svgRef.value.getBoundingClientRect()
+    // 鼠标右移，panX 应减小（内容跟着右移）
+    const dx = (ev.clientX - dragStart.value.x) / svgRect.width * (VW / scale.value)
+    const dy = (ev.clientY - dragStart.value.y) / svgRect.height * (VH / scale.value)
+    const clamped = clampPan(panStart.value.x - dx, panStart.value.y - dy)
+    panX.value = clamped.x
+    panY.value = clamped.y
+  })
+}
+
+function onMouseUp() {
+  if (!isDragging.value) return
+  isDragging.value = false
+  if (svgRef.value) svgRef.value.style.cursor = 'grab'
+}
+
+let initialConfettiTimer: ReturnType<typeof setTimeout> | null = null
+const pendingConfettiTimers: ReturnType<typeof setTimeout>[] = []
+
+onBeforeUnmount(() => {
+  // 清除路由切换后还在飞的 confetti 定时与 rAF；防止引用已销毁 DOM
+  if (hintTimer) clearTimeout(hintTimer)
+  if (initialConfettiTimer) clearTimeout(initialConfettiTimer)
+  pendingConfettiTimers.forEach(clearTimeout)
+  if (panFrame !== null) cancelAnimationFrame(panFrame)
+
+  const svgEl = svgRef.value
+  if (svgEl) {
+    svgEl.removeEventListener('wheel', onWheel)
+    svgEl.removeEventListener('mousedown', onMouseDown)
+  }
+  window.removeEventListener('mousemove', onMouseMove)
+  window.removeEventListener('mouseup', onMouseUp)
+})
+
+// Set 差集 O(n)；之前用 .filter(includes) 是 O(n²)，节点多了会卡帧
 watch(
   () => store.nodes.filter(n => n.state === 'mastered').map(n => n.id),
   (newIds, oldIds) => {
-    const added = newIds.filter(id => !oldIds.includes(id))
-    added.forEach(id => {
+    const oldSet = new Set(oldIds)
+    for (const id of newIds) {
+      if (oldSet.has(id)) continue
       const node = store.nodes.find(n => n.id === id)
       if (node) setTimeout(() => fireConfettiAt(node), 50)
-    })
+    }
   }
 )
 
@@ -437,20 +472,6 @@ function handleHover(payload: { node: KNode | null; event?: MouseEvent }) {
   }
   tip.value = { x, y, text: textMap[payload.node.state] }
 }
-
-watch(() => store.lastMasteredId, (id) => {
-  console.log('lastMasteredId changed:', id)
-  console.log('confettiInstance:', confettiInstance)
-  console.log('nodes:', store.nodes.map(n => ({ id: n.id, state: n.state })))
-  if (!id) return
-  const node = store.nodes.find(n => n.id === id)
-  console.log('found node:', node)
-  if (node) {
-    fireConfettiAt(node)
-    const allMastered = store.nodes.length > 0 && store.nodes.every(n => n.state === 'mastered')
-    if (allMastered) setTimeout(() => fireCelebration(), 400)
-  }
-})
 </script>
 
 <style scoped>

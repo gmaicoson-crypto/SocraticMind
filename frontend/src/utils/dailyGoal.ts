@@ -30,7 +30,9 @@ export function loadGoalConfig(userId: number): DailyGoalConfig {
   try {
     const raw = localStorage.getItem(STORAGE_KEY_GOAL(userId))
     if (raw) return { ...getDefaultGoal(), ...JSON.parse(raw) }
-  } catch {}
+  } catch (err) {
+    console.warn('每日目标本地存储解析失败，使用默认值', err)
+  }
   return getDefaultGoal()
 }
 
@@ -52,7 +54,9 @@ export function loadTodayProgress(userId: number): DailyProgress {
       }
       return data
     }
-  } catch {}
+  } catch (err) {
+    console.warn('每日目标本地存储解析失败，使用默认值', err)
+  }
   return { date: today, study_minutes: 0 }
 }
 

@@ -51,7 +51,9 @@ export const useLearningStore = defineStore('learning', () => {
   function loadUserFromStorage() {
     const raw = localStorage.getItem('sm_user')
     if (raw) {
-      try { userInfo.value = JSON.parse(raw) } catch {}
+      try { userInfo.value = JSON.parse(raw) } catch (err) {
+        console.warn('解析本地用户信息失败，已忽略', err)
+      }
     }
   }
 

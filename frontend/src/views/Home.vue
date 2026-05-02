@@ -57,7 +57,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount } from 'vue'
-import { addStudyMinutes, loadTodayProgress } from '../utils/dailyGoal'
+import { addStudyMinutes } from '../utils/dailyGoal'
 import TopBar from '../components/TopBar.vue'
 import Sidebar from '../components/Sidebar.vue'
 import SocraticDialogue from '../components/SocraticDialogue.vue'
@@ -76,19 +76,20 @@ const MIN_LEFT = 320
 const MIN_RIGHT = 380
 const DIVIDER_W = 10
 
-// 学习时长计时
+// 学习时长计时：1Hz 计时器；2 分钟无操作判定为 inactive 暂停计时
 let studyTimer: ReturnType<typeof setInterval> | null = null
-let inactiveTimer: ReturnType<typeof setTimeout> | null = null
 let studySeconds = 0
-let isActive = ref(true)
 
 const INACTIVE_TIMEOUT = 2 * 60 * 1000
 const ACTIVE_EVENTS = ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll']
+// 仅记录时间戳，避免每次 mousemove 都 clearTimeout/setTimeout
+let lastActiveAt = Date.now()
 
 function startStudyTimer() {
   if (studyTimer) return
   studyTimer = setInterval(() => {
-    if (!isActive.value) return  // 不活跃时不计时
+    // 在计时器内判定活跃，避免事件回调高频开销
+    if (Date.now() - lastActiveAt > INACTIVE_TIMEOUT) return
     studySeconds++
     if (studySeconds % 60 === 0 && store.userInfo?.id) {
       addStudyMinutes(store.userInfo.id, 1)
@@ -100,56 +101,39 @@ function stopStudyTimer() {
   if (!studyTimer) return
   clearInterval(studyTimer)
   studyTimer = null
-  // 保存剩余秒数
+  // 不足 1 分钟但超过 30 秒按 1 分钟入账
   const remaining = Math.floor(studySeconds % 60)
   if (remaining >= 30 && store.userInfo?.id) {
-    // 超过30秒算1分钟
     addStudyMinutes(store.userInfo.id, 1)
   }
 }
 
-// 用户活跃时重置无操作计时器
 function onUserActive() {
-  isActive.value = true
-  if (inactiveTimer) clearTimeout(inactiveTimer)
-  inactiveTimer = setTimeout(() => {
-    isActive.value = false  // 2分钟无操作，暂停计时
-  }, INACTIVE_TIMEOUT)
+  lastActiveAt = Date.now()
 }
 
-// 页面可见性变化时暂停/恢复计时
 function handleVisibilityChange() {
-  if (document.hidden) {
-    isActive.value = false
-    if (inactiveTimer) clearTimeout(inactiveTimer)
-  } else {
-    onUserActive()  // 重新可见时重置活跃状态
-  }
+  // 切回前台视为一次活跃，防止误判 inactive 漏计时
+  if (!document.hidden) onUserActive()
 }
 
-
-onMounted(() => {
+onMounted(async () => {
   startStudyTimer()
-  onUserActive()  // 初始化活跃状态
+  onUserActive()
   document.addEventListener('visibilitychange', handleVisibilityChange)
   ACTIVE_EVENTS.forEach(e => window.addEventListener(e, onUserActive, { passive: true }))
-})
 
-onMounted(() => {
   if (mainRef.value) {
     const total = mainRef.value.clientWidth - DIVIDER_W - 28
     leftWidth.value = Math.round(total * 0.45)
   }
-})
 
-onMounted(async () => {
   const token = localStorage.getItem('sm_token')
   if (token) await store.fetchTopics()
 })
 
 onBeforeUnmount(() => {
   stopStudyTimer()
-  if (inactiveTimer) clearTimeout(inactiveTimer)
   document.removeEventListener('visibilitychange', handleVisibilityChange)
   ACTIVE_EVENTS.forEach(e => window.removeEventListener(e, onUserActive))
 })
@@ -177,10 +161,6 @@ function startDrag(e: MouseEvent) {
   window.addEventListener('mousemove', onMove)
   window.addEventListener('mouseup', onUp)
 }
-
-onBeforeUnmount(() => {
-  dragging.value = false
-})
 </script>
 
 <style scoped>

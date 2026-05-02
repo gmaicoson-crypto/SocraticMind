@@ -147,14 +147,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onBeforeUnmount } from 'vue'
 import { useLearningStore } from '../stores/learning'
 import TopicManager from './TopicManager.vue'
 import { generateTopic } from '../api/topic'
 
 const store = useLearningStore()
 const showManager = ref(false)
-const isGenerating = ref(false)
 const generatingTitle = ref<string | null>(null)
 
 const MAX_VISIBLE = 4
@@ -203,9 +202,10 @@ async function handleRecommend(title: string, emoji: string) {
   }
 }
 
+// 31 天循环热力格：满 31 天后归零进入下一周期，颜色随周期内进度由浅到深，给"积累感"的视觉反馈
 function getBarStyle(i: number) {
   const streak = store.streakData.streak
-  // 当前循环内已点亮的格数（streak % 31，满31清零）
+  // 满 31 天的整数倍要显示满格而不是 0 格
   const lit = streak % 31 === 0 && streak > 0 ? 31 : streak % 31
   const isLit = i <= lit
 
@@ -229,11 +229,15 @@ function getBarTitle(i: number) {
   const lit = streak % 31 === 0 && streak > 0 ? 31 : streak % 31
   if (i > lit) return `未达到第 ${i} 天`
 
-  // 计算这格对应的实际连续天数
+  // 把热力格 i 还原为绝对天数：先前已完成的循环数 × 31 + 当前格序号
   const cycleStart = Math.floor(streak / 31) * 31
   const actualDay = cycleStart + i
   return `连续学习第 ${actualDay} 天`
 }
+
+onBeforeUnmount(() => {
+  if (toastTimer) clearTimeout(toastTimer)
+})
 </script>
 
 <style scoped>

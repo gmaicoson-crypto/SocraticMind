@@ -164,19 +164,13 @@ def get_suggestions(
     db: Session = Depends(get_db)
 ):
     """根据模式返回 AI 推荐的快捷建议"""
-    from openai import OpenAI
     from core.config import settings
+    from core.ai_client import get_ai_client
+    from ai.util import extract_json_from_markdown
     import json
-
-    client = OpenAI(
-        api_key=settings.deepseek_api_key,
-        base_url=settings.deepseek_base_url,
-    )
 
     if mode == "socratic":
         # 获取用户最近学习的节点
-        from models.node import Node
-        from models.topic import Topic
         recent_nodes = db.query(Node).join(Topic).filter(
             Topic.user_id == current_user.id,
             Node.state == "available"
@@ -192,18 +186,13 @@ def get_suggestions(
 每条建议不超过12个字，像用户说话的口吻。只返回JSON。"""
 
     try:
-        response = client.chat.completions.create(
+        response = get_ai_client().chat.completions.create(
             model=settings.deepseek_model,
             messages=[{"role": "user", "content": prompt}],
             max_tokens=200,
             temperature=0.8,
         )
-        content = response.choices[0].message.content.strip()
-        if content.startswith("```"):
-            content = content.split("```")[1]
-            if content.startswith("json"):
-                content = content[4:]
-        return json.loads(content.strip())
+        return json.loads(extract_json_from_markdown(response.choices[0].message.content))
     except Exception:
         if mode == "socratic":
             return {"suggestions": ["我想学 Python", "教我机器学习", "讲讲数据结构", "学习 Web 开发"]}

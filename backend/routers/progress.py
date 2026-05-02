@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import String, func
 from datetime import date, timedelta
 from core.database import get_db
@@ -14,6 +14,21 @@ router = APIRouter(prefix="/api/progress", tags=["进度"])
 
 def today_str() -> str:
     return date.today().isoformat()
+
+
+def _compute_streak(learned_dates: set[str]) -> int:
+    """从今天往回数，最长无间断学习天数；今天没记录则从昨天起数。"""
+    streak = 0
+    check = date.today()
+    while check.isoformat() in learned_dates:
+        streak += 1
+        check -= timedelta(days=1)
+    if streak == 0:
+        check = date.today() - timedelta(days=1)
+        while check.isoformat() in learned_dates:
+            streak += 1
+            check -= timedelta(days=1)
+    return streak
 
 
 @router.post("/record")
@@ -37,31 +52,29 @@ def get_streak(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    records = db.query(LearningRecord).filter(
+    # 仅取近 60 天用于 streak 判定（连续学习上限远小于此），并用 count() 取总天数
+    cutoff = (date.today() - timedelta(days=60)).isoformat()
+    recent_records = db.query(LearningRecord.date).filter(
         LearningRecord.user_id == current_user.id,
+        LearningRecord.date >= cutoff,
     ).all()
-    learned_dates = {r.date for r in records}
+    learned_dates = {r.date for r in recent_records}
 
-    streak = 0
-    check = date.today()
-    while check.isoformat() in learned_dates:
-        streak += 1
-        check -= timedelta(days=1)
+    total_days = db.query(LearningRecord).filter(
+        LearningRecord.user_id == current_user.id,
+    ).count()
 
-    if streak == 0:
-        check = date.today() - timedelta(days=1)
-        while check.isoformat() in learned_dates:
-            streak += 1
-            check -= timedelta(days=1)
+    streak = _compute_streak(learned_dates)
 
-    recent = []
-    for i in range(13, -1, -1):
-        d = (date.today() - timedelta(days=i)).isoformat()
-        recent.append({"date": d, "learned": d in learned_dates})
+    recent = [
+        {"date": (date.today() - timedelta(days=i)).isoformat(),
+         "learned": (date.today() - timedelta(days=i)).isoformat() in learned_dates}
+        for i in range(13, -1, -1)
+    ]
 
     return {
         "streak": streak,
-        "total_days": len(learned_dates),
+        "total_days": total_days,
         "recent": recent,
     }
 
@@ -71,107 +84,105 @@ def get_stats(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    # 对话轮次
+    today = date.today()
+    one_year_ago = today - timedelta(days=364)
+
+    # 用户对话总数
     chat_count = db.query(ChatMessage).filter(
         ChatMessage.user_id == current_user.id,
         ChatMessage.role == "user",
         ChatMessage.mode == "socratic"
     ).count()
 
-    # 热力图：近一年
-    heatmap = []
-    for i in range(364, -1, -1):
-        d = (date.today() - timedelta(days=i)).isoformat()
-        count = db.query(ChatMessage).filter(
-            ChatMessage.user_id == current_user.id,
-            ChatMessage.role == "user",
-            ChatMessage.mode == "socratic",
-            func.substr(func.cast(ChatMessage.created_at, String), 1, 10) == d
-        ).count()
-        heatmap.append({"date": d, "count": count})
+    # 热力图：一次按日期 GROUP BY 取所有计数；之前是 365 次独立 COUNT
+    date_expr = func.substr(func.cast(ChatMessage.created_at, String), 1, 10)
+    heatmap_rows = db.query(
+        date_expr.label("d"),
+        func.count().label("c"),
+    ).filter(
+        ChatMessage.user_id == current_user.id,
+        ChatMessage.role == "user",
+        ChatMessage.mode == "socratic",
+        ChatMessage.created_at >= one_year_ago,
+    ).group_by("d").all()
+    by_date = {row.d: row.c for row in heatmap_rows}
+    heatmap = [
+        {"date": (today - timedelta(days=i)).isoformat(),
+         "count": by_date.get((today - timedelta(days=i)).isoformat(), 0)}
+        for i in range(364, -1, -1)
+    ]
 
-    # 连续天数
-    records = db.query(LearningRecord).filter(
-        LearningRecord.user_id == current_user.id
+    # 学习记录：streak 用近 60 天即可，total_days 用 count()
+    streak_cutoff = (today - timedelta(days=60)).isoformat()
+    recent_records = db.query(LearningRecord.date).filter(
+        LearningRecord.user_id == current_user.id,
+        LearningRecord.date >= streak_cutoff,
     ).all()
-    learned_dates = {r.date for r in records}
-    streak = 0
-    check = date.today()
-    while check.isoformat() in learned_dates:
-        streak += 1
-        check -= timedelta(days=1)
-    if streak == 0:
-        check = date.today() - timedelta(days=1)
-        while check.isoformat() in learned_dates:
-            streak += 1
-            check -= timedelta(days=1)
+    learned_dates = {r.date for r in recent_records}
+    streak = _compute_streak(learned_dates)
+    total_days_learned = db.query(LearningRecord).filter(
+        LearningRecord.user_id == current_user.id,
+    ).count()
 
     # 本周统计（周一到今天）
-    today = date.today()
-    weekday = today.weekday()  # 0=周一
+    weekday = today.weekday()
     week_start = today - timedelta(days=weekday)
+    week_start_str = week_start.isoformat()
 
     week_chats = db.query(ChatMessage).filter(
         ChatMessage.user_id == current_user.id,
         ChatMessage.role == "user",
         ChatMessage.mode == "socratic",
-        func.substr(func.cast(ChatMessage.created_at, String), 1, 10) >= week_start.isoformat()
+        date_expr >= week_start_str,
     ).count()
 
     week_mastered = db.query(Node).join(Topic).filter(
         Topic.user_id == current_user.id,
         Node.state == "mastered",
         Node.mastered_at.isnot(None),
-        func.substr(func.cast(Node.mastered_at, String), 1, 10) >= week_start.isoformat()
+        func.substr(func.cast(Node.mastered_at, String), 1, 10) >= week_start_str,
     ).count()
 
-    # 最活跃时段
-    all_msgs = db.query(ChatMessage).filter(
+    # 最活跃时段：按 hour GROUP BY，避免全表加载到 Python 再循环统计
+    hour_expr = func.cast(func.strftime("%H", ChatMessage.created_at), String)
+    hour_rows = db.query(
+        hour_expr.label("h"),
+        func.count().label("c"),
+    ).filter(
         ChatMessage.user_id == current_user.id,
         ChatMessage.role == "user",
-        ChatMessage.mode == "socratic"
-    ).all()
-    hour_counts: dict = {}
-    for msg in all_msgs:
-        if msg.created_at:
-            h = msg.created_at.hour
-            hour_counts[h] = hour_counts.get(h, 0) + 1
-    if hour_counts:
-        peak_hour = max(hour_counts, key=lambda k: hour_counts[k])
+        ChatMessage.mode == "socratic",
+    ).group_by("h").all()
+    if hour_rows:
+        peak_hour = int(max(hour_rows, key=lambda r: r.c).h)
         peak_label = f"{peak_hour:02d}:00 - {(peak_hour + 2) % 24:02d}:00"
     else:
         peak_label = "暂无数据"
 
-    # 平均每天对话数
-    total_days_learned = len(learned_dates) or 1
-    avg_daily = round(chat_count / total_days_learned, 1)
+    # 平均每天对话数：以"曾学习过的天数"为分母，未学习的日期不参与平均
+    avg_daily = round(chat_count / (total_days_learned or 1), 1)
+    week_days_learned = sum(1 for d in learned_dates if d >= week_start_str)
 
-    week_days_learned = len([
-        d for d in learned_dates
-        if d >= week_start.isoformat()
-    ])
-
-    # 时间线
-    recent_mastered = db.query(Node).join(Topic).filter(
+    # 时间线：joinedload 避免循环里再查 topic（旧实现是 N+1）
+    recent_mastered = db.query(Node).options(joinedload(Node.topic)).join(Topic).filter(
         Topic.user_id == current_user.id,
         Node.state == "mastered",
-        Node.mastered_at.isnot(None)
+        Node.mastered_at.isnot(None),
     ).order_by(Node.mastered_at.desc()).limit(5).all()
-
-    timeline = []
-    for n in recent_mastered:
-        topic = db.query(Topic).filter(Topic.id == n.topic_id).first()
-        timeline.append({
+    timeline = [
+        {
             "type": "mastered",
             "title": f"掌握「{n.label}」节点",
-            "sub": topic.title if topic else "",
+            "sub": n.topic.title if n.topic else "",
             "time": n.mastered_at.strftime("%m/%d %H:%M") if n.mastered_at else "",
-        })
+        }
+        for n in recent_mastered
+    ]
 
     # 成就徽章
     mastered_count = db.query(Node).join(Topic).filter(
         Topic.user_id == current_user.id,
-        Node.state == "mastered"
+        Node.state == "mastered",
     ).count()
 
     badges = [

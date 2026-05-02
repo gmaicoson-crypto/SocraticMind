@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 from pydantic import BaseModel
 from typing import List
 from core.database import get_db
@@ -30,23 +30,29 @@ class GenerateTopicRequest(BaseModel):
     title: str
     emoji: str = "📚"
 
+def _topic_to_response(t: Topic, nodes: list[Node]) -> TopicResponse:
+    return TopicResponse(
+        id=t.id,
+        title=t.title,
+        emoji=t.emoji,
+        total_nodes=len(nodes),
+        mastered_nodes=sum(1 for n in nodes if n.state == "mastered"),
+    )
+
+
 @router.get("", response_model=List[TopicResponse])
 def get_topics(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    topics = db.query(Topic).filter(Topic.user_id == current_user.id).all()
-    result = []
-    for t in topics:
-        nodes = db.query(Node).filter(Node.topic_id == t.id).all()
-        result.append(TopicResponse(
-            id=t.id,
-            title=t.title,
-            emoji=t.emoji,
-            total_nodes=len(nodes),
-            mastered_nodes=len([n for n in nodes if n.state == "mastered"]),
-        ))
-    return result
+    # selectinload 一次性预取所有 topic 的 nodes，避免循环里再发 N 条 SQL
+    topics = (
+        db.query(Topic)
+        .options(selectinload(Topic.nodes))
+        .filter(Topic.user_id == current_user.id)
+        .all()
+    )
+    return [_topic_to_response(t, t.nodes) for t in topics]
 
 @router.post("/generate", response_model=TopicResponse)
 def generate_topic(
@@ -139,14 +145,7 @@ def update_topic_title(
     topic.title = req.title
     db.commit()
     db.refresh(topic)
-    nodes = db.query(Node).filter(Node.topic_id == topic.id).all()
-    return TopicResponse(
-        id=topic.id,
-        title=topic.title,
-        emoji=topic.emoji,
-        total_nodes=len(nodes),
-        mastered_nodes=len([n for n in nodes if n.state == "mastered"]),
-    )
+    return _topic_to_response(topic, list(topic.nodes))
 
 @router.get("/recommend")
 def recommend_topics(
@@ -162,15 +161,12 @@ def recommend_topics(
         prompt = "该用户还没有学习任何主题，请推荐 3 个适合初学者的热门技术学习主题。"
 
     try:
-        from openai import OpenAI
         from core.config import settings
+        from core.ai_client import get_ai_client
+        from ai.util import extract_json_from_markdown
         import json
 
-        client = OpenAI(
-            api_key=settings.deepseek_api_key,
-            base_url=settings.deepseek_base_url,
-        )
-        response = client.chat.completions.create(
+        response = get_ai_client().chat.completions.create(
             model=settings.deepseek_model,
             messages=[
                 {"role": "system", "content": RECOMMEND_TOPICS_PROMPT},
@@ -179,12 +175,8 @@ def recommend_topics(
             max_tokens=500,
             temperature=0.7,
         )
-        content = response.choices[0].message.content.strip()
-        if content.startswith("```"):
-            content = content.split("```")[1]
-            if content.startswith("json"):
-                content = content[4:]
-        content = content.strip()
-        return json.loads(content)
+        return json.loads(extract_json_from_markdown(response.choices[0].message.content))
     except Exception as e:
+        # 推荐失败不阻塞首页加载，前端会展示空列表
+        print(f"[recommend_topics] 调用失败: {e}")
         return {"recommendations": []}

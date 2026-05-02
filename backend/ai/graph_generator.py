@@ -1,15 +1,13 @@
-from openai import OpenAI
 from core.config import settings
+from core.ai_client import get_ai_client
 from .prompts import GENERATE_NODES_PROMPT, build_generate_prompt
+from .util import extract_json_from_markdown
 import json
 
-client = OpenAI(
-    api_key=settings.deepseek_api_key,
-    base_url=settings.deepseek_base_url,
-)
 
 def generate_graph(topic: str) -> dict:
-    response = client.chat.completions.create(
+    """同步阻塞调用 LLM 生成知识图谱节点；用户感知 5-15s 等待，未来可改 BackgroundTasks。"""
+    response = get_ai_client().chat.completions.create(
         model=settings.deepseek_model,
         messages=[
             {"role": "system", "content": GENERATE_NODES_PROMPT},
@@ -18,20 +16,15 @@ def generate_graph(topic: str) -> dict:
         max_tokens=2000,
         temperature=0.3,
     )
-
-    content = response.choices[0].message.content.strip()
-
-    if content.startswith("```"):
-        content = content.split("```")[1]
-        if content.startswith("json"):
-            content = content[4:]
-    content = content.strip()
-
-    return json.loads(content)
+    return json.loads(extract_json_from_markdown(response.choices[0].message.content))
 
 
 def assign_positions(nodes: list) -> list:
-    """智能树形布局，根据节点数量动态调整坐标"""
+    """BFS 分层布局：按 parent_keys 把节点分到 layers，同层水平均分，给 SVG 一组稳定坐标。
+
+    层间垂直距离根据总层数自适应，避免节点很多时画布超出可视区。
+    未连通的孤立节点单独放最后一层，免得被忽略。
+    """
 
     # 建立父子关系
     children_map: dict = {}

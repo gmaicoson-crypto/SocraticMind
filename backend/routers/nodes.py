@@ -131,13 +131,15 @@ def master_node(
     node.state = "mastered"
     node.mastered_at = datetime.now(timezone.utc)
 
-    # 解锁子节点
+    # parent_keys 是逗号分隔字符串，没有规范化的关系表，所以解锁逻辑只能在 Python 里解析；
+    # 节点数 < ~1k 时性能可接受，未来如规模上来应迁到 join 表索引化
     all_nodes = db.query(Node).filter(Node.topic_id == node.topic_id).all()
     mastered_keys = {n.node_key for n in all_nodes if n.state == "mastered"}
 
     for n in all_nodes:
         if n.state == "locked" and n.parent_keys:
             parents = set(n.parent_keys.split(","))
+            # 所有父节点都已掌握才解锁；任一未掌握保持 locked
             if parents.issubset(mastered_keys):
                 n.state = "available"
 

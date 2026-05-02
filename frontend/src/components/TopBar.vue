@@ -156,6 +156,7 @@ import type { Topic } from '../types'
 import { getProfileStats } from '../api/progress'
 import { computeLevel } from '../utils/level'
 import { avatarSrc } from '../utils/avatar'
+import { highlight } from '../utils/highlight'
 import { searchNodes, type SearchedNode } from '../api/topic'
 
 const store = useLearningStore()
@@ -203,13 +204,6 @@ const topicResults = computed(() => {
 })
 
 const results = computed<(SearchedNode | Topic)[]>(() => [...nodeResults.value, ...topicResults.value])
-
-// 高亮匹配文字
-function highlight(text: string, q: string) {
-  if (!q) return text
-  const regex = new RegExp(`(${q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi')
-  return text.replace(regex, '<mark>$1</mark>')
-}
 
 function stateLabel(state: string) {
   return { mastered: '已掌握', available: '可学习', locked: '已锁定' }[state] || state
@@ -288,9 +282,15 @@ onMounted(async () => {
   try {
     const stats = await getProfileStats()
     chatCount.value = stats.chat_count
-  } catch {}
+  } catch (err) {
+    console.warn('加载用户等级失败', err)
+  }
 })
-onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown))
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', handleKeydown)
+  // 防止快速卸载时遗留请求覆盖新组件的搜索结果
+  if (searchTimer) clearTimeout(searchTimer)
+})
 </script>
 
 <style scoped>

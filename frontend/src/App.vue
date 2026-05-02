@@ -8,17 +8,14 @@ import { onMounted } from 'vue'
 import { useLearningStore } from './stores/learning'
 
 const store = useLearningStore()
-onMounted(() => {
-  store.loadUserFromStorage()
-})
 
 onMounted(async () => {
   store.loadUserFromStorage()
   const token = localStorage.getItem('sm_token')
   if (token) {
     await store.fetchTopics()
-    // recordLearning 内部会先 POST 今日学习记录，再调用 fetchStreak，
-    // 必须 await 以避免与其他 streak 读取竞速导致拿到过期值
+    // recordLearning 内部先 POST 今日记录再 GET streak；必须 await，否则
+    // 其它组件并发读 streak 会拿到过期值（先前曾导致首页连续天数与 Profile 不一致）
     await store.recordLearning()
   }
 })

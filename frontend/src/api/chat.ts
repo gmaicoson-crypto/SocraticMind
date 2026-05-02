@@ -79,7 +79,9 @@ export function chatStream(
               if (json.text) onChunk(json.text)
               if (json.signal) onSignal?.(json.signal)
               if (json.msg_ids) onMsgIds?.(json.msg_ids.user, json.msg_ids.ai)
-            } catch {}
+            } catch {
+              // 流式传输偶发分片：解析失败属预期内，忽略
+            }
           }
         }
       }
