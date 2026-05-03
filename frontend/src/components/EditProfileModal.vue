@@ -162,10 +162,26 @@
                 </div>
                 <button class="danger-btn red" @click="handleLogout">退出登录</button>
               </div>
+
+              <div class="danger-row">
+                <div>
+                  <div class="danger-info">注销账号</div>
+                  <div class="danger-sub">永久删除账号与所有学习数据，不可恢复</div>
+                </div>
+                <button class="danger-btn red" @click="showDeleteModal = true">注销账号</button>
+              </div>
             </div>
           </div>
 
         </div>
+
+        <DeleteAccountModal
+          :show="showDeleteModal"
+          :submitting="deleting"
+          :error-msg="deleteError"
+          @close="showDeleteModal = false"
+          @confirm="handleDeleteAccount"
+        />
 
         <!-- 底部 -->
         <div class="modal-footer">
@@ -194,12 +210,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onBeforeUnmount } from 'vue'
+import { ref, reactive, computed, onBeforeUnmount, defineAsyncComponent } from 'vue'
 import { useRouter } from 'vue-router'
 import { useLearningStore } from '../stores/learning'
-import { updateMe, uploadAvatar, resetAvatar, changePassword } from '../api/auth'
+import { updateMe, uploadAvatar, resetAvatar, changePassword, deleteAccount } from '../api/auth'
 import { avatarSrc } from '../utils/avatar'
 import { avatarGrads } from '../utils/avatarGrads'
+
+const DeleteAccountModal = defineAsyncComponent(() => import('./DeleteAccountModal.vue'))
 
 const emit = defineEmits<{ close: [] }>()
 const router = useRouter()
@@ -366,6 +384,55 @@ function handleLogout() {
   localStorage.removeItem('sm_user')
   router.push('/login')
   emit('close')
+}
+
+// 注销账号
+const showDeleteModal = ref(false)
+const deleting = ref(false)
+const deleteError = ref('')
+
+function clearAllUserScopedStorage() {
+  // 当前用户在本地的所有残留：会话、当前会话指针、建议词缓存、目标 / 进度
+  // 一律以 _u<id> 后缀；扫一遍 localStorage 把所有匹配的键清掉，避免下次同号或他号登录串号
+  const uid = store.userInfo?.id
+  const suffix = uid ? `_u${uid}` : '_guest'
+  const toDelete: string[] = []
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i)
+    if (k && k.endsWith(suffix)) toDelete.push(k)
+  }
+  for (const k of toDelete) localStorage.removeItem(k)
+
+  // 通用键：登录态、用户信息、笔记草稿、数据版本号
+  localStorage.removeItem('sm_token')
+  localStorage.removeItem('sm_logged_in')
+  localStorage.removeItem('sm_user')
+  localStorage.removeItem('sm_data_version')
+  // 笔记编辑器的草稿键当前未按用户作用域，统一清掉
+  for (let i = localStorage.length - 1; i >= 0; i--) {
+    const k = localStorage.key(i)
+    if (k && (k.startsWith('sm_note_') || k === 'sm_note_draft')) {
+      localStorage.removeItem(k)
+    }
+  }
+}
+
+async function handleDeleteAccount(payload: { password: string; confirm: string }) {
+  deleteError.value = ''
+  deleting.value = true
+  try {
+    await deleteAccount(payload.password, payload.confirm)
+    clearAllUserScopedStorage()
+    store.setUserInfo(null)
+    store.clearGraph()
+    showDeleteModal.value = false
+    emit('close')
+    router.push('/login')
+  } catch (err: any) {
+    deleteError.value = err?.response?.data?.detail ?? '注销失败，请稍后重试'
+  } finally {
+    deleting.value = false
+  }
 }
 </script>
 

@@ -143,34 +143,36 @@ const currentTopicId = computed(() => Number(store.activeTopicId) || 0)
 const chatMode = ref<'socratic' | 'normal'>('socratic')
 const aiStyleOptions = ['温和', '标准', '严格'] as const
 const aiStyle = ref<string>(store.userInfo?.ai_style ?? '标准')
-const chips = ref<string[]>(loadCachedChips('socratic'))
-const chipsLoading = ref(false)
 
-const STORAGE_KEY_SOCRATIC_SESSIONS = 'sm_sessions_socratic'
-const STORAGE_KEY_NORMAL_SESSIONS = 'sm_sessions_normal'
-const STORAGE_KEY_SOCRATIC_CUR = 'sm_session_cur_socratic'
-const STORAGE_KEY_NORMAL_CUR = 'sm_session_cur_normal'
-const STORAGE_KEY_CHIPS_SOCRATIC = 'sm_chips_socratic'
-const STORAGE_KEY_CHIPS_NORMAL = 'sm_chips_normal'
+// 会话/缓存按用户隔离：换账号即看不到上一账号的历史，避免共享浏览器串号
+const userScope = computed(() => store.userInfo?.id ? `u${store.userInfo.id}` : 'guest')
+const STORAGE_KEY_SOCRATIC_SESSIONS = computed(() => `sm_sessions_socratic_${userScope.value}`)
+const STORAGE_KEY_NORMAL_SESSIONS = computed(() => `sm_sessions_normal_${userScope.value}`)
+const STORAGE_KEY_SOCRATIC_CUR = computed(() => `sm_session_cur_socratic_${userScope.value}`)
+const STORAGE_KEY_NORMAL_CUR = computed(() => `sm_session_cur_normal_${userScope.value}`)
+const STORAGE_KEY_CHIPS_SOCRATIC = computed(() => `sm_chips_socratic_${userScope.value}`)
+const STORAGE_KEY_CHIPS_NORMAL = computed(() => `sm_chips_normal_${userScope.value}`)
 const STORAGE_VERSION_KEY = 'sm_data_version'
-const CURRENT_DATA_VERSION = '2'  // v2: 引入 db_id 同步，清除不带 db_id 的旧数据
+const CURRENT_DATA_VERSION = '3'  // v3: 会话按用户作用域隔离
 
+// 一次性迁移：清掉 v1/v2 共享键，避免新账号看到旧账号残留
 if (localStorage.getItem(STORAGE_VERSION_KEY) !== CURRENT_DATA_VERSION) {
-  // 旧数据无 db_id，删除消息时无法同步后端，整体清掉重来
-  localStorage.removeItem(STORAGE_KEY_SOCRATIC_SESSIONS)
-  localStorage.removeItem(STORAGE_KEY_NORMAL_SESSIONS)
-  localStorage.removeItem(STORAGE_KEY_SOCRATIC_CUR)
-  localStorage.removeItem(STORAGE_KEY_NORMAL_CUR)
-  localStorage.removeItem(STORAGE_KEY_CHIPS_SOCRATIC)
-  localStorage.removeItem(STORAGE_KEY_CHIPS_NORMAL)
+  for (const k of [
+    'sm_sessions_socratic', 'sm_sessions_normal',
+    'sm_session_cur_socratic', 'sm_session_cur_normal',
+    'sm_chips_socratic', 'sm_chips_normal',
+  ]) localStorage.removeItem(k)
   localStorage.setItem(STORAGE_VERSION_KEY, CURRENT_DATA_VERSION)
 }
 
-const socraticSessions = ref<Session[]>(loadSessions(STORAGE_KEY_SOCRATIC_SESSIONS, 'socratic'))
-const normalSessions = ref<Session[]>(loadSessions(STORAGE_KEY_NORMAL_SESSIONS, 'normal'))
+const chips = ref<string[]>(loadCachedChips('socratic'))
+const chipsLoading = ref(false)
 
-const socraticCurrentId = ref<string>(loadCurrentId(STORAGE_KEY_SOCRATIC_CUR, socraticSessions.value))
-const normalCurrentId = ref<string>(loadCurrentId(STORAGE_KEY_NORMAL_CUR, normalSessions.value))
+const socraticSessions = ref<Session[]>(loadSessions(STORAGE_KEY_SOCRATIC_SESSIONS.value, 'socratic'))
+const normalSessions = ref<Session[]>(loadSessions(STORAGE_KEY_NORMAL_SESSIONS.value, 'normal'))
+
+const socraticCurrentId = ref<string>(loadCurrentId(STORAGE_KEY_SOCRATIC_CUR.value, socraticSessions.value))
+const normalCurrentId = ref<string>(loadCurrentId(STORAGE_KEY_NORMAL_CUR.value, normalSessions.value))
 
 const currentSessionId = computed(() =>
   chatMode.value === 'socratic' ? socraticCurrentId.value : normalCurrentId.value
@@ -257,7 +259,7 @@ function loadCurrentId(key: string, sessions: Session[]): string {
 }
 
 function loadCachedChips(mode: 'socratic' | 'normal'): string[] {
-  const key = mode === 'socratic' ? STORAGE_KEY_CHIPS_SOCRATIC : STORAGE_KEY_CHIPS_NORMAL
+  const key = mode === 'socratic' ? STORAGE_KEY_CHIPS_SOCRATIC.value : STORAGE_KEY_CHIPS_NORMAL.value
   try {
     const raw = localStorage.getItem(key)
     if (raw) return JSON.parse(raw)
@@ -268,7 +270,7 @@ function loadCachedChips(mode: 'socratic' | 'normal'): string[] {
 }
 
 function saveCachedChips(mode: 'socratic' | 'normal', list: string[]) {
-  const key = mode === 'socratic' ? STORAGE_KEY_CHIPS_SOCRATIC : STORAGE_KEY_CHIPS_NORMAL
+  const key = mode === 'socratic' ? STORAGE_KEY_CHIPS_SOCRATIC.value : STORAGE_KEY_CHIPS_NORMAL.value
   localStorage.setItem(key, JSON.stringify(list))
 }
 
@@ -294,10 +296,10 @@ function saveSessions() {
   // 防抖批量写：连续修改会话只触发一次 localStorage 写入，避免大量 JSON 序列化
   if (saveTimer) clearTimeout(saveTimer)
   saveTimer = setTimeout(() => {
-    localStorage.setItem(STORAGE_KEY_SOCRATIC_SESSIONS, JSON.stringify(socraticSessions.value))
-    localStorage.setItem(STORAGE_KEY_NORMAL_SESSIONS, JSON.stringify(normalSessions.value))
-    localStorage.setItem(STORAGE_KEY_SOCRATIC_CUR, socraticCurrentId.value)
-    localStorage.setItem(STORAGE_KEY_NORMAL_CUR, normalCurrentId.value)
+    localStorage.setItem(STORAGE_KEY_SOCRATIC_SESSIONS.value, JSON.stringify(socraticSessions.value))
+    localStorage.setItem(STORAGE_KEY_NORMAL_SESSIONS.value, JSON.stringify(normalSessions.value))
+    localStorage.setItem(STORAGE_KEY_SOCRATIC_CUR.value, socraticCurrentId.value)
+    localStorage.setItem(STORAGE_KEY_NORMAL_CUR.value, normalCurrentId.value)
   }, 300)
 }
 

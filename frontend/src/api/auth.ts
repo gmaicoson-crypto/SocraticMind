@@ -9,7 +9,10 @@ export interface RegisterParams {
   username: string
   email: string
   password: string
+  code: string
 }
+
+export type CodePurpose = 'register' | 'reset'
 
 export interface UserInfo {
   id: number
@@ -71,4 +74,29 @@ export async function changePassword(oldPassword: string, newPassword: string) {
     old_password: oldPassword,
     new_password: newPassword,
   })
+}
+
+// 发送邮箱验证码（注册或重置密码）
+export async function sendVerificationCode(email: string, purpose: CodePurpose) {
+  const res = await api.post('/api/auth/send-code', { email, purpose })
+  return res.data as { message: string }
+}
+
+// 凭验证码重置密码
+export async function resetPassword(email: string, code: string, newPassword: string) {
+  const res = await api.post('/api/auth/reset-password', {
+    email,
+    code,
+    new_password: newPassword,
+  })
+  return res.data as { message: string }
+}
+
+// 注销账号：服务器端清除所有关联数据
+export async function deleteAccount(password: string, confirm: string) {
+  // axios delete 的 body 必须放在 data 字段里
+  const res = await api.delete('/api/auth/me', {
+    data: { password, confirm },
+  })
+  return res.data as { message: string }
 }

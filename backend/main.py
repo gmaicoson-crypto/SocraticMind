@@ -29,6 +29,7 @@ with engine.connect() as conn:
         "CREATE INDEX IF NOT EXISTS ix_chat_mode ON chat_messages (mode)",
         "CREATE INDEX IF NOT EXISTS ix_learning_records_user_id ON learning_records (user_id)",
         "CREATE UNIQUE INDEX IF NOT EXISTS ix_lr_user_date ON learning_records (user_id, date)",
+        "CREATE INDEX IF NOT EXISTS ix_email_codes_email_purpose ON email_codes (email, purpose)",
     ]
     for ddl in index_ddls:
         try:

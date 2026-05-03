@@ -1,26 +1,98 @@
+import re
 import uuid
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Request
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from core.database import get_db
 from core.auth import hash_password, verify_password, create_access_token
 from core.deps import get_current_user
+from core.email import generate_code, send_verification_email
+from core import rate_limit
 from models.user import User
 from models.topic import Topic
 from models.node import Node
+from models.email_code import EmailCode
+from models.progress import ChatMessage, LearningRecord
 
 UPLOAD_DIR = Path(__file__).resolve().parent.parent / "uploads" / "avatars"
 ALLOWED_AVATAR_EXT = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
 MAX_AVATAR_SIZE = 5 * 1024 * 1024  # 5MB
 
+CODE_TTL_MINUTES = 10
+EMAIL_RE = re.compile(r"^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$")
+
 router = APIRouter(prefix="/api/auth", tags=["认证"])
+
+
+# ── Pydantic ──
+def _validate_password(v: str) -> str:
+    if len(v) < 8:
+        raise ValueError("密码至少 8 位")
+    if not re.search(r"[A-Za-z]", v) or not re.search(r"\d", v):
+        raise ValueError("密码必须同时包含字母和数字")
+    return v
+
+
+def _validate_email(v: str) -> str:
+    v = v.strip().lower()
+    if not EMAIL_RE.match(v):
+        raise ValueError("邮箱格式不正确")
+    return v
+
+
+class SendCodeRequest(BaseModel):
+    email: str
+    purpose: str  # register / reset
+
+    @field_validator("email")
+    @classmethod
+    def _e(cls, v: str) -> str:
+        return _validate_email(v)
+
 
 class RegisterRequest(BaseModel):
     username: str
     email: str
     password: str
+    code: str
+
+    @field_validator("email")
+    @classmethod
+    def _e(cls, v: str) -> str:
+        return _validate_email(v)
+
+    @field_validator("password")
+    @classmethod
+    def _check_pwd(cls, v: str) -> str:
+        return _validate_password(v)
+
+    @field_validator("username")
+    @classmethod
+    def _check_name(cls, v: str) -> str:
+        v = v.strip()
+        if not (2 <= len(v) <= 20):
+            raise ValueError("用户名长度需在 2-20 之间")
+        return v
+
+
+class ResetPasswordRequest(BaseModel):
+    email: str
+    code: str
+    new_password: str
+
+    @field_validator("email")
+    @classmethod
+    def _e(cls, v: str) -> str:
+        return _validate_email(v)
+
+    @field_validator("new_password")
+    @classmethod
+    def _check_pwd(cls, v: str) -> str:
+        return _validate_password(v)
+
 
 class UserResponse(BaseModel):
     id: int
@@ -35,10 +107,12 @@ class UserResponse(BaseModel):
     class Config:
         from_attributes = True
 
+
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     user: UserResponse
+
 
 class UpdateProfileRequest(BaseModel):
     username: str | None = None
@@ -51,6 +125,54 @@ class UpdateProfileRequest(BaseModel):
 class ChangePasswordRequest(BaseModel):
     old_password: str
     new_password: str
+
+    @field_validator("new_password")
+    @classmethod
+    def _check_pwd(cls, v: str) -> str:
+        return _validate_password(v)
+
+
+class DeleteAccountRequest(BaseModel):
+    password: str
+    confirm: str  # 二次确认：要求前端把固定文案回传，避免误调用
+
+
+# ── 内部工具 ──
+def _client_ip(request: Request) -> str:
+    # 反代后取 X-Forwarded-For 第一段；裸跑时退回 client.host
+    fwd = request.headers.get("x-forwarded-for")
+    if fwd:
+        return fwd.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+def _now_utc() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _consume_code(db: Session, email: str, code: str, purpose: str) -> None:
+    """匹配最新一条同 (email, purpose) 的未用未过期记录；命中即标记 used，避免重放。"""
+    rec = (
+        db.query(EmailCode)
+        .filter(
+            EmailCode.email == email,
+            EmailCode.purpose == purpose,
+            EmailCode.used == False,  # noqa: E712
+        )
+        .order_by(EmailCode.id.desc())
+        .first()
+    )
+    if not rec:
+        raise HTTPException(status_code=400, detail="请先获取验证码")
+    expires = rec.expires_at
+    if expires.tzinfo is None:
+        expires = expires.replace(tzinfo=timezone.utc)
+    if expires < _now_utc():
+        raise HTTPException(status_code=400, detail="验证码已过期，请重新获取")
+    if rec.code != code.strip():
+        raise HTTPException(status_code=400, detail="验证码错误")
+    rec.used = True
+    db.flush()
 
 
 def init_default_topic(db: Session, user_id: int):
@@ -82,40 +204,123 @@ def init_default_topic(db: Session, user_id: int):
     db.commit()
 
 
+# ── 验证码 ──
+@router.post("/send-code")
+def send_code(req: SendCodeRequest, request: Request, db: Session = Depends(get_db)):
+    purpose = req.purpose.strip()
+    if purpose not in {"register", "reset"}:
+        raise HTTPException(status_code=400, detail="未知的验证码用途")
+
+    email = req.email.lower().strip()
+
+    # 反爬反骚扰：单邮箱 60s 一次、单 IP 每小时 10 次
+    if not rate_limit.hit(f"sendcode:email:{email}", max_calls=1, window_seconds=60):
+        wait = rate_limit.remaining_seconds(f"sendcode:email:{email}", 60)
+        raise HTTPException(status_code=429, detail=f"请求过于频繁，请 {wait} 秒后再试")
+    ip = _client_ip(request)
+    if not rate_limit.hit(f"sendcode:ip:{ip}", max_calls=10, window_seconds=3600):
+        raise HTTPException(status_code=429, detail="该网络请求次数过多，请稍后再试")
+
+    user_exists = db.query(User.id).filter(User.email == email).first() is not None
+    if purpose == "register" and user_exists:
+        raise HTTPException(status_code=400, detail="该邮箱已注册")
+    if purpose == "reset" and not user_exists:
+        # 不暴露账号是否存在但仍消耗速率配额，避免邮箱枚举
+        return {"message": "如果该邮箱已注册，验证码已发送"}
+
+    code = generate_code()
+    expires = _now_utc() + timedelta(minutes=CODE_TTL_MINUTES)
+    db.add(EmailCode(email=email, code=code, purpose=purpose, expires_at=expires))
+    db.commit()
+
+    try:
+        send_verification_email(email, code, purpose)
+    except Exception:
+        raise HTTPException(status_code=500, detail="邮件发送失败，请稍后重试")
+
+    return {"message": "验证码已发送，10 分钟内有效"}
+
+
+# ── 注册 ──
 @router.post("/register", response_model=TokenResponse)
-def register(req: RegisterRequest, db: Session = Depends(get_db)):
-    if db.query(User).filter(User.email == req.email).first():
+def register(req: RegisterRequest, request: Request, db: Session = Depends(get_db)):
+    email = req.email.lower().strip()
+
+    # IP 注册速率：5 次/小时，挡住批量注册脚本
+    ip = _client_ip(request)
+    if not rate_limit.hit(f"register:ip:{ip}", max_calls=5, window_seconds=3600):
+        raise HTTPException(status_code=429, detail="注册请求过于频繁，请稍后再试")
+
+    if db.query(User).filter(User.email == email).first():
         raise HTTPException(status_code=400, detail="邮箱已注册")
     if db.query(User).filter(User.username == req.username).first():
         raise HTTPException(status_code=400, detail="用户名已存在")
 
+    _consume_code(db, email, req.code, "register")
+
     user = User(
         username=req.username,
-        email=req.email,
+        email=email,
         hashed_password=hash_password(req.password),
     )
     db.add(user)
     db.commit()
     db.refresh(user)
 
-    # 自动初始化默认主题
     init_default_topic(db, user.id)
 
     token = create_access_token({"sub": str(user.id)})
     return TokenResponse(access_token=token, user=UserResponse.model_validate(user))
 
 
+# ── 登录 ──
 @router.post("/login", response_model=TokenResponse)
 def login(
+    request: Request,
     form: OAuth2PasswordRequestForm = Depends(),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
-    user = db.query(User).filter(User.email == form.username).first()
+    email = form.username.lower().strip()
+
+    locked = rate_limit.is_login_locked(email)
+    if locked:
+        raise HTTPException(status_code=429, detail=f"登录失败次数过多，请 {locked // 60 + 1} 分钟后再试")
+
+    # IP 限流，防止单点扫密码
+    ip = _client_ip(request)
+    if not rate_limit.hit(f"login:ip:{ip}", max_calls=20, window_seconds=300):
+        raise HTTPException(status_code=429, detail="登录请求过于频繁，请稍后再试")
+
+    user = db.query(User).filter(User.email == email).first()
     if not user or not verify_password(form.password, user.hashed_password):
+        rate_limit.record_login_fail(email)
         raise HTTPException(status_code=401, detail="邮箱或密码错误")
 
+    rate_limit.reset_login_fail(email)
     token = create_access_token({"sub": str(user.id)})
     return TokenResponse(access_token=token, user=UserResponse.model_validate(user))
+
+
+# ── 找回密码 ──
+@router.post("/reset-password")
+def reset_password(req: ResetPasswordRequest, request: Request, db: Session = Depends(get_db)):
+    email = req.email.lower().strip()
+
+    ip = _client_ip(request)
+    if not rate_limit.hit(f"reset:ip:{ip}", max_calls=10, window_seconds=3600):
+        raise HTTPException(status_code=429, detail="操作过于频繁，请稍后再试")
+
+    user = db.query(User).filter(User.email == email).first()
+    if not user:
+        # 同样不暴露账号是否存在
+        raise HTTPException(status_code=400, detail="验证码错误或已过期")
+
+    _consume_code(db, email, req.code, "reset")
+
+    user.hashed_password = hash_password(req.new_password)
+    db.commit()
+    rate_limit.reset_login_fail(email)
+    return {"message": "密码已重置，请使用新密码登录"}
 
 
 @router.get("/me", response_model=UserResponse)
@@ -200,8 +405,41 @@ def change_password(
 ):
     if not verify_password(req.old_password, current_user.hashed_password):
         raise HTTPException(status_code=400, detail="原密码错误")
-    if len(req.new_password) < 6:
-        raise HTTPException(status_code=400, detail="新密码至少 6 个字符")
     current_user.hashed_password = hash_password(req.new_password)
     db.commit()
     return {"message": "密码修改成功"}
+
+
+CONFIRM_PHRASE = "DELETE"
+
+
+@router.delete("/me")
+def delete_account(
+    req: DeleteAccountRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """注销账号：删光所有关联数据 + 头像文件。需要密码 + 固定确认串双重校验。"""
+    if req.confirm.strip().upper() != CONFIRM_PHRASE:
+        raise HTTPException(status_code=400, detail="二次确认未通过")
+    if not verify_password(req.password, current_user.hashed_password):
+        raise HTTPException(status_code=400, detail="密码错误")
+
+    user_id = current_user.id
+    user_email = current_user.email
+
+    # 1) 头像文件先删（数据库回滚也无法恢复磁盘文件，所以放在最前面验证已通过之后立刻执行）
+    _delete_old_avatar(current_user)
+
+    # 2) 显式删聊天/打卡/邮箱验证码：模型未在 User 侧声明 cascade，靠 SQLAlchemy 自动级联不可靠
+    db.query(ChatMessage).filter(ChatMessage.user_id == user_id).delete(synchronize_session=False)
+    db.query(LearningRecord).filter(LearningRecord.user_id == user_id).delete(synchronize_session=False)
+    db.query(EmailCode).filter(EmailCode.email == user_email).delete(synchronize_session=False)
+
+    # 3) 删用户：topics → nodes 走 ORM cascade（user.topics 配置了 cascade="all, delete"）
+    db.delete(current_user)
+    db.commit()
+
+    # 顺带把登录失败计数清零，避免被锁的邮箱重新注册同邮箱后状态残留
+    rate_limit.reset_login_fail(user_email)
+    return {"message": "账号已注销"}
