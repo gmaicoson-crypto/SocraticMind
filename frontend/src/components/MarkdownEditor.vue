@@ -13,9 +13,20 @@
         >{{ v.label }}</button>
       </div>
       <div class="md-meta">
+        <button
+          class="help-btn"
+          title="Markdown 语法说明"
+          @click="showHelp = true"
+        >
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/>
+            <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
+            <line x1="12" y1="17" x2="12.01" y2="17"/>
+          </svg>
+        </button>
         <span>{{ content.length }} 字符</span>
         <span>·</span>
-        <button class="download-btn" @click="handleDownload" title="下载 Markdown 文件">
+        <button class="download-btn" title="下载 Markdown 文件" @click="handleDownload">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
             <path d="M12 5v14M5 19h14M19 14l-7 7-7-7"/>
           </svg>
@@ -41,33 +52,36 @@
       />
     </div>
 
+    <MarkdownHelpModal :show="showHelp" @close="showHelp = false" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { marked } from 'marked'
+import hljs from 'highlight.js'
+import MarkdownHelpModal from './MarkdownHelpModal.vue'
 
 const STORAGE_KEY = 'sm_markdown_content'
 
 const PLACEHOLDER = `在这里记录你的学习笔记…
 
-支持 Markdown 语法：
-# 标题
-**粗体** *斜体* \`代码\`
+支持完整 Markdown 语法（含 GFM）：
+# 标题  **粗体**  *斜体*  ~~删除~~  \`代码\`
+- [x] 任务列表
+| 表格 | GFM |
 
 \`\`\`python
-# 代码块
 print("Hello, World!")
 \`\`\`
 
-> 引用块`
+点击右上角 ? 查看完整语法`
 
-// 读取上次内容，没有则为空
 const savedContent = localStorage.getItem(STORAGE_KEY)
 const content = ref(savedContent ?? '')
 
 const viewMode = ref<'edit' | 'split' | 'preview'>('split')
+const showHelp = ref(false)
 
 const views = [
   { key: 'edit' as const,    label: '编辑' },
@@ -75,23 +89,50 @@ const views = [
   { key: 'preview' as const, label: '预览' },
 ]
 
-const renderedHtml = computed(() => {
-  if (!content.value.trim()) return '<p style="color:var(--ink-3);font-size:13px;">预览区域 · 开始编辑后这里会实时渲染</p>'
-  return marked.parse(content.value, { breaks: true }) as string
+// 自定义 renderer：代码块走 hljs 语法高亮，行内代码加专属样式
+const renderer = new marked.Renderer()
+
+renderer.code = ({ text, lang }: { text: string; lang?: string }) => {
+  const language = lang && hljs.getLanguage(lang) ? lang : 'plaintext'
+  const highlighted = hljs.highlight(text, { language }).value
+  const langLabel = lang ? `<span class="md-code-lang">${lang}</span>` : ''
+  return `<div class="md-code-block">
+    <div class="md-code-header">${langLabel}</div>
+    <pre><code class="hljs language-${language}">${highlighted}</code></pre>
+  </div>`
+}
+
+renderer.codespan = ({ text }: { text: string }) => `<code class="md-inline-code">${text}</code>`
+
+// 全量启用 GFM：表格 / 删除线 / 自动链接 / 任务列表（默认输出 <input type="checkbox" disabled>，
+// 由下面 CSS 直接命中 li > input[type=checkbox] 即可，无需自定义 renderer）
+marked.setOptions({
+  gfm: true,
+  breaks: true,
 })
 
-// 自动保存到 localStorage
+const renderedHtml = computed(() => {
+  if (!content.value.trim()) {
+    return '<p style="color:var(--ink-3);font-size:13px;">预览区域 · 开始编辑后这里会实时渲染</p>'
+  }
+  return marked.parse(content.value, { renderer }) as string
+})
+
 function saveContent() {
   localStorage.setItem(STORAGE_KEY, content.value)
 }
 
-// 监听内容变化自动保存（防抖）
+// 防抖批量写：连续按键不会每次都触发 localStorage IO
 let saveTimer: ReturnType<typeof setTimeout> | null = null
 watch(content, () => {
   if (saveTimer) clearTimeout(saveTimer)
   saveTimer = setTimeout(() => {
     localStorage.setItem(STORAGE_KEY, content.value)
   }, 500)
+})
+
+onBeforeUnmount(() => {
+  if (saveTimer) clearTimeout(saveTimer)
 })
 
 function handleDownload() {
@@ -127,7 +168,6 @@ function handleDownload() {
   border-radius: 8px;
   padding: 2px;
 }
-
 .view-btn {
   padding: 5px 12px;
   font-size: 11.5px;
@@ -140,7 +180,6 @@ function handleDownload() {
   font-family: var(--font-sans);
   transition: all .15s;
 }
-
 .view-btn.active {
   background: var(--surface);
   color: var(--ink);
@@ -154,6 +193,22 @@ function handleDownload() {
   font-size: 11px;
   color: var(--ink-3);
   font-family: var(--font-mono);
+}
+
+.help-btn {
+  width: 22px; height: 22px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  color: var(--ink-3);
+  cursor: pointer;
+  transition: all .15s;
+}
+.help-btn:hover {
+  color: var(--blue-2);
+  border-color: var(--blue-line);
+  background: var(--blue-tint);
 }
 
 .download-btn {
@@ -182,15 +237,8 @@ function handleDownload() {
   display: grid;
   gap: 8px;
 }
-
-.md-body.split {
-  grid-template-columns: 1fr 1fr;
-}
-
-.md-body.edit,
-.md-body.preview {
-  grid-template-columns: 1fr;
-}
+.md-body.split { grid-template-columns: 1fr 1fr; }
+.md-body.edit, .md-body.preview { grid-template-columns: 1fr; }
 
 .md-editor {
   font-family: var(--font-mono);
@@ -207,17 +255,12 @@ function handleDownload() {
   height: 100%;
   transition: border-color .15s, box-shadow .15s;
 }
-
 .md-editor:focus {
   border-color: var(--blue);
   box-shadow: 0 0 0 3px oklch(0.72 0.085 235 / 0.15);
   background: var(--surface);
 }
-
-.md-editor::placeholder {
-  color: var(--ink-3);
-  line-height: 1.8;
-}
+.md-editor::placeholder { color: var(--ink-3); line-height: 1.8; }
 
 .md-preview {
   padding: 14px 18px;
@@ -230,55 +273,207 @@ function handleDownload() {
   color: var(--ink);
 }
 
+/* ── 标题 1-6 ── */
 .md-preview :deep(h1),
 .md-preview :deep(h2),
-.md-preview :deep(h3) {
+.md-preview :deep(h3),
+.md-preview :deep(h4),
+.md-preview :deep(h5),
+.md-preview :deep(h6) {
   color: var(--ink);
   margin: 14px 0 8px;
   font-weight: 600;
+  line-height: 1.35;
 }
-
-.md-preview :deep(h1) { font-size: 18px; }
-.md-preview :deep(h2) { font-size: 15.5px; }
-.md-preview :deep(h3) { font-size: 14px; }
+.md-preview :deep(h1) { font-size: 19px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+.md-preview :deep(h2) { font-size: 16.5px; padding-bottom: 4px; border-bottom: 1px solid var(--line); }
+.md-preview :deep(h3) { font-size: 14.5px; }
+.md-preview :deep(h4) { font-size: 13.5px; }
+.md-preview :deep(h5) { font-size: 12.5px; }
+.md-preview :deep(h6) { font-size: 12px; color: var(--ink-2); }
 
 .md-preview :deep(p) { margin: 8px 0; }
 
+/* 强调 */
+.md-preview :deep(strong) { font-weight: 600; }
+.md-preview :deep(em) { font-style: italic; }
+.md-preview :deep(del) { text-decoration: line-through; color: var(--ink-3); }
+.md-preview :deep(mark) {
+  background: oklch(0.94 0.10 90);
+  padding: 0 3px;
+  border-radius: 2px;
+}
+
+/* 链接 */
+.md-preview :deep(a) {
+  color: var(--blue-2);
+  text-decoration: none;
+  border-bottom: 1px solid var(--blue-line);
+}
+.md-preview :deep(a:hover) { border-bottom-color: var(--blue-2); }
+
+/* 行内代码 */
+.md-preview :deep(.md-inline-code),
 .md-preview :deep(code) {
   font-family: var(--font-mono);
-  font-size: 12.5px;
+  font-size: 0.88em;
   background: var(--blue-tint);
   color: var(--blue-2);
   padding: 1px 6px;
   border-radius: 4px;
 }
 
-.md-preview :deep(pre) {
-  background: var(--bg-3);
-  padding: 12px 14px;
-  border-radius: var(--radius-xs);
-  overflow-x: auto;
+/* 代码块 */
+.md-preview :deep(.md-code-block) {
+  margin: 10px 0;
+  border-radius: 8px;
+  overflow: hidden;
   border: 1px solid var(--line);
+  background: #1e1e2e;
 }
-
-.md-preview :deep(pre code) {
+.md-preview :deep(.md-code-header) {
+  display: flex; justify-content: flex-end;
+  padding: 4px 12px;
+  background: #2a2a3e;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  min-height: 16px;
+}
+.md-preview :deep(.md-code-lang) {
+  font-size: 10.5px;
+  font-family: var(--font-mono);
+  color: #888;
+  text-transform: lowercase;
+  letter-spacing: 0.05em;
+}
+.md-preview :deep(.md-code-block pre) {
+  margin: 0;
+  padding: 12px 14px;
+  overflow-x: auto;
+  background: #1e1e2e;
+  border: none;
+  border-radius: 0;
+}
+.md-preview :deep(.md-code-block pre code) {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.65;
   background: transparent;
   padding: 0;
-  color: var(--ink);
+  color: #cdd6f4;
 }
 
+/* highlight.js 颜色（Catppuccin Mocha 风） */
+.md-preview :deep(.hljs-keyword),
+.md-preview :deep(.hljs-selector-tag) { color: #cba6f7; }
+.md-preview :deep(.hljs-string),
+.md-preview :deep(.hljs-attr) { color: #a6e3a1; }
+.md-preview :deep(.hljs-number),
+.md-preview :deep(.hljs-literal) { color: #fab387; }
+.md-preview :deep(.hljs-comment) { color: #6c7086; font-style: italic; }
+.md-preview :deep(.hljs-function),
+.md-preview :deep(.hljs-title) { color: #89b4fa; }
+.md-preview :deep(.hljs-variable),
+.md-preview :deep(.hljs-name) { color: #cdd6f4; }
+.md-preview :deep(.hljs-type),
+.md-preview :deep(.hljs-class) { color: #f9e2af; }
+.md-preview :deep(.hljs-built_in) { color: #89dceb; }
+.md-preview :deep(.hljs-operator),
+.md-preview :deep(.hljs-punctuation) { color: #89dceb; }
+.md-preview :deep(.hljs-property) { color: #f38ba8; }
+
+/* 列表 */
 .md-preview :deep(ul),
 .md-preview :deep(ol) {
   padding-left: 22px;
   margin: 8px 0;
 }
-
 .md-preview :deep(li) { margin: 3px 0; }
+.md-preview :deep(li > p) { margin: 4px 0; }
 
+/* 任务列表（GFM）：marked 默认在 li 里输出 <input type="checkbox" disabled>，
+   用 :has 隐藏圆点；不支持 :has 的旧浏览器也不影响内容显示，只是会保留圆点 */
+.md-preview :deep(li:has(> input[type=checkbox])) {
+  list-style: none;
+  margin-left: -18px;
+}
+.md-preview :deep(li > input[type=checkbox]) {
+  margin-right: 6px;
+  vertical-align: middle;
+  accent-color: var(--blue-2);
+}
+
+/* 引用块 */
 .md-preview :deep(blockquote) {
   border-left: 3px solid var(--blue-line);
-  padding-left: 12px;
-  margin: 8px 0;
+  padding: 4px 12px;
+  margin: 10px 0;
   color: var(--ink-2);
+  background: var(--blue-tint);
+  border-radius: 0 6px 6px 0;
+}
+.md-preview :deep(blockquote blockquote) {
+  margin: 6px 0;
+  background: transparent;
+}
+
+/* 分隔线 */
+.md-preview :deep(hr) {
+  border: none;
+  border-top: 1px solid var(--line);
+  margin: 14px 0;
+}
+
+/* 表格（GFM） */
+.md-preview :deep(table) {
+  border-collapse: collapse;
+  margin: 10px 0;
+  font-size: 12.5px;
+  width: auto;
+  max-width: 100%;
+  display: block;
+  overflow-x: auto;
+}
+.md-preview :deep(thead) { background: var(--bg-3); }
+.md-preview :deep(th),
+.md-preview :deep(td) {
+  border: 1px solid var(--line);
+  padding: 6px 12px;
+  text-align: left;
+  vertical-align: top;
+}
+.md-preview :deep(th) { font-weight: 600; }
+.md-preview :deep(tbody tr:nth-child(even)) { background: var(--bg-2); }
+
+/* 图片 */
+.md-preview :deep(img) {
+  max-width: 100%;
+  border-radius: 6px;
+  margin: 6px 0;
+}
+
+/* 键盘按键 */
+.md-preview :deep(kbd) {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  background: var(--bg-3);
+  color: var(--ink);
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--line);
+  box-shadow: inset 0 -1px 0 var(--line-2);
+}
+
+/* details / summary */
+.md-preview :deep(details) {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 8px 12px;
+  margin: 8px 0;
+  background: var(--bg-2);
+}
+.md-preview :deep(summary) {
+  cursor: pointer;
+  font-weight: 500;
+  color: var(--ink);
 }
 </style>
