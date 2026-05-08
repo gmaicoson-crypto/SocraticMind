@@ -57,7 +57,7 @@
         </button>
 
         <!-- 展开按钮 -->
-        <button v-if="hasMore" class="expand-btn" @click="openManager()">
+        <button v-if="showMoreTopics" class="expand-btn" @click="openManager()">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
             <path d="M6 9l6 6 6-6"/>
           </svg>
@@ -168,9 +168,9 @@ function openManager() {
 }
 const generatingTitle = ref<string | null>(null)
 
-const MAX_VISIBLE = 4
+const MAX_VISIBLE = 3
 const visibleTopics = computed(() => store.topics.slice(0, MAX_VISIBLE))
-const hasMore = computed(() => store.topics.length > MAX_VISIBLE)
+const showMoreTopics = computed(() => store.topics.length > MAX_VISIBLE)
 
 const toastMsg = ref('')
 const showToast = ref(false)
@@ -207,7 +207,7 @@ async function handleRecommend(title: string, emoji: string) {
     // 先标记新主题需要概览，再切主题；SocraticDialogue 切到该会话后会自动推送概览
     store.requestTopicOverview(topic.id)
     await store.setActiveTopic(String(topic.id))
-    showToastMsg(`已成功将《${title}》加入学习计划 ✓`)
+    showToastMsg(`已成功将《${title}》加入学习计划`)
   } catch (err) {
     showToastMsg(`加入失败，请重试`)
     console.error('生成推荐主题失败', err)
