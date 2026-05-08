@@ -173,9 +173,12 @@ const pct = computed(() => Math.round((store.masteredCount / store.totalCount) *
 
 // 搜索结果（节点跨主题，从后端获取，带 200ms 防抖）
 const nodeResults = ref<SearchedNode[]>([])
+
+//TypeScript 自动判断当前是哪个环境，用对应的类型
 let searchTimer: ReturnType<typeof setTimeout> | null = null
 let searchSeq = 0
 
+//带防抖和竞态处理，用序号递增解决网络请求乱序返回导致显示旧结果的问题（难题和亮点）
 watch(query, (q) => {
   if (searchTimer) clearTimeout(searchTimer)
   activeIndex.value = -1
@@ -184,10 +187,11 @@ watch(query, (q) => {
     nodeResults.value = []
     return
   }
+  //竞态处理：每次搜索前序号加一，结果返回时检查序号是否匹配，不匹配则丢弃结果
   const seq = ++searchSeq
   searchTimer = setTimeout(async () => {
     try {
-      const data = await searchNodes(keyword, 8)
+      const data = await searchNodes(keyword, 6)
       if (seq === searchSeq) nodeResults.value = data
     } catch {
       if (seq === searchSeq) nodeResults.value = []
