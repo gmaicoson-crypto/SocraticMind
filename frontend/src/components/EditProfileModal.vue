@@ -216,6 +216,7 @@ import { useLearningStore } from '../stores/learning'
 import { updateMe, uploadAvatar, resetAvatar, changePassword, deleteAccount } from '../api/auth'
 import { avatarSrc } from '../utils/avatar'
 import { avatarGrads } from '../utils/avatarGrads'
+import { clearAuth, updateUser } from '../utils/token'
 
 const DeleteAccountModal = defineAsyncComponent(() => import('./DeleteAccountModal.vue'))
 
@@ -260,7 +261,7 @@ async function onFileChange(e: Event) {
     const updated = await uploadAvatar(file)
     avatarUrl.value = updated.avatar_url
     localPreview.value = null
-    localStorage.setItem('sm_user', JSON.stringify(updated))
+    updateUser(updated)
     store.setUserInfo(updated)
   } catch (err: any) {
     alert(err?.response?.data?.detail ?? '上传失败')
@@ -277,7 +278,7 @@ async function handleResetAvatar() {
     const updated = await resetAvatar()
     avatarUrl.value = null
     localPreview.value = null
-    localStorage.setItem('sm_user', JSON.stringify(updated))
+    updateUser(updated)
     store.setUserInfo(updated)
   } catch (err: any) {
     alert(err?.response?.data?.detail ?? '重置失败')
@@ -364,7 +365,7 @@ async function handleSave() {
       avatar_grad: form.avatarGrad,
     })
     // 更新本地存储和 store
-    localStorage.setItem('sm_user', JSON.stringify(updated))
+    updateUser(updated)
     store.setUserInfo(updated)
     savedDone.value = true
     savedCloseTimer = setTimeout(() => {
@@ -379,9 +380,7 @@ async function handleSave() {
 }
 
 function handleLogout() {
-  localStorage.removeItem('sm_token')
-  localStorage.removeItem('sm_logged_in')
-  localStorage.removeItem('sm_user')
+  clearAuth()
   router.push('/login')
   emit('close')
 }
@@ -392,29 +391,24 @@ const deleting = ref(false)
 const deleteError = ref('')
 
 function clearAllUserScopedStorage() {
-  // 当前用户在本地的所有残留：会话、当前会话指针、建议词缓存、目标 / 进度
-  // 一律以 _u<id> 后缀；扫一遍 localStorage 把所有匹配的键清掉，避免下次同号或他号登录串号
-  const uid = store.userInfo?.id
-  const suffix = uid ? `_u${uid}` : '_guest'
-  const toDelete: string[] = []
-  for (let i = 0; i < localStorage.length; i++) {
-    const k = localStorage.key(i)
-    if (k && k.endsWith(suffix)) toDelete.push(k)
-  }
-  for (const k of toDelete) localStorage.removeItem(k)
-
-  // 通用键：登录态、用户信息、笔记草稿、数据版本号
-  localStorage.removeItem('sm_token')
-  localStorage.removeItem('sm_logged_in')
-  localStorage.removeItem('sm_user')
-  localStorage.removeItem('sm_data_version')
-  // 笔记编辑器的草稿键当前未按用户作用域，统一清掉
-  for (let i = localStorage.length - 1; i >= 0; i--) {
-    const k = localStorage.key(i)
-    if (k && (k.startsWith('sm_note_') || k === 'sm_note_draft')) {
-      localStorage.removeItem(k)
+  // 清除所有会话快照缓存（固定 key）+ 笔记草稿
+  const sessionKeys = [
+    'sm_socratic_sessions', 'sm_normal_sessions',
+    'sm_socratic_cur', 'sm_normal_cur',
+    'sm_chips_socratic', 'sm_chips_normal',
+  ]
+  for (const s of [localStorage, sessionStorage]) {
+    for (const k of sessionKeys) s.removeItem(k)
+    // 笔记编辑器的草稿键
+    for (let i = s.length - 1; i >= 0; i--) {
+      const k = s.key(i)
+      if (k && (k.startsWith('sm_note_') || k === 'sm_note_draft')) {
+        s.removeItem(k)
+      }
     }
   }
+
+  clearAuth()
 }
 
 async function handleDeleteAccount(payload: { password: string; confirm: string }) {

@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
-from typing import List
+from typing import List, Optional
 import json
 from core.database import get_db
 from core.deps import get_current_user
@@ -34,6 +34,7 @@ class HistoryResponse(BaseModel):
     content: str
     node_key: str = ""
     mode: str = ""
+    topic_id: Optional[int] = None
     created_at: str = ""
 
     class Config:
@@ -156,7 +157,9 @@ def get_all_messages(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    msgs = db.query(ChatMessage).filter(
+    rows = db.query(ChatMessage, Node.topic_id).outerjoin(
+        Node, ChatMessage.node_key == Node.node_key
+    ).filter(
         ChatMessage.user_id == current_user.id,
     ).order_by(ChatMessage.id.desc()).offset(offset).limit(limit).all()
     return [{
@@ -165,8 +168,9 @@ def get_all_messages(
         "content": m.content,
         "node_key": m.node_key,
         "mode": m.mode,
+        "topic_id": topic_id,
         "created_at": m.created_at.strftime("%Y-%m-%d %H:%M:%S") if m.created_at else "",
-    } for m in msgs]
+    } for m, topic_id in rows]
 
 
 class DeleteMessagesRequest(BaseModel):

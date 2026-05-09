@@ -29,7 +29,9 @@
       "Bash(git clone *)",
       "WebFetch(domain:raw.githubusercontent.com)",
       "Bash(Get-ChildItem -Path \"D:\\\\Study\\\\ThirdProject\\\\new_project\\\\SocraticMind\" -Directory -Depth 1)",
-      "Bash(Select-Object FullName)"
+      "Bash(Select-Object FullName)",
+      "Bash(npx vue-tsc *)",
+      "Bash(npx *)"
     ],
     "deny": [
       "Bash(git checkout *)",

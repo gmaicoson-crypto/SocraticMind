@@ -250,10 +250,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, h, onBeforeUnmount, defineAsyncComponent } from 'vue'
+import { ref, computed, h, watch, onBeforeUnmount, defineAsyncComponent } from 'vue'
 import { useRouter } from 'vue-router'
 import { login, register, sendVerificationCode } from '../api/auth'
 import { useLearningStore } from '../stores/learning'
+import { setAuth } from '../utils/token'
 
 const ForgotPasswordModal = defineAsyncComponent(() => import('../components/ForgotPasswordModal.vue'))
 const LegalModal = defineAsyncComponent(() => import('../components/LegalModal.vue'))
@@ -267,7 +268,7 @@ const errorMsg = ref('')
 
 const store = useLearningStore()
 
-const form = ref({
+const blankForm = () => ({
   name: '',
   email: '',
   password: '',
@@ -275,6 +276,14 @@ const form = ref({
   code: '',
   remember: false,
   agreed: false,
+})
+const form = ref(blankForm())
+
+// 切换登录/注册时清空表单，避免上一模式的 stale data 残留在内存
+watch(mode, () => {
+  form.value = blankForm()
+  errorMsg.value = ''
+  codeMsg.value = ''
 })
 
 // 验证码发送态：组件卸载需清理 cooldown 计时器，避免组件销毁后还在 tick 报警告
@@ -379,7 +388,7 @@ async function handleSubmit() {
   try {
     let result
     if (mode.value === 'login') {
-      result = await login({ email: form.value.email, password: form.value.password })
+      result = await login({ email: form.value.email.trim().toLowerCase(), password: form.value.password })
     } else {
       result = await register({
         username: form.value.name,
@@ -388,10 +397,7 @@ async function handleSubmit() {
         code: form.value.code.trim(),
       })
     }
-    // 保存 token 和用户信息
-    localStorage.setItem('sm_token', result.access_token)
-    localStorage.setItem('sm_logged_in', 'true')
-    localStorage.setItem('sm_user', JSON.stringify(result.user))
+    setAuth(result.access_token, result.user, form.value.remember)
     store.setUserInfo(result.user)
     await store.fetchTopics()
     await store.fetchStreak()

@@ -1,4 +1,5 @@
 import api from './index'
+import { getToken } from '../utils/token'
 
 export interface ChatMessage {
   role: 'ai' | 'user'
@@ -23,7 +24,7 @@ export function chatStream(
   onMsgIds?: (userMsgId: number, aiMsgId: number) => void,
   kind: ChatKind = 'qa',
 ) {
-  const token = localStorage.getItem('sm_token')
+  const token = getToken()
 
   // 使用外部传入的 controller，没有则新建
   const controller = controllers ?? new AbortController()
@@ -126,7 +127,7 @@ export async function getChatHistory(nodeKey: string) {
 // 从数据库获取用户所有消息（localStorage 空时回退）
 export async function getAllMessages(limit = 200, offset = 0) {
   const res = await api.get(`/api/chat/messages?limit=${limit}&offset=${offset}`)
-  return res.data as { id: number; role: string; content: string; node_key: string; mode: string; created_at: string }[]
+  return res.data as { id: number; role: string; content: string; node_key: string; mode: string; topic_id: number | null; created_at: string }[]
 }
 
 export async function deleteMessages(ids: number[]) {

@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { isLoggedIn } from '../utils/token'
 
 // 路由懒加载：每个 view 独立成 chunk，登录页不再带上 Home/Profile 的依赖
 // （Home 引入 KnowledgeGraph、Profile 引入热力图等），首屏体积明显下降
@@ -30,11 +31,11 @@ const router = createRouter({
 })
 
 router.beforeEach((to) => {
-  const isLoggedIn = !!localStorage.getItem('sm_token')
-  if (to.meta.requiresAuth && !isLoggedIn) {
+  const loggedIn = isLoggedIn()
+  if (to.meta.requiresAuth && !loggedIn) {
     return { name: 'login' }
   }
-  if (to.name === 'login' && isLoggedIn) {
+  if (to.name === 'login' && loggedIn) {
     return { name: 'home' }
   }
 })

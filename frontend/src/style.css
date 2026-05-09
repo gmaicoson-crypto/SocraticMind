@@ -293,12 +293,12 @@ html, body, #app {
   color: #6E7681;
 }
 [data-theme="dark"] .hdr-btn:hover { background: #21262D; color: #E6EDF3; border-color: rgba(255,255,255,0.10); }
-[data-theme="dark"] .bubble.ai {
+[data-theme="dark"] .dlg-messages .bubble.ai {
   background: #161B22;
   border-color: rgba(255,255,255,0.06);
   color: #B0B8C4;
 }
-[data-theme="dark"] .bubble.user {
+[data-theme="dark"] .dlg-messages .bubble.user {
   background: #21262D;
   border-color: rgba(255,255,255,0.10);
   color: #E6EDF3;

@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { getToken, clearAuth } from '../utils/token'
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE,
@@ -6,7 +7,7 @@ const api = axios.create({
 
 // 自动带上 Token
 api.interceptors.request.use(config => {
-  const token = localStorage.getItem('sm_token')
+  const token = getToken()
   if (token) config.headers.Authorization = `Bearer ${token}`
   return config
 })
@@ -16,8 +17,7 @@ api.interceptors.response.use(
   res => res,
   err => {
     if (err.response?.status === 401) {
-      localStorage.removeItem('sm_token')
-      localStorage.removeItem('sm_logged_in')
+      clearAuth()
       window.location.href = '/login'
     }
     return Promise.reject(err)

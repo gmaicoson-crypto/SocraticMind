@@ -5,6 +5,7 @@ import { getTopics, getNodes, masterNode as apiMasterNode } from '../api/topic'
 import { getRecommendations } from '../api/topic'
 import { recordToday, getStreak } from '../api/progress'
 import type { StreakData } from '../api/progress'
+import { loadUser } from '../utils/token'
 
 // 主题初始化：localStorage > 系统偏好 > 默认明亮
 function getInitialTheme(): boolean {
@@ -72,12 +73,8 @@ export const useLearningStore = defineStore('learning', () => {
   }
 
   function loadUserFromStorage() {
-    const raw = localStorage.getItem('sm_user')
-    if (raw) {
-      try { userInfo.value = JSON.parse(raw) } catch (err) {
-        console.warn('解析本地用户信息失败，已忽略', err)
-      }
-    }
+    const data = loadUser()
+    if (data) userInfo.value = data as typeof userInfo.value
   }
 
   // ── 主题与节点加载 ──

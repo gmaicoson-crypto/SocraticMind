@@ -150,35 +150,22 @@ const chatMode = ref<'socratic' | 'normal'>('socratic')
 const aiStyleOptions = ['温和', '标准', '严格'] as const
 const aiStyle = ref<string>(store.userInfo?.ai_style ?? '标准')
 
-// 会话/缓存按用户隔离：换账号即看不到上一账号的历史，避免共享浏览器串号
-const userScope = computed(() => store.userInfo?.id ? `u${store.userInfo.id}` : 'guest')
-const STORAGE_KEY_SOCRATIC_SESSIONS = computed(() => `sm_sessions_socratic_${userScope.value}`)
-const STORAGE_KEY_NORMAL_SESSIONS = computed(() => `sm_sessions_normal_${userScope.value}`)
-const STORAGE_KEY_SOCRATIC_CUR = computed(() => `sm_session_cur_socratic_${userScope.value}`)
-const STORAGE_KEY_NORMAL_CUR = computed(() => `sm_session_cur_normal_${userScope.value}`)
-const STORAGE_KEY_CHIPS_SOCRATIC = computed(() => `sm_chips_socratic_${userScope.value}`)
-const STORAGE_KEY_CHIPS_NORMAL = computed(() => `sm_chips_normal_${userScope.value}`)
-const STORAGE_VERSION_KEY = 'sm_data_version'
-const CURRENT_DATA_VERSION = '3'  // v3: 会话按用户作用域隔离
-
-// 一次性迁移：清掉 v1/v2 共享键，避免新账号看到旧账号残留
-if (localStorage.getItem(STORAGE_VERSION_KEY) !== CURRENT_DATA_VERSION) {
-  for (const k of [
-    'sm_sessions_socratic', 'sm_sessions_normal',
-    'sm_session_cur_socratic', 'sm_session_cur_normal',
-    'sm_chips_socratic', 'sm_chips_normal',
-  ]) localStorage.removeItem(k)
-  localStorage.setItem(STORAGE_VERSION_KEY, CURRENT_DATA_VERSION)
-}
+// 会话快照缓存键（固定 key，非用户隔离；clearAuth 时清除）
+const SK_SOCRATIC = 'sm_socratic_sessions'
+const SK_NORMAL = 'sm_normal_sessions'
+const SK_SOCRATIC_CUR = 'sm_socratic_cur'
+const SK_NORMAL_CUR = 'sm_normal_cur'
+const SK_CHIPS_SOCRATIC = 'sm_chips_socratic'
+const SK_CHIPS_NORMAL = 'sm_chips_normal'
 
 const chips = ref<string[]>(loadCachedChips('socratic'))
 const chipsLoading = ref(false)
 
-const socraticSessions = ref<Session[]>(loadSessions(STORAGE_KEY_SOCRATIC_SESSIONS.value, 'socratic'))
-const normalSessions = ref<Session[]>(loadSessions(STORAGE_KEY_NORMAL_SESSIONS.value, 'normal'))
+const socraticSessions = ref<Session[]>(loadSessions(SK_SOCRATIC, 'socratic'))
+const normalSessions = ref<Session[]>(loadSessions(SK_NORMAL, 'normal'))
 
-const socraticCurrentId = ref<string>(loadCurrentId(STORAGE_KEY_SOCRATIC_CUR.value, socraticSessions.value))
-const normalCurrentId = ref<string>(loadCurrentId(STORAGE_KEY_NORMAL_CUR.value, normalSessions.value))
+const socraticCurrentId = ref<string>(loadCurrentId(SK_SOCRATIC_CUR, socraticSessions.value))
+const normalCurrentId = ref<string>(loadCurrentId(SK_NORMAL_CUR, normalSessions.value))
 
 const currentSessionId = computed(() =>
   chatMode.value === 'socratic' ? socraticCurrentId.value : normalCurrentId.value
@@ -265,7 +252,7 @@ function loadCurrentId(key: string, sessions: Session[]): string {
 }
 
 function loadCachedChips(mode: 'socratic' | 'normal'): string[] {
-  const key = mode === 'socratic' ? STORAGE_KEY_CHIPS_SOCRATIC.value : STORAGE_KEY_CHIPS_NORMAL.value
+  const key = mode === 'socratic' ? SK_CHIPS_SOCRATIC : SK_CHIPS_NORMAL
   try {
     const raw = localStorage.getItem(key)
     if (raw) return JSON.parse(raw)
@@ -276,7 +263,7 @@ function loadCachedChips(mode: 'socratic' | 'normal'): string[] {
 }
 
 function saveCachedChips(mode: 'socratic' | 'normal', list: string[]) {
-  const key = mode === 'socratic' ? STORAGE_KEY_CHIPS_SOCRATIC.value : STORAGE_KEY_CHIPS_NORMAL.value
+  const key = mode === 'socratic' ? SK_CHIPS_SOCRATIC : SK_CHIPS_NORMAL
   localStorage.setItem(key, JSON.stringify(list))
 }
 
@@ -299,13 +286,12 @@ async function loadSuggestions(force = false) {
 }
 
 function saveSessions() {
-  // 防抖批量写：连续修改会话只触发一次 localStorage 写入，避免大量 JSON 序列化
   if (saveTimer) clearTimeout(saveTimer)
   saveTimer = setTimeout(() => {
-    localStorage.setItem(STORAGE_KEY_SOCRATIC_SESSIONS.value, JSON.stringify(socraticSessions.value))
-    localStorage.setItem(STORAGE_KEY_NORMAL_SESSIONS.value, JSON.stringify(normalSessions.value))
-    localStorage.setItem(STORAGE_KEY_SOCRATIC_CUR.value, socraticCurrentId.value)
-    localStorage.setItem(STORAGE_KEY_NORMAL_CUR.value, normalCurrentId.value)
+    localStorage.setItem(SK_SOCRATIC, JSON.stringify(socraticSessions.value))
+    localStorage.setItem(SK_NORMAL, JSON.stringify(normalSessions.value))
+    localStorage.setItem(SK_SOCRATIC_CUR, socraticCurrentId.value)
+    localStorage.setItem(SK_NORMAL_CUR, normalCurrentId.value)
   }, 300)
 }
 
@@ -367,102 +353,141 @@ function newSession() {
   scrollToBottom()
 }
 
-// 从数据库拉取全部历史，增量合并到已有会话（按 db_id 去重）
-async function syncFromDB() {
+// 从后端全量拉取消息，按 topic_id 分组重建会话（后端为唯一数据源）
+async function rebuildFromBackend() {
   try {
-    const msgs = await getAllMessages()
+    const msgs = await getAllMessages(500, 0)
     if (!msgs.length) return
 
-    const existingIds = new Set<number>()
-    for (const s of [...socraticSessions.value, ...normalSessions.value]) {
-      for (const m of s.messages) {
-        if (m.db_id != null) existingIds.add(m.db_id)
-      }
-    }
+    const socraticMsgs = msgs.filter(m => m.mode === 'socratic')
+    const normalMsgs = msgs.filter(m => m.mode !== 'socratic')
 
-    const newMsgs = msgs.filter(m => !existingIds.has(m.id))
-    const socraticNew = newMsgs.filter(m => m.mode === 'socratic')
-    const normalNew = newMsgs.filter(m => m.mode !== 'socratic')
-
-    if (socraticNew.length) {
-      for (const m of socraticNew) {
-        const nk = m.node_key || 'unknown'
-        // 优先通过 topic 标题查找 topicId 再匹配 session（主题概览的 node_key 即标题）
-        let session: Session | undefined
-        const matchedTopic = store.topics.find(t => t.title === nk)
-        if (matchedTopic) {
-          session = socraticSessions.value.find(s => s.topicId === Number(matchedTopic.id))
-        }
-        // 回退：按 topicTitle / name 模糊匹配
-        if (!session) {
-          session = socraticSessions.value.find(s => s.topicTitle === nk || s.name === nk.slice(0, 12))
-        }
-        // 仍未匹配则跳过，不再创建无 topicId 的孤儿 session
-        if (!session) continue
-        // 内容去重：防止 db_id 缺失时同一消息重复合并
-        if (session.messages.some(existing => existing.text === m.content)) continue
-        if (m.role === 'ai') {
-          const { cleanText, choices } = parseChoices(m.content)
-          session.messages.push({
-            role: 'ai',
-            text: cleanText,
-            time: m.created_at || now(),
-            db_id: m.id,
-            choices: choices ?? undefined,
-          })
-        } else {
-          // 跳过空内容的用户消息（topic_overview / node_overview 触发的占位记录）
-          if (!m.content || !m.content.trim()) continue
-          session.messages.push({
-            role: 'user',
-            text: m.content,
-            time: m.created_at || now(),
-            db_id: m.id,
-          })
-        }
-        session.updatedAt = m.created_at || session.updatedAt
-      }
-      for (const s of socraticSessions.value) {
-        s.messages.sort((a, b) => (a.time || '').localeCompare(b.time || ''))
-      }
-    }
-
-    // 每次刷新都推断历史选中项，修复 saveSessions 300ms 防抖导致 selected_choice
-    // 来不及持久化就刷新时，下次加载无法显示已选高亮的问题
+    // 保留当前会话中未持久化的临时消息（刚发送、无 db_id）
+    const ephemeralByTopic = new Map<number, Message[]>()
     for (const s of socraticSessions.value) {
-      for (let i = 0; i < s.messages.length - 1; i++) {
-        const msg = s.messages[i]
-        if (msg.role === 'ai' && msg.choices?.length && !msg.selected_choice) {
-          const next = s.messages[i + 1]
-          if (next?.role === 'user') {
-            const lm = next.text.match(/^([A-F])[.、]/)
-            if (lm && msg.choices.some(c => c.label === lm[1])) {
-              msg.selected_choice = lm[1]
-            }
-          }
-        }
+      if (s.topicId != null) {
+        const eph = s.messages.filter(m => m.db_id == null)
+        if (eph.length) ephemeralByTopic.set(s.topicId, eph)
       }
     }
 
-    if (normalNew.length) {
-      let normalSession = normalSessions.value.find(s => s.name === '历史对话' && s.messages.length > 1)
-      if (!normalSession) {
-        normalSession = { id: genId(), name: '历史对话', messages: [], updatedAt: nowDate() }
-        normalSessions.value.unshift(normalSession)
+    // 按 topic_id 分组 socratic 消息；无 topic_id 的消息按 node_key 分组作为回退
+    const topicMsgMap = new Map<number, Message[]>()
+    const nodeKeyMsgMap = new Map<string, Message[]>()  // 回退：无 topic_id 时按 node_key 分组
+
+    function convertBackendMsg(m: typeof socraticMsgs[number]): Message | null {
+      if (m.role === 'ai') {
+        const { cleanText, choices } = parseChoices(m.content)
+        return { role: 'ai', text: cleanText, time: m.created_at || now(), db_id: m.id, choices: choices ?? undefined }
       }
-      for (const m of normalNew) {
+      if (!m.content || !m.content.trim()) return null
+      return { role: 'user', text: m.content, time: m.created_at || now(), db_id: m.id }
+    }
+
+    for (const m of socraticMsgs) {
+      const msg = convertBackendMsg(m)
+      if (!msg) continue
+      if (m.topic_id) {
+        const arr = topicMsgMap.get(m.topic_id) || []
+        arr.push(msg)
+        topicMsgMap.set(m.topic_id, arr)
+      } else {
+        // 回退：无 topic_id 时按 node_key 分组
+        const nk = m.node_key || 'unknown'
+        const arr = nodeKeyMsgMap.get(nk) || []
+        arr.push(msg)
+        nodeKeyMsgMap.set(nk, arr)
+      }
+    }
+
+    // 重建 socratic 会话
+    const newSocratic: Session[] = []
+
+    function buildSessions(map: Map<number, Message[]>) {
+      for (const [topicId, messages] of map) {
+        const eph = ephemeralByTopic.get(topicId) || []
+        messages.push(...eph)
+        messages.sort((a, b) => (a.time || '').localeCompare(b.time || ''))
+        inferSelectedChoices(messages)
+        const topic = store.topics.find(t => Number(t.id) === topicId)
+        newSocratic.push({
+          id: genId(),
+          name: topic?.title?.slice(0, 12) ?? '学习对话',
+          messages,
+          updatedAt: messages[messages.length - 1]?.time ?? nowDate(),
+          topicId,
+          topicTitle: topic?.title,
+        })
+      }
+    }
+
+    buildSessions(topicMsgMap)
+
+    // 回退：无 topic_id 的消息，尝试匹配到当前活跃 topic 的会话
+    if (nodeKeyMsgMap.size > 0) {
+      const cid = currentTopicId.value
+      for (const [nk, msgs] of nodeKeyMsgMap) {
+        msgs.sort((a, b) => (a.time || '').localeCompare(b.time || ''))
+        inferSelectedChoices(msgs)
+        // 尝试在 store.nodes 中查找此 node_key 对应的节点（当前 topic）
+        const node = store.nodes.find(n => n.id === nk)
+        const topic = node ? store.topics.find(t => Number(t.id) === cid) : null
+        newSocratic.push({
+          id: genId(),
+          name: topic?.title?.slice(0, 12) ?? nk.slice(0, 12),
+          messages: msgs,
+          updatedAt: msgs[msgs.length - 1]?.time ?? nowDate(),
+          topicId: topic ? Number(topic.id) : undefined,
+          topicTitle: topic?.title,
+        })
+      }
+    }
+
+    // 保留无 topic 绑定的孤儿会话（用户手动创建的）
+    for (const s of socraticSessions.value) {
+      if (s.topicId == null && !newSocratic.find(ns => ns.id === s.id)) {
+        newSocratic.push(s)
+      }
+    }
+
+    if (newSocratic.length === 0) {
+      newSocratic.push(defaultSession('socratic'))
+    }
+    socraticSessions.value = newSocratic
+
+    // 重建 normal 会话
+    if (normalMsgs.length) {
+      const normalSession: Session = { id: genId(), name: '历史对话', messages: [], updatedAt: nowDate() }
+      for (const m of normalMsgs) {
         normalSession.messages.push({
           role: (m.role === 'ai' ? 'ai' : 'user') as 'ai' | 'user',
           text: m.content, time: m.created_at || now(), db_id: m.id,
         })
       }
-      normalSession.updatedAt = normalNew[normalNew.length - 1]?.created_at || normalSession.updatedAt
       normalSession.messages.sort((a, b) => (a.time || '').localeCompare(b.time || ''))
+      normalSession.updatedAt = normalMsgs[normalMsgs.length - 1]?.created_at || normalSession.updatedAt
+      normalSessions.value = [normalSession]
     }
 
     saveSessions()
   } catch (err) {
-    console.warn('从数据库同步历史消息失败', err)
+    console.warn('从数据库加载历史消息失败', err)
+  }
+}
+
+// 按相邻 AI→user 消息对推断 selected_choice（修复 saveSessions 防抖导致的丢失）
+function inferSelectedChoices(messages: Message[]) {
+  for (let i = 0; i < messages.length - 1; i++) {
+    const msg = messages[i]
+    if (msg.role === 'ai' && msg.choices?.length && !msg.selected_choice) {
+      const next = messages[i + 1]
+      if (next?.role === 'user') {
+        const lm = next.text.match(/^([A-F])[.、]/)
+        if (lm && msg.choices.some(c => c.label === lm[1])) {
+          msg.selected_choice = lm[1]
+        }
+      }
+    }
   }
 }
 
@@ -474,15 +499,13 @@ onMounted(() => {
   isHydrated = true
 })
 
-// 等 store.topics 加载完毕后再从 DB 同步历史，避免 syncFromDB 在 topics 就绪前
-// 创建无 topicId 的孤儿 session（竞态：syncFromDB 的 HTTP 可能比 fetchTopics 先返回）
-let hasSynced = false
+// topics 就绪 + 已登录时，从后端全量拉取消息重建会话（后端为唯一数据源）
+// immediate: true — 覆盖登录后跳转时 topics 已加载完毕、length 不再变化的情况
 watch(() => store.topics.length, (len) => {
-  if (len > 0 && !hasSynced && userScope.value !== 'guest') {
-    hasSynced = true
-    syncFromDB()
+  if (len > 0 && store.userInfo?.id) {
+    rebuildFromBackend()
   }
-})
+}, { immediate: true })
 
 watch(chatMode, () => {
   // 切模式仅读缓存，避免来回切换都打 AI；缓存为空才走默认词
