@@ -3,7 +3,7 @@
 ## 一切问题用中文回答
 
 ## 当前任务
-解决[CHOICES]的渲染问题，分支：`new-DataBase-MySQL`
+解决页面刷新后用户对话不能显示已选过的AI选项，只显示气泡，分支：`new-DataBase-MySQL`
 
 ## 强制约束（必须遵守）
 
@@ -22,7 +22,6 @@
 ### 文件操作
 - **禁止**修改 `.env.production` 文件
 - **禁止**修改迁移目录之外的业务代码（src/、app/ 等）
-- 只允许操作 `migrations/`、`database/` 目录下的文件
 
 ## 每步操作前必须
 1. 确认当前 git 分支是 `new-DataBase-MySQL`

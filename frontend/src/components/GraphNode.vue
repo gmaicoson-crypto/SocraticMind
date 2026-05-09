@@ -97,25 +97,25 @@ const styles = computed(() => {
   const s = props.node.state
   const dark = store.isDark
   if (s === 'mastered') return {
-    bg: dark ? '#1A2A3A' : 'var(--blue)',
-    stroke: dark ? 'rgba(106,169,255,0.35)' : 'var(--blue-2)',
-    label: dark ? '#A8C8F0' : 'white',
-    sub: dark ? 'rgba(168,200,240,0.6)' : 'oklch(0.95 0.02 235)',
-    icon: dark ? '#6AA9FF' : 'white',
+    bg: dark ? '#1A2D3F' : 'var(--blue)',
+    stroke: dark ? 'rgba(74,111,165,0.35)' : 'var(--blue-2)',
+    label: dark ? '#8AA9C6' : 'white',
+    sub: dark ? 'rgba(138,169,198,0.6)' : 'oklch(0.95 0.02 235)',
+    icon: dark ? '#4A6FA5' : 'white',
   }
   if (s === 'available') return {
-    bg: dark ? '#161616' : 'var(--surface)',
+    bg: dark ? '#161B22' : 'var(--surface)',
     stroke: dark ? 'rgba(255,255,255,0.15)' : 'var(--blue)',
-    label: dark ? '#E0E0E0' : 'var(--ink)',
-    sub: dark ? '#6AA9FF' : 'var(--blue-2)',
-    icon: dark ? '#6AA9FF' : 'var(--blue-2)',
+    label: dark ? '#B0B8C4' : 'var(--ink)',
+    sub: dark ? '#4A6FA5' : 'var(--blue-2)',
+    icon: dark ? '#4A6FA5' : 'var(--blue-2)',
   }
   return {
-    bg: dark ? '#0D0D0D' : 'var(--bg-3)',
+    bg: dark ? '#0A0E14' : 'var(--bg-3)',
     stroke: dark ? 'rgba(255,255,255,0.08)' : 'var(--locked)',
-    label: dark ? '#555555' : 'var(--locked-ink)',
-    sub: dark ? '#444444' : 'var(--locked-ink)',
-    icon: dark ? '#555555' : 'var(--locked-ink)',
+    label: dark ? '#484F58' : 'var(--locked-ink)',
+    sub: dark ? '#3D444D' : 'var(--locked-ink)',
+    icon: dark ? '#484F58' : 'var(--locked-ink)',
   }
 })
 </script>

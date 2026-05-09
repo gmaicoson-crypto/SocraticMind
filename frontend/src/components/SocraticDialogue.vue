@@ -30,7 +30,6 @@
         <div>
           <div class="dlg-title">
             {{ currentSessionName }}
-            <span class="dlg-badge">SOCRATES · v3</span>
           </div>
           <div class="dlg-sub">{{ isThinking ? '正在思考…' : '通过提问引导你发现答案' }}</div>
         </div>
@@ -1028,11 +1027,7 @@ onBeforeUnmount(() => {
   display: flex; align-items: center; gap: 6px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px;
 }
-.dlg-badge {
-  font-size: 10px; font-family: var(--font-mono); color: var(--blue-2);
-  background: var(--blue-tint); padding: 1.5px 6px; border-radius: 4px;
-  font-weight: 500; flex-shrink: 0;
-}
+
 .dlg-sub { font-size: 11px; color: var(--ink-3); margin-top: 1px; }
 .dlg-actions { display: flex; gap: 6px; }
 .hdr-btn {

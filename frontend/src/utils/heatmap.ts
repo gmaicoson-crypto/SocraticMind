@@ -1,15 +1,14 @@
-// GitHub 风格热力图配色：浅灰底 + 4 档绿，30/60/120 阈值参考 GitHub 轻/中/重活跃区间
 export const heatColors = [
-  '#F0F0F0', // 0
-  '#9BE9A8', // 1-30
-  '#40C463', // 31-60
-  '#30A14E', // 61-120
-  '#216E39', // 120+
+  'var(--heatmap-0)',
+  'var(--heatmap-1)',
+  'var(--heatmap-2)',
+  'var(--heatmap-3)',
+  'var(--heatmap-4)',
 ] as const
 
 export function heatColor(count: number): string {
   if (count === 0) return heatColors[0]
-  if (count <= 30) return heatColors[1]
+  if (count <= 20) return heatColors[1]
   if (count <= 60) return heatColors[2]
   if (count <= 120) return heatColors[3]
   return heatColors[4]

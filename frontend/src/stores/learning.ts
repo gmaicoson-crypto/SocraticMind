@@ -6,12 +6,26 @@ import { getRecommendations } from '../api/topic'
 import { recordToday, getStreak } from '../api/progress'
 import type { StreakData } from '../api/progress'
 
+// 主题初始化：localStorage > 系统偏好 > 默认明亮
+function getInitialTheme(): boolean {
+  const stored = localStorage.getItem('sm_theme')
+  if (stored !== null) return stored === 'dark'
+  return window.matchMedia('(prefers-color-scheme: dark)').matches
+}
+
+function applyTheme(dark: boolean) {
+  document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light')
+}
+
 export const useLearningStore = defineStore('learning', () => {
 
   // ── 主题状态 ──
   // shallowRef 仅追踪 .value 引用替换；这些数组都是整体替换（fetchNodes/fetchTopics/masterNode），
   // 不存在按索引修改，shallowRef 省去深层 reactive Proxy 包装，节点/主题数变多时收益明显
-  const isDark = ref(false)
+  const isDark = ref(getInitialTheme())
+
+  // 首次加载时立即应用主题
+  applyTheme(isDark.value)
   const nodes = shallowRef<KNode[]>([])
   const edges = shallowRef<KEdge[]>([])
   const topics = shallowRef<Topic[]>([])
@@ -205,7 +219,8 @@ export const useLearningStore = defineStore('learning', () => {
   // ── 主题切换 ──
   function toggleTheme() {
     isDark.value = !isDark.value
-    document.documentElement.setAttribute('data-theme', isDark.value ? 'dark' : 'light')
+    localStorage.setItem('sm_theme', isDark.value ? 'dark' : 'light')
+    applyTheme(isDark.value)
   }
 
   function clearGraph() {
