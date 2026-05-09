@@ -63,7 +63,6 @@
         :node="n"
         :is-selected="store.activeNode?.id === n.id"
         @click="handleClick"
-        @hover="handleHover"
       />
     </svg>
 
@@ -75,11 +74,6 @@
       </svg>
       <div class="empty-title">暂无知识图谱</div>
       <div class="empty-sub">在左侧对话框告诉 AI 你想学什么</div>
-    </div>
-
-    <!-- Tooltip -->
-    <div v-if="tip" class="tip" :style="{ left: tip.x + 'px', top: tip.y + 'px' }">
-      {{ tip.text }}
     </div>
 
     <!-- Confetti canvas -->
@@ -148,7 +142,6 @@ const store = useLearningStore()
 const containerRef = ref<HTMLElement | null>(null)
 const svgRef = ref<SVGSVGElement | null>(null)
 const confettiCanvasRef = ref<HTMLCanvasElement | null>(null)
-const tip = ref<{ x: number; y: number; text: string } | null>(null)
 const showScaleHint = ref(false)
 
 // 基础 viewBox 尺寸
@@ -455,23 +448,6 @@ function handleClick(node: KNode) {
   if (node.state === 'locked') return
   store.setActiveNode(node)
 }
-
-function handleHover(payload: { node: KNode | null; event?: MouseEvent }) {
-  if (!payload.node) { tip.value = null; return }
-  if (!containerRef.value || !svgRef.value) return
-  const containerRect = containerRef.value.getBoundingClientRect()
-  const svgRect = svgRef.value.getBoundingClientRect()
-  const parts = viewBox.value.split(' ').map(Number)
-  const [vx, vy, vw, vh] = parts
-  const x = ((payload.node.x - vx) / vw) * svgRect.width + (svgRect.left - containerRect.left)
-  const y = ((payload.node.y - vy) / vh) * svgRect.height + (svgRect.top - containerRect.top)
-  const textMap: Record<string, string> = {
-    mastered: '已掌握 · 点击复习',
-    available: '可学习 · 点击开始',
-    locked: '已锁定 · 解锁前置节点',
-  }
-  tip.value = { x, y, text: textMap[payload.node.state] }
-}
 </script>
 
 <style scoped>
@@ -551,27 +527,6 @@ function handleHover(payload: { node: KNode | null; event?: MouseEvent }) {
   color: var(--ink-3);
 }
 
-.tip {
-  position: absolute;
-  pointer-events: none;
-  background: oklch(0.22 0.012 250);
-  color: var(--bg);
-  font-size: 11.5px;
-  padding: 6px 9px;
-  border-radius: 6px;
-  transform: translate(-50%, calc(-100% - 10px));
-  white-space: nowrap;
-  z-index: 50;
-  font-weight: 500;
-}
-.tip::after {
-  content: '';
-  position: absolute;
-  left: 50%; bottom: -4px;
-  transform: translateX(-50%) rotate(45deg);
-  width: 8px; height: 8px;
-  background: oklch(0.22 0.012 250);
-}
 
 .confetti-canvas {
   position: absolute;

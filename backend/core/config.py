@@ -5,7 +5,7 @@ class Settings(BaseSettings):
     deepseek_base_url: str = "https://api.deepseek.com"
     deepseek_model: str = "deepseek-chat"
     secret_key: str
-    database_url: str = "sqlite:///./socraticmind.db"
+    database_url: str = "mysql+pymysql://root@localhost:3306/socraticmind"
     access_token_expire_minutes: int = 60 * 24 * 7  # 7天
 
     # SMTP 配置：未配置 smtp_host 时，验证码会打印到控制台（开发用）

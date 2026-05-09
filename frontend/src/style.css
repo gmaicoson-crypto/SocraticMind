@@ -448,14 +448,6 @@ html, body, #app {
 }
 
 /* ════ Knowledge graph ════ */
-[data-theme="dark"] .tip {
-  background: #B0B8C4;
-  color: #000000;
-}
-
-[data-theme="dark"] .tip::after {
-  background: #B0B8C4;
-}
 
 [data-theme="dark"] .graph-wrap line,
 [data-theme="dark"] .graph-wrap path[fill="none"] {

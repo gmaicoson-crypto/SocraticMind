@@ -30,7 +30,10 @@
           <path d="M12 2 L13.5 8.5 L20 10 L13.5 11.5 L12 18 L10.5 11.5 L4 10 L10.5 8.5 Z" fill="white"/>
         </svg>
       </div>
-      <div v-else class="user-avatar">{{ userInitial }}</div>
+      <div v-else class="user-avatar" :style="avatarUrl ? {} : { background: avatarGrad }">
+        <img v-if="avatarUrl" :src="avatarSrc(avatarUrl)" alt="avatar" class="user-avatar-img" decoding="async" />
+        <template v-else>{{ userInitial }}</template>
+      </div>
 
       <div class="msg-content" :class="msg.role">
         <div v-if="msg.quote" class="msg-quote">
@@ -148,6 +151,7 @@
 import { ref, computed, nextTick, onBeforeUnmount } from 'vue'
 import type { Message } from '../../types'
 import InlineMarkdown from '../InlineMarkdown.vue'
+import { avatarSrc } from '../../utils/avatar'
 
 defineEmits<{
   (e: 'delete', index: number): void
@@ -162,6 +166,8 @@ const props = defineProps<{
   streamingChoices?: { label: string; text: string }[] | null
   isThinking: boolean
   userInitial: string
+  avatarUrl: string | null
+  avatarGrad: string
 }>()
 
 const displayStreamingText = computed(() => {
@@ -238,6 +244,11 @@ defineExpose({ scrollToBottom })
   width: 28px; height: 28px; flex-shrink: 0; border-radius: 8px;
   background: var(--bg-3); color: var(--ink-2); font-weight: 600;
   display: flex; align-items: center; justify-content: center; font-size: 12px;
+  overflow: hidden;
+}
+.user-avatar-img {
+  width: 100%; height: 100%; object-fit: cover;
+  border-radius: inherit;
 }
 
 .msg-quote {

@@ -66,6 +66,8 @@
       :streaming-choices="streamingChoices"
       :is-thinking="isThinking"
       :user-initial="userInitial"
+      :avatar-url="store.userInfo?.avatar_url ?? null"
+      :avatar-grad="store.userInfo?.avatar_grad ?? ''"
       @delete="deleteMessage"
       @retry="retryAt"
       @quote="quoteMessage"
@@ -379,52 +381,54 @@ async function syncFromDB() {
     }
 
     const newMsgs = msgs.filter(m => !existingIds.has(m.id))
-    if (!newMsgs.length) return
-
     const socraticNew = newMsgs.filter(m => m.mode === 'socratic')
     const normalNew = newMsgs.filter(m => m.mode !== 'socratic')
 
-    for (const m of socraticNew) {
-      const nk = m.node_key || 'unknown'
-      // 优先通过 topic 标题查找 topicId 再匹配 session（主题概览的 node_key 即标题）
-      let session: Session | undefined
-      const matchedTopic = store.topics.find(t => t.title === nk)
-      if (matchedTopic) {
-        session = socraticSessions.value.find(s => s.topicId === Number(matchedTopic.id))
+    if (socraticNew.length) {
+      for (const m of socraticNew) {
+        const nk = m.node_key || 'unknown'
+        // 优先通过 topic 标题查找 topicId 再匹配 session（主题概览的 node_key 即标题）
+        let session: Session | undefined
+        const matchedTopic = store.topics.find(t => t.title === nk)
+        if (matchedTopic) {
+          session = socraticSessions.value.find(s => s.topicId === Number(matchedTopic.id))
+        }
+        // 回退：按 topicTitle / name 模糊匹配
+        if (!session) {
+          session = socraticSessions.value.find(s => s.topicTitle === nk || s.name === nk.slice(0, 12))
+        }
+        // 仍未匹配则跳过，不再创建无 topicId 的孤儿 session
+        if (!session) continue
+        // 内容去重：防止 db_id 缺失时同一消息重复合并
+        if (session.messages.some(existing => existing.text === m.content)) continue
+        if (m.role === 'ai') {
+          const { cleanText, choices } = parseChoices(m.content)
+          session.messages.push({
+            role: 'ai',
+            text: cleanText,
+            time: m.created_at || now(),
+            db_id: m.id,
+            choices: choices ?? undefined,
+          })
+        } else {
+          // 跳过空内容的用户消息（topic_overview / node_overview 触发的占位记录）
+          if (!m.content || !m.content.trim()) continue
+          session.messages.push({
+            role: 'user',
+            text: m.content,
+            time: m.created_at || now(),
+            db_id: m.id,
+          })
+        }
+        session.updatedAt = m.created_at || session.updatedAt
       }
-      // 回退：按 topicTitle / name 模糊匹配
-      if (!session) {
-        session = socraticSessions.value.find(s => s.topicTitle === nk || s.name === nk.slice(0, 12))
+      for (const s of socraticSessions.value) {
+        s.messages.sort((a, b) => (a.time || '').localeCompare(b.time || ''))
       }
-      // 仍未匹配则跳过，不再创建无 topicId 的孤儿 session
-      if (!session) continue
-      // 内容去重：防止 db_id 缺失时同一消息重复合并
-      if (session.messages.some(existing => existing.text === m.content)) continue
-      if (m.role === 'ai') {
-        const { cleanText, choices } = parseChoices(m.content)
-        session.messages.push({
-          role: 'ai',
-          text: cleanText,
-          time: m.created_at || now(),
-          db_id: m.id,
-          choices: choices ?? undefined,
-        })
-      } else {
-        // 跳过空内容的用户消息（topic_overview / node_overview 触发的占位记录）
-        if (!m.content || !m.content.trim()) continue
-        session.messages.push({
-          role: 'user',
-          text: m.content,
-          time: m.created_at || now(),
-          db_id: m.id,
-        })
-      }
-      session.updatedAt = m.created_at || session.updatedAt
     }
-    for (const s of socraticSessions.value) {
-      s.messages.sort((a, b) => (a.time || '').localeCompare(b.time || ''))
-    }
-    // 推断历史选中项：若用户回复以 "A. / B. ..." 开头且匹配 AI 选项，则标记 selected_choice
+
+    // 每次刷新都推断历史选中项，修复 saveSessions 300ms 防抖导致 selected_choice
+    // 来不及持久化就刷新时，下次加载无法显示已选高亮的问题
     for (const s of socraticSessions.value) {
       for (let i = 0; i < s.messages.length - 1; i++) {
         const msg = s.messages[i]

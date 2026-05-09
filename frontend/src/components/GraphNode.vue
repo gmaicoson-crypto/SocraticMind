@@ -5,8 +5,6 @@
     :style="{ cursor: node.state === 'locked' ? 'not-allowed' : 'pointer' }"
     :class="{ 'node-mastered': node.state === 'mastered' }"
     @click="emit('click', node)"
-    @mouseenter="emit('hover', { node, event: $event })"
-    @mouseleave="emit('hover', { node: null })"
   >
     <!-- 选中虚线边框 -->
     <rect
@@ -78,7 +76,6 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   click: [node: KNode]
-  hover: [payload: { node: KNode | null; event?: MouseEvent }]
 }>()
 
 const store = useLearningStore()
