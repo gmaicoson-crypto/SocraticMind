@@ -64,11 +64,13 @@
       ref="messageListRef"
       :messages="messages"
       :streaming-text="streamingText"
+      :streaming-choices="streamingChoices"
       :is-thinking="isThinking"
       :user-initial="userInitial"
       @delete="deleteMessage"
       @retry="retryAt"
       @quote="quoteMessage"
+      @select-choice="sendChoiceText"
     />
 
     <DialogueInputBar
@@ -97,7 +99,7 @@
 import { ref, watch, nextTick, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useLearningStore } from '../stores/learning'
 import type { Message } from '../types'
-import { chatStream, getSuggestions, deleteMessages } from '../api/chat'
+import { chatStream, getSuggestions, deleteMessages, getAllMessages } from '../api/chat'
 import { generateTopic, updateTopicTitle } from '../api/topic'
 import { now, nowDate, genId, extractTopic, isNewTopicIntent, isConfirmation } from '../utils/chat'
 
@@ -125,6 +127,7 @@ const input = ref('')
 const isThinking = ref(false)
 const isGenerating = ref(false)
 const streamingText = ref('')
+const streamingChoices = ref<{ label: string; text: string }[] | null>(null)
 const quotedText = ref('')
 const showHistory = ref(false)
 const editingSessionId = ref<string | null>(null)
@@ -361,9 +364,72 @@ function newSession() {
   scrollToBottom()
 }
 
+// 从数据库拉取全部历史，增量合并到已有会话（按 db_id 去重）
+async function syncFromDB() {
+  try {
+    const msgs = await getAllMessages()
+    if (!msgs.length) return
+
+    const existingIds = new Set<number>()
+    for (const s of [...socraticSessions.value, ...normalSessions.value]) {
+      for (const m of s.messages) {
+        if (m.db_id != null) existingIds.add(m.db_id)
+      }
+    }
+
+    const newMsgs = msgs.filter(m => !existingIds.has(m.id))
+    if (!newMsgs.length) return
+
+    const socraticNew = newMsgs.filter(m => m.mode === 'socratic')
+    const normalNew = newMsgs.filter(m => m.mode !== 'socratic')
+
+    for (const m of socraticNew) {
+      const nk = m.node_key || 'unknown'
+      let session = socraticSessions.value.find(s => s.topicTitle === nk || s.name === nk.slice(0, 12))
+      if (!session) {
+        session = { id: genId(), name: nk.slice(0, 12), messages: [], updatedAt: nowDate(), topicTitle: nk }
+        socraticSessions.value.push(session)
+      }
+      session.messages.push({
+        role: (m.role === 'ai' ? 'ai' : 'user') as 'ai' | 'user',
+        text: m.content, time: m.created_at || now(), db_id: m.id,
+      })
+      session.updatedAt = m.created_at || session.updatedAt
+    }
+    for (const s of socraticSessions.value) {
+      s.messages.sort((a, b) => (a.time || '').localeCompare(b.time || ''))
+    }
+
+    if (normalNew.length) {
+      let normalSession = normalSessions.value.find(s => s.name === '历史对话' && s.messages.length > 1)
+      if (!normalSession) {
+        normalSession = { id: genId(), name: '历史对话', messages: [], updatedAt: nowDate() }
+        normalSessions.value.unshift(normalSession)
+      }
+      for (const m of normalNew) {
+        normalSession.messages.push({
+          role: (m.role === 'ai' ? 'ai' : 'user') as 'ai' | 'user',
+          text: m.content, time: m.created_at || now(), db_id: m.id,
+        })
+      }
+      normalSession.updatedAt = normalNew[normalNew.length - 1]?.created_at || normalSession.updatedAt
+      normalSession.messages.sort((a, b) => (a.time || '').localeCompare(b.time || ''))
+    }
+
+    saveSessions()
+  } catch (err) {
+    console.warn('从数据库同步历史消息失败', err)
+  }
+}
+
 onMounted(() => {
   const cached = loadCachedChips(chatMode.value)
   chips.value = cached.length > 0 ? cached : defaultChips[chatMode.value]
+
+  // 始终从数据库同步全部历史（增量合并，按 id 去重）
+  if (userScope.value !== 'guest') {
+    syncFromDB()
+  }
 })
 
 watch(chatMode, () => {
@@ -504,11 +570,14 @@ function abortChat() {
     abortController.abort()
     abortController = null
   }
-  // 把已经 stream 出来的部分内容也保留，避免用户看到"什么都没回"
   const partial = streamingText.value.trim()
   streamingText.value = ''
+  streamingChoices.value = null
   isThinking.value = false
-  if (partial) pushMessage({ role: 'ai', text: partial, time: now() })
+  if (partial) {
+    const { cleanText, choices } = parseChoices(partial)
+    pushMessage({ role: 'ai', text: cleanText, time: now(), choices: choices ?? undefined })
+  }
   scrollToBottom()
 }
 
@@ -569,9 +638,47 @@ async function saveTopicName() {
   editingTopicName.value = false
 }
 
-// 把流式片段里的 [MASTERED]/[CONFIRM_MASTER] 信号 token 剔掉，只渲染对用户可见的内容
+// 把流式片段里的 [MASTERED]/[CONFIRM_MASTER] 信号 token 剔掉
 function stripSignals(s: string): string {
   return s.replace(/\[MASTERED\]/g, '').replace(/\[CONFIRM_MASTER\]/g, '')
+}
+
+// 去掉 [CHOICES]...[ECHOICES] 块，用于流式展示
+function stripChoicesBlock(s: string): string {
+  return s.replace(/\s*\[CHOICES\][\s\S]*?\[ECHOICES\]\s*/g, '')
+}
+
+// 流式过程中检测完整的 [CHOICES]...[ECHOICES] 块，有则提前解析出选项
+function checkStreamingChoices() {
+  if (!streamingChoices.value) {
+    const { choices } = parseChoices(streamingText.value)
+    if (choices) streamingChoices.value = choices
+  }
+}
+
+// 从 AI 回复中提取 [CHOICES]...[ECHOICES] 选项块，返回清洗后的正文 + 选项数组
+function parseChoices(text: string): { cleanText: string; choices: { label: string; text: string }[] | null } {
+  const match = text.match(/\[CHOICES\]([\s\S]*?)\[ECHOICES\]/)
+  if (!match) return { cleanText: text, choices: null }
+  const cleanText = text.replace(/\s*\[CHOICES\][\s\S]*?\[ECHOICES\]\s*/g, '').trim()
+  const lines = match[1].trim().split('\n').filter(Boolean)
+  const choices = lines
+    .map(line => {
+      const m = line.match(/^([A-F])[.、]\s*(.+?)(?:\s*[—\-–:：]\s*(.+))?$/)
+      if (!m) return null
+      return { label: m[1], text: m[2] + (m[3] ? ` —— ${m[3]}` : '') }
+    })
+    .filter((c): c is { label: string; text: string } => c !== null)
+  return { cleanText, choices: choices.length >= 2 ? choices : null }
+}
+
+// 用户点击选项按钮时，直接作为用户消息发送，无需手动输入
+function sendChoiceText(choiceText: string) {
+  if (isGenerating.value) return
+  // 流式进行中点击选项：先中止当前流，commit 已有内容，再发送选择
+  if (isThinking.value) abortChat()
+  input.value = choiceText
+  send()
 }
 
 async function send() {
@@ -601,12 +708,16 @@ async function send() {
       'normal', 0, userInput, history, 'normal', '标准',
       (chunk) => {
         streamingText.value = stripSignals(streamingText.value + chunk)
+        checkStreamingChoices()
         scrollToBottom()
       },
       () => {
         const t = stripSignals(streamingText.value).trim()
-        streamingText.value = ''; isThinking.value = false
-        if (t) pushMessage({ role: 'ai', text: t, time: now() })
+        streamingText.value = ''; streamingChoices.value = null; isThinking.value = false
+        if (t) {
+          const { cleanText, choices } = parseChoices(t)
+          pushMessage({ role: 'ai', text: cleanText, time: now(), choices: choices ?? undefined })
+        }
         scrollToBottom()
       },
       (err) => {
@@ -676,13 +787,15 @@ async function send() {
     store.activeNode.id, currentTopicId.value, userInput, history, 'socratic', aiStyle.value,
     (chunk) => {
       streamingText.value = stripSignals(streamingText.value + chunk)
+      checkStreamingChoices()
       scrollToBottom()
     },
     () => {
       const t = stripSignals(streamingText.value).trim()
-      streamingText.value = ''; isThinking.value = false
+      streamingText.value = ''; streamingChoices.value = null; isThinking.value = false
       if (t) {
-        const aiMsg: Message = { role: 'ai', text: t, time: now() }
+        const { cleanText, choices } = parseChoices(t)
+        const aiMsg: Message = { role: 'ai', text: cleanText, time: now(), choices: choices ?? undefined }
         if (pendingMsgIds) {
           userMsgRef.db_id = pendingMsgIds.user
           aiMsg.db_id = pendingMsgIds.ai
@@ -726,12 +839,16 @@ async function retryAt(aiIndex: number) {
     store.activeNode?.id ?? 'normal', currentTopicId.value, userMsg.text, history, chatMode.value, aiStyle.value,
     (chunk) => {
       streamingText.value = stripSignals(streamingText.value + chunk)
+      checkStreamingChoices()
       scrollToBottom()
     },
     () => {
       const t = stripSignals(streamingText.value).trim()
-      streamingText.value = ''; isThinking.value = false
-      if (t) pushMessage({ role: 'ai', text: t, time: now() })
+      streamingText.value = ''; streamingChoices.value = null; isThinking.value = false
+      if (t) {
+        const { cleanText, choices } = parseChoices(t)
+        pushMessage({ role: 'ai', text: cleanText, time: now(), choices: choices ?? undefined })
+      }
       scrollToBottom()
     },
     (err) => {
@@ -787,13 +904,17 @@ function streamOverview(kind: 'topic' | 'node', identifier: string): Promise<voi
       'socratic', aiStyle.value,
       (chunk) => {
         streamingText.value = stripSignals(streamingText.value + chunk)
+        checkStreamingChoices()
         scrollToBottom()
       },
       () => {
         const t = stripSignals(streamingText.value).trim()
-        streamingText.value = ''
+        streamingText.value = ''; streamingChoices.value = null
         isThinking.value = false
-        if (t) pushMessage({ role: 'ai', text: t, time: now() })
+        if (t) {
+          const { cleanText, choices } = parseChoices(t)
+          pushMessage({ role: 'ai', text: cleanText, time: now(), choices: choices ?? undefined })
+        }
         scrollToBottom()
         resolve()
       },
@@ -834,14 +955,16 @@ watch(() => store.activeNode?.id, async (id) => {
       'socratic', aiStyle.value,
       (chunk) => {
         streamingText.value = stripSignals(streamingText.value + chunk)
+        checkStreamingChoices()
         scrollToBottom()
       },
       () => {
         const t = stripSignals(streamingText.value).trim()
-        streamingText.value = ''
+        streamingText.value = ''; streamingChoices.value = null
         isThinking.value = false
         if (t) {
-          const aiMsg: Message = { role: 'ai', text: t, time: now() }
+          const { cleanText, choices } = parseChoices(t)
+          const aiMsg: Message = { role: 'ai', text: cleanText, time: now(), choices: choices ?? undefined }
           if (pendingMsgIds) {
             aiMsg.db_id = pendingMsgIds.ai
             aiMsg.paired_db_id = pendingMsgIds.user

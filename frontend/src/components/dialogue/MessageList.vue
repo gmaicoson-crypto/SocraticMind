@@ -40,6 +40,18 @@
         <div class="bubble" :class="msg.role">
           <InlineMarkdown :text="msg.text" :with-caret="false" />
         </div>
+        <!-- AI 选项按钮：仅最后一条消息且非思考中渲染 -->
+        <div v-if="msg.choices && msg.choices.length && msg.role === 'ai' && i === messages.length - 1 && !isThinking" class="choices-row">
+          <button
+            v-for="c in msg.choices"
+            :key="c.label"
+            class="choice-btn"
+            @click="$emit('select-choice', c.label + '. ' + c.text)"
+          >
+            <span class="choice-label">{{ c.label }}</span>
+            <span class="choice-text">{{ c.text }}</span>
+          </button>
+        </div>
         <div class="msg-actions" :class="{ visible: hoveredIndex === i }">
           <span class="msg-time">{{ msg.role === 'ai' ? 'Socrates AI' : '你' }} · {{ msg.time }}</span>
           <div class="action-btns">
@@ -81,7 +93,18 @@
       </div>
       <div class="msg-content ai">
         <div class="bubble ai">
-          <InlineMarkdown :text="streamingText" :with-caret="true" />
+          <InlineMarkdown :text="displayStreamingText" :with-caret="true" />
+        </div>
+        <div v-if="streamingChoices && streamingChoices.length" class="choices-row">
+          <button
+            v-for="c in streamingChoices"
+            :key="c.label"
+            class="choice-btn"
+            @click="$emit('select-choice', c.label + '. ' + c.text)"
+          >
+            <span class="choice-label">{{ c.label }}</span>
+            <span class="choice-text">{{ c.text }}</span>
+          </button>
         </div>
       </div>
     </div>
@@ -103,22 +126,35 @@
 </template>
 
 <script setup lang="ts">
-import { ref, nextTick, onBeforeUnmount } from 'vue'
+import { ref, computed, nextTick, onBeforeUnmount } from 'vue'
 import type { Message } from '../../types'
 import InlineMarkdown from '../InlineMarkdown.vue'
-
-defineProps<{
-  messages: Message[]
-  streamingText: string
-  isThinking: boolean
-  userInitial: string
-}>()
 
 defineEmits<{
   (e: 'delete', index: number): void
   (e: 'retry', index: number): void
   (e: 'quote', msg: Message): void
+  (e: 'select-choice', text: string): void
 }>()
+
+const props = defineProps<{
+  messages: Message[]
+  streamingText: string
+  streamingChoices?: { label: string; text: string }[] | null
+  isThinking: boolean
+  userInitial: string
+}>()
+
+const displayStreamingText = computed(() => {
+  let text = props.streamingText
+  // 去掉完整的 [CHOICES]...[ECHOICES] 块
+  text = text.replace(/\s*\[CHOICES\][\s\S]*?\[ECHOICES\]\s*/g, '')
+  // [CHOICES] 已到但 [ECHOICES] 还没到 → 截断，不暴露裸标签
+  const idx = text.indexOf('[CHOICES]')
+  if (idx !== -1) text = text.slice(0, idx)
+  return text
+})
+
 
 const scrollRef = ref<HTMLElement | null>(null)
 const showScrollBtn = ref(false)
@@ -153,6 +189,7 @@ async function onCopy(msg: Message, index: number) {
     console.warn('复制到剪贴板失败', err)
   }
 }
+
 
 onBeforeUnmount(() => {
   if (scrollFrame !== null) cancelAnimationFrame(scrollFrame)
@@ -226,6 +263,31 @@ defineExpose({ scrollToBottom })
 @keyframes dot {
   0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); }
   40% { opacity: 1; transform: scale(1); }
+}
+
+/* 选项按钮 */
+.choices-row {
+  display: flex; flex-direction: column; gap: 5px; margin-top: 4px;
+}
+.choice-btn {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 12px;
+  background: var(--surface); border: 1px solid var(--blue-line); border-radius: 8px;
+  cursor: pointer; text-align: left; font-family: var(--font-sans);
+  transition: all .15s;
+}
+.choice-btn:hover {
+  background: var(--blue-tint); border-color: var(--blue-2);
+  transform: translateX(2px);
+}
+.choice-label {
+  width: 22px; height: 22px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--blue-soft); color: var(--blue-2);
+  font-size: 11px; font-weight: 700; border-radius: 5px; flex-shrink: 0;
+}
+.choice-text {
+  font-size: 12.5px; color: var(--ink-2); line-height: 1.4;
 }
 
 .scroll-to-bottom {

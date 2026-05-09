@@ -32,6 +32,9 @@ class HistoryResponse(BaseModel):
     id: int
     role: str
     content: str
+    node_key: str = ""
+    mode: str = ""
+    created_at: str = ""
 
     class Config:
         from_attributes = True
@@ -145,6 +148,26 @@ def get_history(
         ChatMessage.user_id == current_user.id,
         ChatMessage.node_key == node_key,
     ).order_by(ChatMessage.id).limit(50).all()
+
+@router.get("/messages", response_model=List[HistoryResponse])
+def get_all_messages(
+    limit: int = 200,
+    offset: int = 0,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    msgs = db.query(ChatMessage).filter(
+        ChatMessage.user_id == current_user.id,
+    ).order_by(ChatMessage.id.desc()).offset(offset).limit(limit).all()
+    return [{
+        "id": m.id,
+        "role": m.role,
+        "content": m.content,
+        "node_key": m.node_key,
+        "mode": m.mode,
+        "created_at": m.created_at.strftime("%Y-%m-%d %H:%M:%S") if m.created_at else "",
+    } for m in msgs]
+
 
 class DeleteMessagesRequest(BaseModel):
     ids: List[int]

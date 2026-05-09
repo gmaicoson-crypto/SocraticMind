@@ -83,8 +83,9 @@ export function chatStream(
               if (json.text) onChunk(json.text)
               if (json.signal) onSignal?.(json.signal)
               if (json.msg_ids) onMsgIds?.(json.msg_ids.user, json.msg_ids.ai)
-            } catch {
-              // 流式传输偶发分片：解析失败属预期内，忽略
+            } catch (e) {
+              // 流式传输偶发分片，但持续失败需关注
+              console.warn('[SSE] JSON 解析失败，分片数据:', data.slice(0, 80), e)
             }
           }
         }
@@ -120,6 +121,12 @@ export function chatStream(
 export async function getChatHistory(nodeKey: string) {
   const res = await api.get(`/api/chat/history/${nodeKey}`)
   return res.data as { id: number; role: string; content: string }[]
+}
+
+// 从数据库获取用户所有消息（localStorage 空时回退）
+export async function getAllMessages(limit = 200, offset = 0) {
+  const res = await api.get(`/api/chat/messages?limit=${limit}&offset=${offset}`)
+  return res.data as { id: number; role: string; content: string; node_key: string; mode: string; created_at: string }[]
 }
 
 export async function deleteMessages(ids: number[]) {

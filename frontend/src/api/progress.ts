@@ -19,6 +19,7 @@ export interface ProfileStats {
   chat_count: number
   mastered_count: number
   streak: number
+  total_days: number
   heatmap: { date: string; count: number }[]
   timeline: { type: string; title: string; sub: string; time: string }[]
   badges: { icon: string; name: string; unlocked: boolean }[]

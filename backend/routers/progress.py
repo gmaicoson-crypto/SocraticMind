@@ -95,7 +95,7 @@ def get_stats(
     ).count()
 
     # 热力图：一次按日期 GROUP BY 取所有计数；之前是 365 次独立 COUNT
-    date_expr = func.substr(func.cast(ChatMessage.created_at, String), 1, 10)
+    date_expr = func.substr(func.cast(ChatMessage.created_at, String(10)), 1, 10)
     heatmap_rows = db.query(
         date_expr.label("d"),
         func.count().label("c"),
@@ -140,11 +140,11 @@ def get_stats(
         Topic.user_id == current_user.id,
         Node.state == "mastered",
         Node.mastered_at.isnot(None),
-        func.substr(func.cast(Node.mastered_at, String), 1, 10) >= week_start_str,
+        func.substr(func.cast(Node.mastered_at, String(10)), 1, 10) >= week_start_str,
     ).count()
 
     # 最活跃时段：按 hour GROUP BY，避免全表加载到 Python 再循环统计
-    hour_expr = func.cast(func.strftime("%H", ChatMessage.created_at), String)
+    hour_expr = func.cast(func.date_format(ChatMessage.created_at, "%H"), String(2))
     hour_rows = db.query(
         hour_expr.label("h"),
         func.count().label("c"),
@@ -200,6 +200,7 @@ def get_stats(
         "chat_count": chat_count,
         "mastered_count": mastered_count,
         "streak": streak,
+        "total_days": total_days_learned,
         "heatmap": heatmap,
         "timeline": timeline,
         "badges": badges,

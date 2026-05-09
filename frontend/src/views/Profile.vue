@@ -108,7 +108,7 @@ import { useLearningStore } from '../stores/learning'
 import TopBar from '../components/TopBar.vue'
 // 编辑资料弹窗只在用户点"编辑"时显示，做成 async 避免首次进入 Profile 页就拉取 ~360 行的弹窗代码
 const EditProfileModal = defineAsyncComponent(() => import('../components/EditProfileModal.vue'))
-import { getProfileStats } from '../api/progress'
+import { getProfileStats, recordToday } from '../api/progress'
 import { loadTodayProgress } from '../utils/dailyGoal'
 import type { ProfileStats } from '../api/progress'
 
@@ -127,6 +127,7 @@ const stats = shallowRef<ProfileStats>({
   chat_count: 0,
   mastered_count: 0,
   streak: 0,
+  total_days: 0,
   heatmap: [],
   timeline: [],
   badges: [],
@@ -140,14 +141,18 @@ const stats = shallowRef<ProfileStats>({
 })
 
 onMounted(async () => {
-  // 先确保今日学习记录已写入再拉统计；同时刷新 store 的 streak，让首页 Sidebar 与本页同源
+  // POST 今日学习记录（仅写入，不额外拉取 streak——stats 已包含 streak）
   try {
-    await store.recordLearning()
+    await recordToday()
   } catch (err) {
-    console.warn('记录今日学习失败，统计可能短暂滞后', err)
+    console.warn('记录今日学习失败', err)
   }
   try {
-    stats.value = await getProfileStats()
+    const data = await getProfileStats()
+    stats.value = data
+    // 同步 streak 到 store，避免冗余的 GET /api/progress/streak
+    store.streakData.streak = data.streak
+    store.streakData.total_days = data.total_days
   } catch (err) {
     console.error('加载统计数据失败', err)
   }

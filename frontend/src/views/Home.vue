@@ -137,8 +137,7 @@ onMounted(async () => {
     leftWidth.value = Math.round(total * 0.45)
   }
 
-  const token = localStorage.getItem('sm_token')
-  if (token) await store.fetchTopics()
+  // fetchTopics 已在 App.vue onMounted 中调用，此处不重复请求
 })
 
 onBeforeUnmount(() => {

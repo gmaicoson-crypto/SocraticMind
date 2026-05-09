@@ -30,4 +30,5 @@ export interface Message {
   quote?: string
   db_id?: number        // DB primary key for this message record
   paired_db_id?: number // for AI messages auto-triggered by an invisible system prompt
+  choices?: { label: string; text: string }[]  // [CHOICES] 解析出的选项
 }

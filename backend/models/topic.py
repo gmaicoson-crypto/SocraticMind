@@ -8,8 +8,8 @@ class Topic(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    title = Column(String, nullable=False)
-    emoji = Column(String, default="📚")
+    title = Column(String(200), nullable=False)
+    emoji = Column(String(10), default="📚")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     nodes = relationship("Node", back_populates="topic", cascade="all, delete")

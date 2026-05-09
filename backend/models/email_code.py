@@ -7,9 +7,9 @@ class EmailCode(Base):
     __tablename__ = "email_codes"
 
     id = Column(Integer, primary_key=True, index=True)
-    email = Column(String, nullable=False)
-    code = Column(String, nullable=False)
-    purpose = Column(String, nullable=False)  # register / reset
+    email = Column(String(255), nullable=False)
+    code = Column(String(10), nullable=False)
+    purpose = Column(String(20), nullable=False)  # register / reset
     expires_at = Column(DateTime(timezone=True), nullable=False)
     used = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

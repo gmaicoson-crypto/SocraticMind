@@ -9,14 +9,14 @@ class Node(Base):
     id = Column(Integer, primary_key=True, index=True)
     # 加索引：search、joinedload 都按 topic_id 过滤
     topic_id = Column(Integer, ForeignKey("topics.id"), nullable=False, index=True)
-    node_key = Column(String, nullable=False)   # 前端用的 id，如 "py-basics"
-    label = Column(String, nullable=False)
-    sub = Column(String, default="")
+    node_key = Column(String(100), nullable=False)   # 前端用的 id，如 "py-basics"
+    label = Column(String(200), nullable=False)
+    sub = Column(String(500), default="")
     # state 是搜索结果与统计的高频过滤列
-    state = Column(String, default="locked", index=True)  # locked / available / mastered
+    state = Column(String(20), default="locked", index=True)  # locked / available / mastered
     x = Column(Float, default=0)
     y = Column(Float, default=0)
-    parent_keys = Column(String, default="")    # 逗号分隔的父节点 key
+    parent_keys = Column(String(500), default="")    # 逗号分隔的父节点 key
     mastered_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 

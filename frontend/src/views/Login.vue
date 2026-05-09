@@ -394,6 +394,7 @@ async function handleSubmit() {
     localStorage.setItem('sm_user', JSON.stringify(result.user))
     store.setUserInfo(result.user)
     await store.fetchTopics()
+    await store.fetchStreak()
     router.push('/')
   } catch (err: any) {
     errorMsg.value = err.response?.data?.detail || '操作失败，请重试'

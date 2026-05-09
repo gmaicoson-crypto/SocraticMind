@@ -7,10 +7,10 @@ class ChatMessage(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
-    node_key = Column(String, nullable=False)
-    role = Column(String, nullable=False)            # ai / user
+    node_key = Column(String(100), nullable=False)
+    role = Column(String(10), nullable=False)            # ai / user
     content = Column(Text, nullable=False)
-    mode = Column(String, default="socratic")
+    mode = Column(String(50), default="socratic")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     # 热力图、本周统计、最活跃时段都按 user_id + created_at 范围过滤
@@ -27,7 +27,7 @@ class LearningRecord(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
-    date = Column(String, nullable=False)            # "2026-04-30"
+    date = Column(String(10), nullable=False)            # "2026-04-30"
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     # streak 计算扫描 (user_id, date)；唯一约束顺便防止重复"今日记录"竞态
