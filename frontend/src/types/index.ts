@@ -31,4 +31,5 @@ export interface Message {
   db_id?: number        // DB primary key for this message record
   paired_db_id?: number // for AI messages auto-triggered by an invisible system prompt
   choices?: { label: string; text: string }[]  // [CHOICES] 解析出的选项
+  selected_choice?: string  // 用户已选选项的 label，如 "A"
 }

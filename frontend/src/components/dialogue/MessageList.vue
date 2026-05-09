@@ -19,7 +19,7 @@
     <div
       v-for="(msg, i) in messages"
       :key="(msg.db_id ?? `${msg.role}-${msg.time}-${i}`)"
-      v-memo="[msg.text, msg.quote, msg.time, hoveredIndex === i, copiedIndex === i, isThinking]"
+      v-memo="[msg.text, msg.quote, msg.time, msg.selected_choice, hoveredIndex === i, copiedIndex === i, isThinking]"
       class="msg-row"
       :class="msg.role"
       @mouseenter="hoveredIndex = i"
@@ -40,12 +40,31 @@
         <div class="bubble" :class="msg.role">
           <InlineMarkdown :text="msg.text" :with-caret="false" />
         </div>
-        <!-- AI 选项按钮：仅最后一条消息且非思考中渲染 -->
-        <div v-if="msg.choices && msg.choices.length && msg.role === 'ai' && i === messages.length - 1 && !isThinking" class="choices-row">
+        <!-- 历史 AI 选项（非最后一条）：静态展示，已选高亮，不可点击 -->
+        <div
+          v-if="msg.choices && msg.choices.length && msg.role === 'ai' && i < messages.length - 1"
+          class="choices-row historical"
+        >
+          <div
+            v-for="c in msg.choices"
+            :key="c.label"
+            class="choice-btn"
+            :class="{ selected: msg.selected_choice === c.label }"
+          >
+            <span class="choice-label">{{ c.label }}</span>
+            <span class="choice-text">{{ c.text }}</span>
+          </div>
+        </div>
+        <!-- 最后一条 AI 选项：可点击，已选高亮 -->
+        <div
+          v-if="msg.choices && msg.choices.length && msg.role === 'ai' && i === messages.length - 1 && !isThinking"
+          class="choices-row"
+        >
           <button
             v-for="c in msg.choices"
             :key="c.label"
             class="choice-btn"
+            :class="{ selected: msg.selected_choice === c.label }"
             @click="$emit('select-choice', c.label + '. ' + c.text)"
           >
             <span class="choice-label">{{ c.label }}</span>
@@ -288,6 +307,26 @@ defineExpose({ scrollToBottom })
 }
 .choice-text {
   font-size: 12.5px; color: var(--ink-2); line-height: 1.4;
+}
+.choice-btn.selected {
+  background: var(--blue-tint);
+  border-color: var(--blue-2);
+}
+.choice-btn.selected .choice-label {
+  background: var(--blue-2);
+  color: white;
+}
+.choices-row.historical .choice-btn {
+  cursor: default;
+  opacity: 0.65;
+}
+.choices-row.historical .choice-btn:hover {
+  transform: none;
+  background: var(--surface);
+  border-color: var(--blue-line);
+}
+.choices-row.historical .choice-btn.selected {
+  opacity: 1;
 }
 
 .scroll-to-bottom {

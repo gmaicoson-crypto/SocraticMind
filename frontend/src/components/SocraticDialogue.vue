@@ -135,6 +135,8 @@ const editingName = ref('')
 let abortController: AbortController | null = null
 let saveTimer: ReturnType<typeof setTimeout> | null = null
 let pendingMsgIds: { user: number; ai: number } | null = null
+// 页面刷新后，组件首次 hydrate 完成前禁止触发 topic_overview
+let isHydrated = false
 
 const pendingTopicName = ref('')
 const editingTopicName = ref(false)
@@ -384,19 +386,58 @@ async function syncFromDB() {
 
     for (const m of socraticNew) {
       const nk = m.node_key || 'unknown'
-      let session = socraticSessions.value.find(s => s.topicTitle === nk || s.name === nk.slice(0, 12))
-      if (!session) {
-        session = { id: genId(), name: nk.slice(0, 12), messages: [], updatedAt: nowDate(), topicTitle: nk }
-        socraticSessions.value.push(session)
+      // 优先通过 topic 标题查找 topicId 再匹配 session（主题概览的 node_key 即标题）
+      let session: Session | undefined
+      const matchedTopic = store.topics.find(t => t.title === nk)
+      if (matchedTopic) {
+        session = socraticSessions.value.find(s => s.topicId === Number(matchedTopic.id))
       }
-      session.messages.push({
-        role: (m.role === 'ai' ? 'ai' : 'user') as 'ai' | 'user',
-        text: m.content, time: m.created_at || now(), db_id: m.id,
-      })
+      // 回退：按 topicTitle / name 模糊匹配
+      if (!session) {
+        session = socraticSessions.value.find(s => s.topicTitle === nk || s.name === nk.slice(0, 12))
+      }
+      // 仍未匹配则跳过，不再创建无 topicId 的孤儿 session
+      if (!session) continue
+      // 内容去重：防止 db_id 缺失时同一消息重复合并
+      if (session.messages.some(existing => existing.text === m.content)) continue
+      if (m.role === 'ai') {
+        const { cleanText, choices } = parseChoices(m.content)
+        session.messages.push({
+          role: 'ai',
+          text: cleanText,
+          time: m.created_at || now(),
+          db_id: m.id,
+          choices: choices ?? undefined,
+        })
+      } else {
+        // 跳过空内容的用户消息（topic_overview / node_overview 触发的占位记录）
+        if (!m.content || !m.content.trim()) continue
+        session.messages.push({
+          role: 'user',
+          text: m.content,
+          time: m.created_at || now(),
+          db_id: m.id,
+        })
+      }
       session.updatedAt = m.created_at || session.updatedAt
     }
     for (const s of socraticSessions.value) {
       s.messages.sort((a, b) => (a.time || '').localeCompare(b.time || ''))
+    }
+    // 推断历史选中项：若用户回复以 "A. / B. ..." 开头且匹配 AI 选项，则标记 selected_choice
+    for (const s of socraticSessions.value) {
+      for (let i = 0; i < s.messages.length - 1; i++) {
+        const msg = s.messages[i]
+        if (msg.role === 'ai' && msg.choices?.length && !msg.selected_choice) {
+          const next = s.messages[i + 1]
+          if (next?.role === 'user') {
+            const lm = next.text.match(/^([A-F])[.、]/)
+            if (lm && msg.choices.some(c => c.label === lm[1])) {
+              msg.selected_choice = lm[1]
+            }
+          }
+        }
+      }
     }
 
     if (normalNew.length) {
@@ -425,8 +466,16 @@ onMounted(() => {
   const cached = loadCachedChips(chatMode.value)
   chips.value = cached.length > 0 ? cached : defaultChips[chatMode.value]
 
-  // 始终从数据库同步全部历史（增量合并，按 id 去重）
-  if (userScope.value !== 'guest') {
+  // 标记组件已完成初次挂载，后续 topic_overview 允许触发
+  isHydrated = true
+})
+
+// 等 store.topics 加载完毕后再从 DB 同步历史，避免 syncFromDB 在 topics 就绪前
+// 创建无 topicId 的孤儿 session（竞态：syncFromDB 的 HTTP 可能比 fetchTopics 先返回）
+let hasSynced = false
+watch(() => store.topics.length, (len) => {
+  if (len > 0 && !hasSynced && userScope.value !== 'guest') {
+    hasSynced = true
     syncFromDB()
   }
 })
@@ -452,7 +501,7 @@ watch([() => store.activeTopicId, chatMode], async () => {
     scrollToBottom()
   }
   // 消费"待概览"标记：刚生成 / 加入推荐主题时由发起方设置；首屏挂载不会带 flag
-  if (store.pendingTopicOverviewId === numId) {
+  if (store.pendingTopicOverviewId === numId && isHydrated) {
     const title = store.topics.find(t => Number(t.id) === numId)?.title
     store.requestTopicOverview(null)  // 先清，避免重复触发
     if (title) await streamOverview('topic', title)
@@ -676,6 +725,21 @@ function sendChoiceText(choiceText: string) {
   if (isGenerating.value) return
   // 流式进行中点击选项：先中止当前流，commit 已有内容，再发送选择
   if (isThinking.value) abortChat()
+
+  // 找到当前会话中最后一条有 choices 的 AI 消息，记录已选 label
+  const msgs = currentSession.value?.messages
+  if (msgs) {
+    const matchLabel = choiceText.match(/^([A-F])[.、]/)
+    if (matchLabel) {
+      for (let i = msgs.length - 1; i >= 0; i--) {
+        if (msgs[i].role === 'ai' && msgs[i].choices?.length) {
+          msgs[i].selected_choice = matchLabel[1]
+          break
+        }
+      }
+    }
+  }
+
   input.value = choiceText
   send()
 }
@@ -912,7 +976,13 @@ function streamOverview(kind: 'topic' | 'node', identifier: string): Promise<voi
         isThinking.value = false
         if (t) {
           const { cleanText, choices } = parseChoices(t)
-          pushMessage({ role: 'ai', text: cleanText, time: now(), choices: choices ?? undefined })
+          const aiMsg: Message = { role: 'ai', text: cleanText, time: now(), choices: choices ?? undefined }
+          if (pendingMsgIds) {
+            aiMsg.db_id = pendingMsgIds.ai
+            aiMsg.paired_db_id = pendingMsgIds.user
+            pendingMsgIds = null
+          }
+          pushMessage(aiMsg)
         }
         scrollToBottom()
         resolve()
@@ -928,7 +998,7 @@ function streamOverview(kind: 'topic' | 'node', identifier: string): Promise<voi
       },
       abortController,
       undefined,
-      undefined,
+      (userMsgId, aiMsgId) => { pendingMsgIds = { user: userMsgId, ai: aiMsgId } },
       apiKind,
     )
   })

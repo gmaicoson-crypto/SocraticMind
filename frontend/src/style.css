@@ -83,19 +83,19 @@ html, body, #app {
   --locked: #21262D;
   --locked-ink: #6E7681;
 
-  /* 紫色配色
-  --heatmap-0: #211e25;
+  
+  --heatmap-0: #1B1F2A;
   --heatmap-1: #554778;
   --heatmap-2: #553098;
   --heatmap-3: #8256D0;
   --heatmap-4: #A78BFA; 
-  */
+ 
 
-  --heatmap-0: #1B1F2A;
+  /* --heatmap-0: #1B1F2A;
   --heatmap-1: #1E2D45;
   --heatmap-2: #2D4A75;
   --heatmap-3: #4A6FA5;
-  --heatmap-4: #7BA4D1;
+  --heatmap-4: #7BA4D1; */
 
   --amber: #D6A96B;
   --green: #6FCF8C;
