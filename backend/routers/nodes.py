@@ -34,7 +34,7 @@ def search_nodes(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """跨主题搜索当前用户的节点（按 label / sub 匹配，不区分大小写）。"""
+    """跨主题搜索当前用户的节点，按 label 和 sub 模糊匹配（不区分大小写）。"""
     pattern = f"%{q.strip()}%"
     rows = (
         db.query(Node, Topic)
@@ -58,6 +58,7 @@ def search_nodes(
         for n, t in rows
     ]
 
+
 class NodeResponse(BaseModel):
     id: int
     node_key: str
@@ -71,6 +72,7 @@ class NodeResponse(BaseModel):
     class Config:
         from_attributes = True
 
+
 class CreateNodeRequest(BaseModel):
     topic_id: int
     node_key: str
@@ -80,29 +82,32 @@ class CreateNodeRequest(BaseModel):
     y: float = 0
     parent_keys: str = ""
 
+
 @router.get("/topic/{topic_id}", response_model=List[NodeResponse])
 def get_nodes(
     topic_id: int,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
+    """获取指定主题下的所有节点，先校验主题归属确保不越权访问。"""
     topic = db.query(Topic).filter(
         Topic.id == topic_id,
-        Topic.user_id == current_user.id
+        Topic.user_id == current_user.id,
     ).first()
     if not topic:
         raise HTTPException(status_code=404, detail="主题不存在")
     return db.query(Node).filter(Node.topic_id == topic_id).all()
 
+
 @router.post("", response_model=NodeResponse)
 def create_node(
     req: CreateNodeRequest,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     topic = db.query(Topic).filter(
         Topic.id == req.topic_id,
-        Topic.user_id == current_user.id
+        Topic.user_id == current_user.id,
     ).first()
     if not topic:
         raise HTTPException(status_code=404, detail="主题不存在")
@@ -113,15 +118,21 @@ def create_node(
     db.refresh(node)
     return node
 
+
 @router.put("/{node_id}/master", response_model=NodeResponse)
 def master_node(
     node_id: int,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
+    """将节点标记为已掌握，并自动解锁所有父节点均已掌握的子节点。
+
+    parent_keys 是逗号分隔字符串而非关系表，解锁判断需在 Python 侧完成；
+    节点数量较少（< 1k）时性能可接受，若图谱规模扩大可考虑改为 join 表。
+    """
     node = db.query(Node).join(Topic).filter(
         Node.id == node_id,
-        Topic.user_id == current_user.id
+        Topic.user_id == current_user.id,
     ).first()
     if not node:
         raise HTTPException(status_code=404, detail="节点不存在")
@@ -131,15 +142,13 @@ def master_node(
     node.state = "mastered"
     node.mastered_at = datetime.now(timezone.utc)
 
-    # parent_keys 是逗号分隔字符串，没有规范化的关系表，所以解锁逻辑只能在 Python 里解析；
-    # 节点数 < ~1k 时性能可接受，未来如规模上来应迁到 join 表索引化
+    # 加载同主题所有节点，计算哪些子节点的父节点已全部掌握
     all_nodes = db.query(Node).filter(Node.topic_id == node.topic_id).all()
     mastered_keys = {n.node_key for n in all_nodes if n.state == "mastered"}
 
     for n in all_nodes:
         if n.state == "locked" and n.parent_keys:
             parents = set(n.parent_keys.split(","))
-            # 所有父节点都已掌握才解锁；任一未掌握保持 locked
             if parents.issubset(mastered_keys):
                 n.state = "available"
 

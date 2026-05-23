@@ -17,7 +17,7 @@ def today_str() -> str:
 
 
 def _compute_streak(learned_dates: set[str]) -> int:
-    """从今天往回数，最长无间断学习天数；今天没记录则从昨天起数。"""
+    """计算连续学习天数：从今天往前数，今天没记录则从昨天开始数。"""
     streak = 0
     check = date.today()
     while check.isoformat() in learned_dates:
@@ -34,8 +34,9 @@ def _compute_streak(learned_dates: set[str]) -> int:
 @router.post("/record")
 def record_today(
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
+    """记录今日打卡，幂等操作：同一天重复调用不会重复写入。"""
     today = today_str()
     exists = db.query(LearningRecord).filter(
         LearningRecord.user_id == current_user.id,
@@ -50,9 +51,12 @@ def record_today(
 @router.get("/streak")
 def get_streak(
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
-    # 仅取近 60 天用于 streak 判定（连续学习上限远小于此），并用 count() 取总天数
+    """获取连续学习天数和最近 14 天的打卡情况。
+
+    streak 计算只取近 60 天记录（连续学习上限远小于此值），total_days 用 count() 统计总天数。
+    """
     cutoff = (date.today() - timedelta(days=60)).isoformat()
     recent_records = db.query(LearningRecord.date).filter(
         LearningRecord.user_id == current_user.id,
@@ -67,8 +71,10 @@ def get_streak(
     streak = _compute_streak(learned_dates)
 
     recent = [
-        {"date": (date.today() - timedelta(days=i)).isoformat(),
-         "learned": (date.today() - timedelta(days=i)).isoformat() in learned_dates}
+        {
+            "date": (date.today() - timedelta(days=i)).isoformat(),
+            "learned": (date.today() - timedelta(days=i)).isoformat() in learned_dates,
+        }
         for i in range(13, -1, -1)
     ]
 
@@ -82,19 +88,20 @@ def get_streak(
 @router.get("/stats")
 def get_stats(
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
+    """获取完整的学习统计数据：热力图、streak、本周概览、成就徽章、最近掌握时间线。"""
     today = date.today()
     one_year_ago = today - timedelta(days=364)
 
-    # 用户对话总数
+    # 苏格拉底模式下用户发出的消息总数（不含 AI 回复）
     chat_count = db.query(ChatMessage).filter(
         ChatMessage.user_id == current_user.id,
         ChatMessage.role == "user",
-        ChatMessage.mode == "socratic"
+        ChatMessage.mode == "socratic",
     ).count()
 
-    # 热力图：一次按日期 GROUP BY 取所有计数；之前是 365 次独立 COUNT
+    # 热力图：单次 GROUP BY 查询替代原先的 365 次独立 COUNT，性能差异显著
     date_expr = func.substr(func.cast(ChatMessage.created_at, String(10)), 1, 10)
     heatmap_rows = db.query(
         date_expr.label("d"),
@@ -107,12 +114,14 @@ def get_stats(
     ).group_by("d").all()
     by_date = {row.d: row.c for row in heatmap_rows}
     heatmap = [
-        {"date": (today - timedelta(days=i)).isoformat(),
-         "count": by_date.get((today - timedelta(days=i)).isoformat(), 0)}
+        {
+            "date": (today - timedelta(days=i)).isoformat(),
+            "count": by_date.get((today - timedelta(days=i)).isoformat(), 0),
+        }
         for i in range(364, -1, -1)
     ]
 
-    # 学习记录：streak 用近 60 天即可，total_days 用 count()
+    # streak 和总学习天数
     streak_cutoff = (today - timedelta(days=60)).isoformat()
     recent_records = db.query(LearningRecord.date).filter(
         LearningRecord.user_id == current_user.id,
@@ -124,7 +133,7 @@ def get_stats(
         LearningRecord.user_id == current_user.id,
     ).count()
 
-    # 本周统计（周一到今天）
+    # 本周统计（从本周一到今天）
     weekday = today.weekday()
     week_start = today - timedelta(days=weekday)
     week_start_str = week_start.isoformat()
@@ -143,7 +152,7 @@ def get_stats(
         func.substr(func.cast(Node.mastered_at, String(10)), 1, 10) >= week_start_str,
     ).count()
 
-    # 最活跃时段：按 hour GROUP BY，避免全表加载到 Python 再循环统计
+    # 最活跃时段：按小时 GROUP BY，避免全表加载到 Python 再循环统计
     hour_expr = func.cast(func.date_format(ChatMessage.created_at, "%H"), String(2))
     hour_rows = db.query(
         hour_expr.label("h"),
@@ -159,11 +168,11 @@ def get_stats(
     else:
         peak_label = "暂无数据"
 
-    # 平均每天对话数：以"曾学习过的天数"为分母，未学习的日期不参与平均
+    # 平均每天对话数：以曾学习过的天数为分母，避免用总日历天数导致数值虚低
     avg_daily = round(chat_count / (total_days_learned or 1), 1)
     week_days_learned = sum(1 for d in learned_dates if d >= week_start_str)
 
-    # 时间线：joinedload 避免循环里再查 topic（旧实现是 N+1）
+    # 最近掌握时间线：joinedload 避免循环中对 node.topic 的 N+1 查询
     recent_mastered = db.query(Node).options(joinedload(Node.topic)).join(Topic).filter(
         Topic.user_id == current_user.id,
         Node.state == "mastered",
@@ -179,7 +188,7 @@ def get_stats(
         for n in recent_mastered
     ]
 
-    # 成就徽章
+    # 成就徽章：按解锁条件计算，顺序即展示顺序
     mastered_count = db.query(Node).join(Topic).filter(
         Topic.user_id == current_user.id,
         Node.state == "mastered",

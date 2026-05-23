@@ -1,3 +1,4 @@
+// 热力图颜色阶梯（CSS 变量，支持深浅色主题）
 export const heatColors = [
   'var(--heatmap-0)',
   'var(--heatmap-1)',
@@ -6,6 +7,7 @@ export const heatColors = [
   'var(--heatmap-4)',
 ] as const
 
+// 根据当日对话次数返回热力颜色
 export function heatColor(count: number): string {
   if (count === 0) return heatColors[0]
   if (count <= 20) return heatColors[1]
@@ -27,12 +29,12 @@ export function isoDate(year: number, month: number, day: number): string {
   return `${year}-${pad2(month)}-${pad2(day)}`
 }
 
-/** 当月第一天落在星期几（0=周日），用来给月历前置空白格 */
+// 当月第一天是星期几（0=周日），用于月历前置空白格
 export function monthStartPad(year: number, month: number): number {
   return new Date(year, month - 1, 1).getDay()
 }
 
-/** 给定 year/month，返回该月每一天的日期字符串与对应计数（来自 heatmap 字典） */
+// 生成指定月份每天的日期字符串与热力计数
 export function buildMonthDays(
   year: number,
   month: number,
@@ -46,19 +48,19 @@ export function buildMonthDays(
   })
 }
 
-/** 上一个月，跨年自动回退 */
+// 上一个月，跨年时自动回退
 export function prevMonth(year: number, month: number): { year: number; month: number } {
   if (month === 1) return { year: year - 1, month: 12 }
   return { year, month: month - 1 }
 }
 
-/** 下一个月，跨年自动前进 */
+// 下一个月，跨年时自动前进
 export function nextMonth(year: number, month: number): { year: number; month: number } {
   if (month === 12) return { year: year + 1, month: 1 }
   return { year, month: month + 1 }
 }
 
-/** 仅允许在 [今年-1 1月, 今年当月] 区间翻动，避免跳到没有数据的未来或太久远的过去 */
+// 可翻到上个月：限制范围为 [去年1月, 今月]
 export function canGoPrev(year: number, month: number, today: Date = new Date()): boolean {
   return !(year === today.getFullYear() - 1 && month === 1)
 }

@@ -14,8 +14,7 @@ onMounted(async () => {
   store.loadUserFromStorage()
   if (getToken()) {
     await store.fetchTopics()
-    // recordLearning 内部先 POST 今日记录再 GET streak；必须 await，否则
-    // 其它组件并发读 streak 会拿到过期值（先前曾导致首页连续天数与 Profile 不一致）
+    // 必须先 await recordLearning，确保 streak 数据写入后其他组件才读取，避免数据不一致
     await store.recordLearning()
   }
 })

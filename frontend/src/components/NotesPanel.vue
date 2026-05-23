@@ -1,7 +1,6 @@
 <template>
   <div class="notes-wrap">
 
-    <!-- Header -->
     <div class="notes-header">
       <div class="notes-header-left">
         <span class="notes-title">笔记与画布</span>
@@ -20,7 +19,6 @@
       </div>
     </div>
 
-    <!-- Body -->
     <div class="notes-body">
       <MarkdownEditor v-if="activeTab === 'md'" />
       <CanvasSketch v-else />
@@ -31,8 +29,7 @@
 
 <script setup lang="ts">
 import { ref, h, defineAsyncComponent } from 'vue'
-// MarkdownEditor 内部用 marked，CanvasSketch 操作 canvas；按 tab 异步加载
-// 用户切到对应 tab 才下载相关代码，且模板中已配合 v-if 让闲置 tab 不实例化
+// MarkdownEditor 和 CanvasSketch 按 tab 异步加载，切换时才下载对应代码
 const MarkdownEditor = defineAsyncComponent(() => import('./MarkdownEditor.vue'))
 const CanvasSketch = defineAsyncComponent(() => import('./CanvasSketch.vue'))
 
@@ -132,5 +129,4 @@ const tabs: Array<{ key: 'md' | 'canvas', label: string, icon: any }> = [
   min-height: 0;
   overflow: hidden;
 }
-
 </style>

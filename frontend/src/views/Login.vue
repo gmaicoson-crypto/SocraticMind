@@ -2,7 +2,6 @@
   <div class="login-page">
     <div class="login-shell">
 
-      <!-- 左侧品牌区 -->
       <div class="brand">
         <div class="brand-logo">
           <div class="brand-icon">
@@ -43,10 +42,8 @@
         <div class="brand-footer">© 2026 SocraticMind · 让学习真正发生</div>
       </div>
 
-      <!-- 右侧表单区 -->
       <div class="form-area">
 
-        <!-- 标签切换 -->
         <div class="form-tabs">
           <button
             class="ftab"
@@ -60,16 +57,13 @@
           >注册</button>
         </div>
 
-        <!-- 标题 -->
         <div class="form-header">
           <div class="form-title">{{ mode === 'login' ? '欢迎回来' : '创建账号' }}</div>
           <div class="form-sub">{{ mode === 'login' ? '继续你的学习旅程 ✦' : '开始你的苏格拉底式学习之旅' }}</div>
         </div>
 
-        <!-- 表单 -->
         <div class="form-body">
 
-          <!-- 注册额外字段 -->
           <div v-if="mode === 'register'" class="field">
             <label>用户名</label>
             <div class="field-input" :class="{ focused: focusField === 'name' }">
@@ -86,7 +80,6 @@
             </div>
           </div>
 
-          <!-- 邮箱 -->
           <div class="field">
             <label>邮箱地址</label>
             <div class="field-input" :class="{ focused: focusField === 'email' }">
@@ -104,7 +97,6 @@
             </div>
           </div>
 
-          <!-- 验证码（注册） -->
           <div v-if="mode === 'register'" class="field">
             <label>邮箱验证码</label>
             <div class="code-row">
@@ -135,7 +127,6 @@
             <div v-if="codeMsg" class="field-success">{{ codeMsg }}</div>
           </div>
 
-          <!-- 密码 -->
           <div class="field">
             <label>密码</label>
             <div class="field-input" :class="{ focused: focusField === 'password' }">
@@ -159,7 +150,6 @@
                 </svg>
               </button>
             </div>
-            <!-- 密码强度条（注册时显示） -->
             <div v-if="mode === 'register'" class="strength-wrap">
               <div class="strength-bar">
                 <div class="strength-fill" :style="{ width: strengthPct + '%', background: strengthColor }" />
@@ -168,7 +158,6 @@
             </div>
           </div>
 
-          <!-- 确认密码（注册） -->
           <div v-if="mode === 'register'" class="field">
             <label>确认密码</label>
             <div class="field-input" :class="{ focused: focusField === 'confirm' }">
@@ -188,7 +177,6 @@
             </div>
           </div>
 
-          <!-- 记住我 / 忘记密码 -->
           <div v-if="mode === 'login'" class="field-row">
             <label class="remember">
               <input v-model="form.remember" type="checkbox" /> 记住我
@@ -196,7 +184,6 @@
             <a class="forgot" @click="showForgot = true">忘记密码？</a>
           </div>
 
-          <!-- 服务条款（注册） -->
           <div v-if="mode === 'register'" class="terms">
             <input v-model="form.agreed" type="checkbox" />
             <span>
@@ -207,10 +194,8 @@
             </span>
           </div>
 
-          <!-- 错误提示 -->
           <div v-if="errorMsg" class="error-msg">{{ errorMsg }}</div>
 
-          <!-- 提交按钮 -->
           <button class="submit-btn" :disabled="submitting" @click="handleSubmit">
             <span v-if="submitting" class="spinner" />
             <template v-else>
@@ -222,7 +207,6 @@
             </template>
           </button>
 
-          <!-- 安全提示 -->
           <div class="security-hint">
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
               <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
@@ -243,7 +227,6 @@
       </div>
     </div>
 
-    <!-- 弹窗 -->
     <ForgotPasswordModal :show="showForgot" @close="showForgot = false" />
     <LegalModal :show="showLegal" :kind="legalKind" @close="showLegal = false" />
   </div>
@@ -256,6 +239,7 @@ import { login, register, sendVerificationCode } from '../api/auth'
 import { useLearningStore } from '../stores/learning'
 import { setAuth } from '../utils/token'
 
+// 弹窗组件异步加载，减少登录页初始 JS 体积
 const ForgotPasswordModal = defineAsyncComponent(() => import('../components/ForgotPasswordModal.vue'))
 const LegalModal = defineAsyncComponent(() => import('../components/LegalModal.vue'))
 
@@ -279,20 +263,18 @@ const blankForm = () => ({
 })
 const form = ref(blankForm())
 
-// 切换登录/注册时清空表单，避免上一模式的 stale data 残留在内存
+// 切换模式时清空表单，防止上一模式的数据残留
 watch(mode, () => {
   form.value = blankForm()
   errorMsg.value = ''
   codeMsg.value = ''
 })
 
-// 验证码发送态：组件卸载需清理 cooldown 计时器，避免组件销毁后还在 tick 报警告
 const sendingCode = ref(false)
 const codeCooldown = ref(0)
 const codeMsg = ref('')
 let cooldownTimer: number | null = null
 
-// 弹窗
 const showForgot = ref(false)
 const legalKind = ref<'terms' | 'privacy'>('terms')
 const showLegal = ref(false)
@@ -306,6 +288,7 @@ const emailValid = computed(() =>
 )
 const canSendCode = computed(() => emailValid.value && codeCooldown.value === 0 && !sendingCode.value)
 
+// 启动 60 秒冷却倒计时
 function startCooldown() {
   codeCooldown.value = 60
   cooldownTimer = window.setInterval(() => {
@@ -333,11 +316,12 @@ async function onSendCode() {
   }
 }
 
+// 组件卸载时清理计时器，防止内存泄漏
 onBeforeUnmount(() => {
   if (cooldownTimer !== null) clearInterval(cooldownTimer)
 })
 
-// 密码强度
+// 密码强度评分：长度 + 大写 + 数字/特殊字符各 25 分
 const strengthPct = computed(() => {
   const p = form.value.password
   if (!p) return 0
@@ -409,7 +393,7 @@ async function handleSubmit() {
   }
 }
 
-// 特性列表图标
+// 左侧品牌区特性列表（使用渲染函数避免引入额外组件文件）
 const features = [
   {
     title: '苏格拉底式 AI 对话',
@@ -462,7 +446,6 @@ const features = [
   box-shadow: 0 8px 40px oklch(0.5 0.04 235 / 0.1);
 }
 
-/* ── 左侧品牌 ── */
 .brand {
   background: var(--bg-2);
   border-right: 1px solid var(--line);
@@ -574,7 +557,6 @@ const features = [
   color: var(--ink-3);
 }
 
-/* ── 右侧表单 ── */
 .form-area {
   padding: 44px;
   display: flex;

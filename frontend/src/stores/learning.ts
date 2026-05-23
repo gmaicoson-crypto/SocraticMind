@@ -7,7 +7,7 @@ import { recordToday, getStreak } from '../api/progress'
 import type { StreakData } from '../api/progress'
 import { loadUser } from '../utils/token'
 
-// 主题初始化：localStorage > 系统偏好 > 默认明亮
+// 读取持久化主题设置，优先本地存储，其次系统偏好
 function getInitialTheme(): boolean {
   const stored = localStorage.getItem('sm_theme')
   if (stored !== null) return stored === 'dark'
@@ -20,13 +20,10 @@ function applyTheme(dark: boolean) {
 
 export const useLearningStore = defineStore('learning', () => {
 
-  // ── 主题状态 ──
-  // shallowRef 仅追踪 .value 引用替换；这些数组都是整体替换（fetchNodes/fetchTopics/masterNode），
-  // 不存在按索引修改，shallowRef 省去深层 reactive Proxy 包装，节点/主题数变多时收益明显
   const isDark = ref(getInitialTheme())
-
-  // 首次加载时立即应用主题
   applyTheme(isDark.value)
+
+  // shallowRef：节点/边/主题数组只做整体替换，不需要深层响应式，节省性能开销
   const nodes = shallowRef<KNode[]>([])
   const edges = shallowRef<KEdge[]>([])
   const topics = shallowRef<Topic[]>([])
@@ -36,14 +33,12 @@ export const useLearningStore = defineStore('learning', () => {
   const lastMasteredId = ref<string | null>(null)
   const recommendations = shallowRef<{ title: string; emoji: string; reason: string }[]>([])
 
-  // 跨组件传递信号：新生成主题（无论从对话框还是侧栏推荐）需要触发一次概览推送
-  // SocraticDialogue 看到匹配的 topicId 后消费并清零
+  // 跨组件信号：新生成主题后通知对话框触发一次概览推送，消费后清零
   const pendingTopicOverviewId = ref<number | null>(null)
   function requestTopicOverview(topicId: number | null) {
     pendingTopicOverviewId.value = topicId
   }
 
-  // ── 用户信息 ──
   const userInfo = ref<{
     id: number
     username: string
@@ -55,19 +50,16 @@ export const useLearningStore = defineStore('learning', () => {
     ai_style: string
   } | null>(null)
 
-  /// ── 进度状态 ──
   const streakData = ref<StreakData>({
     streak: 0,
     total_days: 0,
     recent: [],
   })
 
-  // ── 计算属性 ──
   const masteredCount = computed(() => nodes.value.filter(n => n.state === 'mastered').length)
   const totalCount = computed(() => nodes.value.length)
   const availableCount = computed(() => nodes.value.filter(n => n.state === 'available').length)
 
-  // ── 用户信息方法 ──
   function setUserInfo(info: typeof userInfo.value) {
     userInfo.value = info
   }
@@ -77,7 +69,7 @@ export const useLearningStore = defineStore('learning', () => {
     if (data) userInfo.value = data as typeof userInfo.value
   }
 
-  // ── 主题与节点加载 ──
+  // 加载指定主题的节点，并从 parent_keys 字段解析边关系
   async function fetchNodes(topicId: number) {
     try {
       const data = await getNodes(topicId)
@@ -90,7 +82,6 @@ export const useLearningStore = defineStore('learning', () => {
         state: n.state,
         dbId: n.id,
       }))
-      // 从 parent_keys 解析边
       const newEdges: KEdge[] = []
       data.forEach(n => {
         if (n.parent_keys) {
@@ -105,6 +96,7 @@ export const useLearningStore = defineStore('learning', () => {
     }
   }
 
+  // 加载所有主题，默认激活第一个并加载其节点
   async function fetchTopics() {
     try {
       const data = await getTopics()
@@ -125,30 +117,31 @@ export const useLearningStore = defineStore('learning', () => {
     }
   }
 
+  // 仅更新主题列表，不重置当前激活主题
   async function fetchTopicsOnly() {
-  try {
-    const data = await getTopics()
-    topics.value = data.map(t => ({
-      id: String(t.id),
-      title: t.title,
-      emoji: t.emoji,
-      nodes: t.total_nodes,
-      mastered: t.mastered_nodes,
-    }))
-      // 不重置 activeTopicId
+    try {
+      const data = await getTopics()
+      topics.value = data.map(t => ({
+        id: String(t.id),
+        title: t.title,
+        emoji: t.emoji,
+        nodes: t.total_nodes,
+        mastered: t.mastered_nodes,
+      }))
     } catch (err) {
       console.error('加载主题失败', err)
     }
   }
 
   async function fetchStreak() {
-  try {
-    streakData.value = await getStreak()
-  } catch (err) {
-    console.error('获取连续学习失败', err)
+    try {
+      streakData.value = await getStreak()
+    } catch (err) {
+      console.error('获取连续学习失败', err)
+    }
   }
-}
 
+  // 记录今日学习并刷新 streak 数据
   async function recordLearning() {
     try {
       await recordToday()
@@ -167,9 +160,8 @@ export const useLearningStore = defineStore('learning', () => {
     }
   }
 
-  // ── 主题切换 ──
+  // 切换激活主题，切换时清空 activeNode 防止对话错位
   async function setActiveTopic(id: string) {
-    // 切到不同主题时清空 activeNode，否则会指向上一主题的节点导致对话错位
     if (activeTopicId.value !== id) {
       activeNode.value = null
     }
@@ -178,11 +170,11 @@ export const useLearningStore = defineStore('learning', () => {
     if (!isNaN(numId)) await fetchNodes(numId)
   }
 
-  // ── 节点操作 ──
   function setActiveNode(node: KNode | null) {
     activeNode.value = node
   }
 
+  // 标记节点已掌握，并解锁所有满足前置条件的后继节点
   async function masterNode(nodeId: string) {
     const node = nodes.value.find(n => n.id === nodeId)
     if (!node || !node.dbId) return
@@ -201,19 +193,18 @@ export const useLearningStore = defineStore('learning', () => {
         }
         return n
       })
-      lastMasteredId.value = nodeId  // 触发 confetti
+      lastMasteredId.value = nodeId
     } catch (err) {
       console.error('标记掌握失败', err)
-      throw err  // 抛出让 NotesPanel 捕获
+      throw err
     }
   }
 
-  // ── 消息 ──
   function addMessage(msg: Message) {
     messages.value.push(msg)
   }
 
-  // ── 主题切换 ──
+  // 切换深色/浅色主题并持久化
   function toggleTheme() {
     isDark.value = !isDark.value
     localStorage.setItem('sm_theme', isDark.value ? 'dark' : 'light')
@@ -228,16 +219,13 @@ export const useLearningStore = defineStore('learning', () => {
   }
 
   return {
-    // 状态
     isDark, nodes, edges, topics,
     activeTopicId, activeNode, messages, userInfo,
     lastMasteredId,
     recommendations,
     streakData,
     pendingTopicOverviewId,
-    // 计算
     masteredCount, totalCount, availableCount,
-    // 方法
     toggleTheme,
     setUserInfo, loadUserFromStorage,
     fetchTopics, fetchNodes, setActiveTopic,

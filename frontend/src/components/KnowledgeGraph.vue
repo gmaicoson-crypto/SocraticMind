@@ -1,7 +1,6 @@
 <template>
   <div ref="containerRef" class="graph-wrap">
 
-    <!-- Header -->
     <div class="graph-header">
       <div>
         <div class="graph-label">Knowledge Graph</div>
@@ -17,7 +16,6 @@
       </div>
     </div>
 
-    <!-- SVG Graph -->
     <svg
       :viewBox="viewBox"
       preserveAspectRatio="xMidYMid meet"
@@ -66,7 +64,6 @@
       />
     </svg>
 
-    <!-- 无主题提示 -->
     <div v-if="store.totalCount === 0" class="empty-graph">
       <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--ink-3)" stroke-width="1">
         <circle cx="12" cy="5" r="2"/><circle cx="5" cy="19" r="2"/><circle cx="19" cy="19" r="2"/>
@@ -76,17 +73,14 @@
       <div class="empty-sub">在左侧对话框告诉 AI 你想学什么</div>
     </div>
 
-    <!-- Confetti canvas -->
     <canvas ref="confettiCanvasRef" class="confetti-canvas" />
 
-    <!-- 缩放比例提示 -->
     <Transition name="fade">
       <div v-if="showScaleHint" class="scale-hint">
         {{ Math.round(scale * 100) }}%
       </div>
     </Transition>
 
-    <!-- Controls -->
     <div class="controls">
       <button class="ctrl-btn" title="居中" @click="resetView">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -115,6 +109,7 @@ import type { KNode } from '../types'
 import GraphNode from './GraphNode.vue'
 import GraphEdge from './GraphEdge.vue'
 
+// 图例使用渲染函数，避免为简单展示创建独立组件文件
 const LegendItem = (props: { label: string; count: number; variant: string }) => {
   const dotStyle: Record<string, { bg: string; border: string }> = {
     mastered: { bg: 'var(--blue)', border: 'var(--blue-2)' },
@@ -144,11 +139,10 @@ const svgRef = ref<SVGSVGElement | null>(null)
 const confettiCanvasRef = ref<HTMLCanvasElement | null>(null)
 const showScaleHint = ref(false)
 
-// 基础 viewBox 尺寸
 let VW = 900
 let VH = 720
 
-// 节点加载后检查范围，兜底扩展画布
+// 节点加载后扩展画布范围并重置视图
 watch(() => store.nodes, (nodes) => {
   if (nodes.length === 0) {
     VW = 900
@@ -164,7 +158,6 @@ watch(() => store.nodes, (nodes) => {
   nextTick(() => resetView())
 })
 
-// 缩放和平移
 const scale = ref(1)
 const panX = ref(0)
 const panY = ref(0)
@@ -172,20 +165,19 @@ const panY = ref(0)
 const MIN_SCALE = 0.85
 const MAX_SCALE = 2.5
 
-// 动态 viewBox：通过改变 viewBox 大小实现缩放，内容始终铺满容器
 const viewBoxParts = computed(() =>
   viewBox.value.split(' ').map(Number)
 )
 
+// 通过改变 viewBox 实现缩放，同时将节点包围盒中心居中
 const viewBox = computed(() => {
-  // viewBox 中心对齐节点包围盒中心，缩放从原点不会让图飘出可视区
   const w = VW / scale.value
   const h = VH / scale.value
 
   let offsetX = 0
   let offsetY = 0
   if (store.nodes.length > 0) {
-    // 一遍 reduce 求 min/max，避免 Math.min(...arr) 在节点数千时栈溢出
+    // 用 for 循环避免 Math.min(...arr) 在节点数千时栈溢出
     let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity
     for (const n of store.nodes) {
       if (n.x < minX) minX = n.x
@@ -210,6 +202,7 @@ const currentTopicTitle = computed(() => {
 let confettiInstance: any = null
 let hintTimer: ReturnType<typeof setTimeout> | null = null
 
+// 节点 id → KNode 的快速索引，供 GraphEdge 查找端点坐标
 const nodeMap = computed(() =>
   Object.fromEntries(store.nodes.map(n => [n.id, n]))
 )
@@ -240,13 +233,12 @@ function resetView() {
   showHint()
 }
 
-// 拖拽
 const isDragging = ref(false)
 const dragStart = ref({ x: 0, y: 0 })
 const panStart = ref({ x: 0, y: 0 })
 
+// 限制平移范围，防止图形完全拖出视口
 function clampPan(x: number, y: number) {
-  // 限制平移幅度，避免拖到屏幕外丢失图形可见性
   const limit = 300
   return {
     x: Math.min(Math.max(x, -limit), limit),
@@ -254,8 +246,8 @@ function clampPan(x: number, y: number) {
   }
 }
 
+// 将 SVG 用户坐标转换为容器归一化坐标，供 confetti 的 origin 参数使用
 function getNodeScreenPos(node: KNode) {
-  // 把 SVG 用户坐标换算到容器归一化坐标，给 confetti 当 origin 用
   if (!containerRef.value || !svgRef.value) return { x: 0.5, y: 0.5 }
   const containerRect = containerRef.value.getBoundingClientRect()
   const svgRect = svgRef.value.getBoundingClientRect()
@@ -284,9 +276,9 @@ function fireConfettiAt(node: KNode) {
   })
 }
 
+// 全部节点已掌握时触发三波全屏庆祝彩纸
 function fireCelebration() {
   if (!confettiInstance) return
-  // 三波彩纸屑从不同位置
   confettiInstance({
     particleCount: 100,
     spread: 120,
@@ -331,6 +323,7 @@ onMounted(() => {
     })
   }
 
+  // 首次进入时为已掌握节点依次播放彩纸
   initialConfettiTimer = setTimeout(() => {
     masteredNodes.value.forEach((n, i) => {
       const t = setTimeout(() => fireConfettiAt(n), i * 220)
@@ -349,7 +342,6 @@ onMounted(() => {
   svgEl.style.cursor = 'grab'
 })
 
-// 滚轮缩放
 function onWheel(e: WheelEvent) {
   e.preventDefault()
   const delta = e.deltaY > 0 ? -0.1 : 0.1
@@ -368,7 +360,7 @@ function onMouseDown(e: MouseEvent) {
   e.preventDefault()
 }
 
-// rAF 节流：原生 mousemove 触发率高，无节流时每帧多次更新 panX/panY 会反复触发 viewBox 重算
+// rAF 节流：mousemove 高频触发，合并成每帧最多一次 viewBox 重算
 let panFrame: number | null = null
 let lastMouseEvent: MouseEvent | null = null
 function onMouseMove(e: MouseEvent) {
@@ -380,7 +372,6 @@ function onMouseMove(e: MouseEvent) {
     const ev = lastMouseEvent
     if (!ev || !svgRef.value) return
     const svgRect = svgRef.value.getBoundingClientRect()
-    // 鼠标右移，panX 应减小（内容跟着右移）
     const dx = (ev.clientX - dragStart.value.x) / svgRect.width * (VW / scale.value)
     const dy = (ev.clientY - dragStart.value.y) / svgRect.height * (VH / scale.value)
     const clamped = clampPan(panStart.value.x - dx, panStart.value.y - dy)
@@ -399,7 +390,6 @@ let initialConfettiTimer: ReturnType<typeof setTimeout> | null = null
 const pendingConfettiTimers: ReturnType<typeof setTimeout>[] = []
 
 onBeforeUnmount(() => {
-  // 清除路由切换后还在飞的 confetti 定时与 rAF；防止引用已销毁 DOM
   if (hintTimer) clearTimeout(hintTimer)
   if (initialConfettiTimer) clearTimeout(initialConfettiTimer)
   pendingConfettiTimers.forEach(clearTimeout)
@@ -414,7 +404,7 @@ onBeforeUnmount(() => {
   window.removeEventListener('mouseup', onMouseUp)
 })
 
-// Set 差集 O(n)；之前用 .filter(includes) 是 O(n²)，节点多了会卡帧
+// 用 Set 差集 O(n) 找出新增已掌握节点，只为新节点播放彩纸
 watch(
   () => store.nodes.filter(n => n.state === 'mastered').map(n => n.id),
   (newIds, oldIds) => {
@@ -434,11 +424,9 @@ watch(() => store.lastMasteredId, (id) => {
   const node = store.nodes.find(n => n.id === id)
   if (node) {
     fireConfettiAt(node)
-    // 检查是否全部掌握
     const allMastered = store.nodes.length > 0 &&
       store.nodes.every(n => n.state === 'mastered')
     if (allMastered) {
-      // 延迟触发全屏庆祝
       setTimeout(() => fireCelebration(), 400)
     }
   }
@@ -526,7 +514,6 @@ function handleClick(node: KNode) {
   font-size: 12.5px;
   color: var(--ink-3);
 }
-
 
 .confetti-canvas {
   position: absolute;

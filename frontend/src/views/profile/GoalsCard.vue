@@ -112,11 +112,12 @@ watch(() => props.userId, (id) => {
   if (id) goalConfig.value = loadGoalConfig(id)
 })
 
+// 已完成主题数：所有节点均已掌握的主题
 const completedTopics = computed(() =>
   props.topics.filter(t => t.nodes > 0 && t.mastered === t.nodes).length
 )
 
-// 把启用的目标项整理成统一的列表，给环形图和列表共用
+// 将启用的目标项整理为统一列表，环形图和列表共用
 const goalItems = computed(() => {
   const cfg = goalConfig.value
   const items: { key: string; label: string; val: string; done: boolean; pct: number }[] = []
@@ -147,7 +148,7 @@ const totalPct = computed(() =>
 )
 const dashOffset = computed(() => circumference - (totalPct.value / 100) * circumference)
 
-// 弹窗里编辑用的副本，保存前不影响主显示
+// 弹窗编辑副本，保存前不影响主显示
 const editItems = reactive([
   { key: 'chat_count',       label: '学习对话次数', sub: '完成苏格拉底式对话的轮次',     unit: '轮',    enabled: true,  target: 5  },
   { key: 'mastered_nodes',   label: '掌握节点数',   sub: '今日标记为已掌握的知识节点',   unit: '个',    enabled: true,  target: 2  },
@@ -155,8 +156,8 @@ const editItems = reactive([
   { key: 'study_minutes',    label: '学习时长',     sub: '在学习页面停留的时间',         unit: '分钟',  enabled: true,  target: 30 },
 ])
 
+// 打开弹窗时将当前配置复制到编辑副本
 function openModal() {
-  // 打开时把当前 cfg 复制到 editItems，避免取消编辑还残留旧值
   const cfg = goalConfig.value
   editItems[0].enabled = cfg.chat_count.enabled;       editItems[0].target = cfg.chat_count.target
   editItems[1].enabled = cfg.mastered_nodes.enabled;   editItems[1].target = cfg.mastered_nodes.target
@@ -165,6 +166,7 @@ function openModal() {
   showModal.value = true
 }
 
+// 保存目标并持久化
 function save() {
   const newConfig: DailyGoalConfig = {
     chat_count:       { enabled: editItems[0].enabled, target: editItems[0].target },
@@ -177,6 +179,7 @@ function save() {
   showModal.value = false
 }
 
+// 恢复默认目标配置
 function resetToDefault() {
   const def = getDefaultGoal()
   editItems[0].enabled = def.chat_count.enabled;       editItems[0].target = def.chat_count.target

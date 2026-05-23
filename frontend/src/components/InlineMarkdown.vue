@@ -13,13 +13,12 @@ const props = defineProps<{
   withCaret?: boolean
 }>()
 
-// 配置 marked 使用 highlight.js 高亮代码
 marked.setOptions({
   breaks: true,
   gfm: true,
 })
 
-// 自定义 renderer，代码块加高亮和语言标签
+// 自定义渲染器：代码块加高亮和语言标签
 const renderer = new marked.Renderer()
 
 renderer.code = ({ text, lang }: { text: string; lang?: string }) => {
@@ -39,38 +38,31 @@ renderer.codespan = ({ text }: { text: string }) => {
   return `<code class="inline-code">${text}</code>`
 }
 
-// CommonMark 规定：** 后紧跟 Unicode 标点（如引号、括号）时不构成左侧定界符，
-// 导致 **”text”** 无法渲染为粗体。插入零宽空格 U+200B（Cf 类，非标点非空白）
-// 使 ** 重新满足定界条件，且不影响可见输出。
-// 全部通过 fromCodePoint 构造，源码中不出现任何 Unicode 特殊字符
+// CommonMark 规定 ** 后紧跟 Unicode 标点（如引号）时不构成左侧定界符，导致粗体渲染失败。
+// 插入零宽空格 U+200B（Cf 类，非标点非空白）使 ** 重新满足定界条件，且不影响可见输出。
 function preprocessMarkdown(md: string): string {
-  // U+200B ZERO WIDTH SPACE
   const zwsp = String.fromCodePoint(0x200B)
-  // 中英文引号及常用括号（码位列表，纯 ASCII 数字）
   const quoteCPs = [
-    0x0022, 0x0027, // ASCII double/single quote
-    0x201C, 0x201D, // left/right double quotation mark
-    0x2018, 0x2019, // left/right single quotation mark
-    0x300C, 0x300D, // corner brackets
-    0x300E, 0x300F, // white corner brackets
-    0x300A, 0x300B, // double angle brackets
-    0x3008, 0x3009, // angle brackets
-    0x3010, 0x3011, // black lenticular brackets
-    0x2039, 0x203A, // single guillemets
-    0x00AB, 0x00BB, // double guillemets
+    0x0022, 0x0027,
+    0x201C, 0x201D,
+    0x2018, 0x2019,
+    0x300C, 0x300D,
+    0x300E, 0x300F,
+    0x300A, 0x300B,
+    0x3008, 0x3009,
+    0x3010, 0x3011,
+    0x2039, 0x203A,
+    0x00AB, 0x00BB,
   ]
   const quotes = quoteCPs.map(function(cp) { return String.fromCodePoint(cp) }).join("")
   const cls = "([" + quotes + "])"
   const delim = "(\\*{1,2}|_{1,2})"
-  // ** 紧跟引号/括号 → 插零宽空格，修复左侧定界符
   md = md.replace(new RegExp(delim + cls, "g"), "$1" + zwsp + "$2")
-  // 引号/括号 紧跟 ** → 插零宽空格，修复右侧定界符
   md = md.replace(new RegExp(cls + delim, "g"), "$1" + zwsp + "$2")
   return md
 }
 
-// rAF 节流的渲染：流式追加 chunk 时不再每次都跑完整 marked.parse + 代码高亮，
-// 而是合并成每帧最多一次。withCaret=true（流式态）才节流；静态消息直接同步渲染
+// rAF 节流：流式追加时每帧最多渲染一次，withCaret=true（流式态）才节流
 const renderedHtml = ref('')
 let pendingFrame: number | null = null
 
@@ -113,7 +105,6 @@ onBeforeUnmount(() => {
 </style>
 
 <style>
-/* 全局样式，影响 v-html 渲染内容 */
 .md-inline p {
   margin: 6px 0;
   line-height: 1.7;
@@ -152,7 +143,6 @@ onBeforeUnmount(() => {
   margin: 10px 0;
 }
 
-/* 行内代码 */
 .md-inline .inline-code {
   font-family: var(--font-mono);
   font-size: 0.88em;
@@ -162,7 +152,6 @@ onBeforeUnmount(() => {
   border-radius: 4px;
 }
 
-/* 代码块容器 */
 .md-inline .code-block {
   margin: 10px 0;
   border-radius: 10px;
@@ -220,7 +209,6 @@ onBeforeUnmount(() => {
   color: #cdd6f4;
 }
 
-/* highlight.js 颜色主题（Catppuccin Mocha 风格） */
 .md-inline .hljs-keyword,
 .md-inline .hljs-selector-tag { color: #cba6f7; }
 
@@ -248,7 +236,6 @@ onBeforeUnmount(() => {
 
 .md-inline .hljs-property { color: #f38ba8; }
 
-/* 表格 */
 .md-inline table {
   border-collapse: collapse;
   width: 100%;

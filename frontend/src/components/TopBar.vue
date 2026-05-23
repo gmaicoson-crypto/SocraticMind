@@ -1,6 +1,5 @@
 <template>
   <header class="topbar">
-    <!-- Logo -->
     <div class="logo-wrap" style="cursor:pointer" @click="router.push('/')">
       <div class="logo-icon">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -18,7 +17,6 @@
 
     <div class="divider" />
 
-    <!-- Search -->
     <div class="search-outer" ref="searchRef">
       <div class="search-wrap" :class="{ focused }">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--ink-3)" stroke-width="2">
@@ -43,10 +41,8 @@
         </button>
       </div>
 
-      <!-- 下拉结果 -->
       <Transition name="dropdown">
         <div v-if="showDropdown && focused && results.length > 0" class="search-dropdown">
-          <!-- 节点结果 -->
           <div v-if="nodeResults.length > 0">
             <div class="dropdown-section">节点</div>
             <div
@@ -79,7 +75,6 @@
             </div>
           </div>
 
-          <!-- 主题结果 -->
           <div v-if="topicResults.length > 0">
             <div class="dropdown-section">主题</div>
             <div
@@ -103,7 +98,6 @@
         </div>
       </Transition>
 
-      <!-- 无结果 -->
       <Transition name="dropdown">
         <div v-if="showDropdown && focused && query && results.length === 0" class="search-dropdown">
           <div class="no-result">
@@ -118,7 +112,6 @@
 
     <div style="flex: 1" />
 
-    <!-- Progress -->
     <div class="progress-wrap">
       <div class="progress-label">
         <span>进度</span>
@@ -131,7 +124,6 @@
 
     <div class="divider" />
 
-    <!-- Profile -->
     <div class="profile-wrap" style="cursor:pointer" @click="router.push('/profile')">
       <div class="profile-info">
         <div class="profile-name">{{ store.userInfo?.username ?? '学习者' }}</div>
@@ -171,14 +163,12 @@ const inputRef = ref<HTMLInputElement | null>(null)
 
 const pct = computed(() => Math.round((store.masteredCount / store.totalCount) * 100))
 
-// 搜索结果（节点跨主题，从后端获取，带 200ms 防抖）
+// 跨主题节点搜索结果（后端接口），带 200ms 防抖
 const nodeResults = ref<SearchedNode[]>([])
-
-//TypeScript 自动判断当前是哪个环境，用对应的类型
 let searchTimer: ReturnType<typeof setTimeout> | null = null
+// 序号递增解决并发请求乱序返回导致旧结果覆盖新结果的问题
 let searchSeq = 0
 
-//带防抖和竞态处理，用序号递增解决网络请求乱序返回导致显示旧结果的问题（难题和亮点）
 watch(query, (q) => {
   if (searchTimer) clearTimeout(searchTimer)
   activeIndex.value = -1
@@ -187,7 +177,6 @@ watch(query, (q) => {
     nodeResults.value = []
     return
   }
-  //竞态处理：每次搜索前序号加一，结果返回时检查序号是否匹配，不匹配则丢弃结果
   const seq = ++searchSeq
   searchTimer = setTimeout(async () => {
     try {
@@ -199,6 +188,7 @@ watch(query, (q) => {
   }, 200)
 })
 
+// 主题搜索：本地过滤
 const topicResults = computed(() => {
   if (!query.value.trim()) return []
   const q = query.value.toLowerCase()
@@ -213,7 +203,6 @@ function stateLabel(state: string) {
   return { mastered: '已掌握', available: '可学习', locked: '已锁定' }[state] || state
 }
 
-// 键盘导航
 function moveDown() {
   activeIndex.value = Math.min(activeIndex.value + 1, results.value.length - 1)
 }
@@ -232,7 +221,7 @@ function selectCurrent() {
   }
 }
 
-// 选择节点：切换到对应主题 → 找到本地 KNode → 激活节点（触发对话跳转）
+// 选中节点：切换到对应主题 → 激活节点（触发对话跳转）
 async function selectNode(item: SearchedNode) {
   closeSearch()
   router.push('/')
@@ -243,7 +232,6 @@ async function selectNode(item: SearchedNode) {
   if (localNode) store.setActiveNode(localNode)
 }
 
-// 选择主题
 async function selectTopic(topic: Topic) {
   closeSearch()
   router.push('/')
@@ -272,7 +260,7 @@ function onBlur() {
   }, 150)
 }
 
-// ⌘K 快捷键
+// ⌘K / Ctrl+K 聚焦搜索框
 function handleKeydown(e: KeyboardEvent) {
   if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
     e.preventDefault()
@@ -292,7 +280,6 @@ onMounted(async () => {
 })
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', handleKeydown)
-  // 防止快速卸载时遗留请求覆盖新组件的搜索结果
   if (searchTimer) clearTimeout(searchTimer)
 })
 </script>
@@ -344,7 +331,6 @@ onBeforeUnmount(() => {
   background: var(--line);
 }
 
-/* Search */
 .search-outer {
   flex: 1;
   max-width: 460px;
@@ -398,7 +384,6 @@ onBeforeUnmount(() => {
 }
 .clear-btn:hover { color: var(--ink); }
 
-/* Dropdown */
 .search-dropdown {
   position: absolute;
   top: calc(100% + 6px);
@@ -499,7 +484,6 @@ onBeforeUnmount(() => {
   color: var(--ink-3);
 }
 
-/* Transition */
 .dropdown-enter-active,
 .dropdown-leave-active {
   transition: opacity .15s ease, transform .15s ease;
@@ -510,7 +494,6 @@ onBeforeUnmount(() => {
   transform: translateY(-6px);
 }
 
-/* Progress */
 .progress-wrap {
   display: flex;
   flex-direction: column;
@@ -539,7 +522,6 @@ onBeforeUnmount(() => {
   transition: width .4s ease;
 }
 
-/* Profile */
 .profile-wrap {
   display: flex;
   align-items: center;

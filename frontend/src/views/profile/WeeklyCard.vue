@@ -71,7 +71,7 @@ const props = defineProps<{
 
 const weekDayLabels = ['一', '二', '三', '四', '五', '六', '日']
 
-// 周一到周日：JS 的 getDay() 0=周日 6=周六；这里映射为 0=周一 6=周日
+// JS getDay() 0=周日，这里映射为 0=周一 … 6=周日
 const weekDays = computed(() => {
   const heatmapMap = Object.fromEntries(props.heatmap.map(h => [h.date, h.count]))
   const today = new Date()

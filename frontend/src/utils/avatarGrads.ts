@@ -1,4 +1,4 @@
-// 单一来源的头像渐变配色，避免不同弹窗 / 注册流程出现配色漂移
+// 头像渐变配色列表，所有用头像色的地方统一从这里取，避免配色漂移
 export const avatarGrads = [
   'linear-gradient(135deg,#e8c87a,#d4974a)',
   'linear-gradient(135deg,#5BA3D9,#2E7FBB)',

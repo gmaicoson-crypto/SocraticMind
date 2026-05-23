@@ -18,12 +18,14 @@ const props = defineProps<{
   to: KNode
 }>()
 
+// 根据两端节点状态决定边的视觉状态
 const edgeState = computed(() => {
   if (props.from.state === 'mastered' && props.to.state === 'mastered') return 'active'
   if (props.to.state === 'locked') return 'locked'
   return 'default'
 })
 
+// 三次贝塞尔曲线路径
 const pathD = computed(() => {
   const { from, to } = props
   const dx = to.x - from.x

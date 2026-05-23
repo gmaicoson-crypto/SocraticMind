@@ -1,15 +1,12 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 
-// https://vite.dev/config/
 export default defineConfig({
   plugins: [vue()],
   build: {
-    // 把第三方大依赖切成独立 chunk：
-    // - 业务代码迭代频繁，vendor 不变；浏览器可以长缓存这些 chunk
-    // - 首屏只加载 vue 内核，marked / hljs / confetti 按需在打开对应页面时拉取
     rollupOptions: {
       output: {
+        // 将第三方依赖按用途拆分为独立 chunk，利用浏览器长缓存
         manualChunks: {
           'vendor-vue': ['vue', 'vue-router', 'pinia'],
           'vendor-md': ['marked', 'highlight.js'],
@@ -20,7 +17,6 @@ export default defineConfig({
         },
       },
     },
-    // 提高警告阈值，避免 vendor chunk 触发"chunk 过大"警告噪声
     chunkSizeWarningLimit: 800,
   },
 })

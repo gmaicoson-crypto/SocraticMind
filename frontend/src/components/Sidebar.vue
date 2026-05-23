@@ -1,14 +1,12 @@
 <template>
   <aside class="sidebar">
 
-    <!-- 主题管理弹窗：用 v-if 配合 hasOpenedManager，使弹窗代码只在首次点击后才下载 -->
     <TopicManager
       v-if="hasOpenedManager"
       :show="showManager"
       @close="showManager = false"
     />
 
-    <!-- 我的主题 -->
     <div class="section">
       <div class="section-header">
         <span class="section-title">我的主题</span>
@@ -56,7 +54,6 @@
           </div>
         </button>
 
-        <!-- 展开按钮 -->
         <button v-if="showMoreTopics" class="expand-btn" @click="openManager()">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
             <path d="M6 9l6 6 6-6"/>
@@ -64,14 +61,12 @@
           还有 {{ store.topics.length - MAX_VISIBLE }} 个主题
         </button>
 
-        <!-- 空状态 -->
         <div v-if="store.topics.length === 0" class="empty-topics">
           在对话框告诉 AI 你想学什么
         </div>
       </div>
     </div>
 
-    <!-- 推荐 -->
     <div class="section">
       <div class="section-header">
         <span class="section-title">推荐</span>
@@ -92,7 +87,6 @@
         </button>
       </div>
 
-      <!-- 加载中 -->
       <div v-if="store.recommendations.length === 0 || isRefreshing" class="rec-empty">
         <span class="rec-loading">{{ isRefreshing ? 'AI 正在重新推荐…' : 'AI 正在分析推荐…' }}</span>
       </div>
@@ -114,7 +108,6 @@
       </div>
     </div>
 
-    <!-- 连续学习 -->
     <div class="streak-card">
       <div class="streak-header">
         <span style="font-size: 18px;">✦</span>
@@ -124,7 +117,6 @@
         <span class="streak-num">{{ store.streakData.streak }}</span>
         <span class="streak-unit">天</span>
       </div>
-      <!-- 最近14天热力图 -->
       <div class="streak-bars">
         <div
           v-for="i in 31"
@@ -137,7 +129,6 @@
       <div class="streak-total">累计学习 {{ store.streakData.total_days }} 天</div>
     </div>
 
-    <!-- Toast 提示 -->
     <Transition name="toast">
       <div v-if="showToast" class="toast">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
@@ -153,13 +144,13 @@
 <script setup lang="ts">
 import { ref, computed, onBeforeUnmount, defineAsyncComponent } from 'vue'
 import { useLearningStore } from '../stores/learning'
-// TopicManager 仅在点击"管理主题"按钮时打开，async 化让侧栏首屏不带它
+// TopicManager 体积较大，仅在用户点击"管理主题"时才加载
 const TopicManager = defineAsyncComponent(() => import('./TopicManager.vue'))
 import { generateTopic } from '../api/topic'
 
 const store = useLearningStore()
 const showManager = ref(false)
-// 一旦打开过就保持挂载，避免反复 import；首次打开前根本不会加载组件
+// 首次点击后保持挂载，避免反复销毁重建
 const hasOpenedManager = ref(false)
 
 function openManager() {
@@ -181,7 +172,6 @@ function showToastMsg(msg: string) {
   toastMsg.value = msg
   showToast.value = true
   if (toastTimer) clearTimeout(toastTimer)
-  // 正在加入中不自动消失，等下一条消息替换
   if (!msg.includes('请稍等')) {
     toastTimer = setTimeout(() => { showToast.value = false }, 2500)
   }
@@ -197,6 +187,7 @@ async function refreshRecommend() {
   }
 }
 
+// 点击推荐：生成主题图谱，切换并触发概览推送
 async function handleRecommend(title: string, emoji: string) {
   if (generatingTitle.value) return
   generatingTitle.value = title
@@ -204,7 +195,6 @@ async function handleRecommend(title: string, emoji: string) {
   try {
     const topic = await generateTopic(title, emoji)
     await store.fetchTopicsOnly()
-    // 先标记新主题需要概览，再切主题；SocraticDialogue 切到该会话后会自动推送概览
     store.requestTopicOverview(topic.id)
     await store.setActiveTopic(String(topic.id))
     showToastMsg(`已成功将《${title}》加入学习计划`)
@@ -216,10 +206,9 @@ async function handleRecommend(title: string, emoji: string) {
   }
 }
 
-// 31 天循环热力格：满 31 天后归零进入下一周期，颜色随周期内进度由浅到深，给"积累感"的视觉反馈
+// 31 天循环热力格：颜色随当前周期内进度由浅到深
 function getBarStyle(i: number) {
   const streak = store.streakData.streak
-  // 满 31 天的整数倍要显示满格而不是 0 格
   const lit = streak % 31 === 0 && streak > 0 ? 31 : streak % 31
   const isLit = i <= lit
 
@@ -227,11 +216,9 @@ function getBarStyle(i: number) {
     return { background: 'var(--bg-3)', opacity: '0.4' }
   }
 
-  // 颜色随天数变化：天数越多越深
-  const ratio = i / 31  // 0~1
-  // 用 oklch 从浅蓝到深蓝
-  const l = 0.78 - ratio * 0.25   // 亮度：0.78 → 0.53
-  const c = 0.07 + ratio * 0.08   // 饱和度：0.07 → 0.15
+  const ratio = i / 31
+  const l = 0.78 - ratio * 0.25
+  const c = 0.07 + ratio * 0.08
   return {
     background: `oklch(${l.toFixed(2)} ${c.toFixed(2)} 235)`,
     opacity: '1',
@@ -242,8 +229,6 @@ function getBarTitle(i: number) {
   const streak = store.streakData.streak
   const lit = streak % 31 === 0 && streak > 0 ? 31 : streak % 31
   if (i > lit) return `未达到第 ${i} 天`
-
-  // 把热力格 i 还原为绝对天数：先前已完成的循环数 × 31 + 当前格序号
   const cycleStart = Math.floor(streak / 31) * 31
   const actualDay = cycleStart + i
   return `连续学习第 ${actualDay} 天`

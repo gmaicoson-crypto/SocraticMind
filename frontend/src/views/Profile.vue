@@ -27,7 +27,6 @@
         <WeeklyCard :weekly="stats.weekly" :heatmap="stats.heatmap" :today-str="todayStr" />
       </div>
 
-      <!-- 主题进度 -->
       <div>
         <div class="section-title">学习主题进度</div>
         <div class="grid-topics">
@@ -61,7 +60,6 @@
         </div>
       </div>
 
-      <!-- 成就徽章 -->
       <div class="card">
         <div class="card-title">成就徽章</div>
         <div class="badge-grid">
@@ -78,7 +76,6 @@
         </div>
       </div>
 
-      <!-- 学习时间线 -->
       <div class="card">
         <div class="card-title">最近记录</div>
         <div class="timeline">
@@ -106,7 +103,7 @@ import { ref, shallowRef, computed, onMounted, defineAsyncComponent } from 'vue'
 import { useRouter } from 'vue-router'
 import { useLearningStore } from '../stores/learning'
 import TopBar from '../components/TopBar.vue'
-// 编辑资料弹窗只在用户点"编辑"时显示，做成 async 避免首次进入 Profile 页就拉取 ~360 行的弹窗代码
+// 编辑资料弹窗体积较大，异步加载避免首次进入 Profile 页多余下载
 const EditProfileModal = defineAsyncComponent(() => import('../components/EditProfileModal.vue'))
 import { getProfileStats, recordToday } from '../api/progress'
 import { loadTodayProgress } from '../utils/dailyGoal'
@@ -121,8 +118,7 @@ const showEditModal = ref(false)
 const store = useLearningStore()
 const router = useRouter()
 
-// shallowRef：stats.heatmap 365 个对象、timeline / badges 数组都是整体替换，
-// 不需要每个数组项都被 Proxy 包裹，避免大对象 reactive walk 的开销
+// shallowRef：heatmap(365项)、timeline、badges 均为整体替换，不需要深层响应式
 const stats = shallowRef<ProfileStats>({
   chat_count: 0,
   mastered_count: 0,
@@ -141,7 +137,7 @@ const stats = shallowRef<ProfileStats>({
 })
 
 onMounted(async () => {
-  // POST 今日学习记录（仅写入，不额外拉取 streak——stats 已包含 streak）
+  // 记录今日学习（仅写入，streak 由下面的 stats 接口返回）
   try {
     await recordToday()
   } catch (err) {
@@ -150,7 +146,7 @@ onMounted(async () => {
   try {
     const data = await getProfileStats()
     stats.value = data
-    // 同步 streak 到 store，避免冗余的 GET /api/progress/streak
+    // 将 stats 中的 streak 同步到 store，避免额外请求 GET /api/progress/streak
     store.streakData.streak = data.streak
     store.streakData.total_days = data.total_days
   } catch (err) {
@@ -163,7 +159,7 @@ const userBio = computed(() => store.userInfo?.bio ?? '每一个问题都是通�
 
 const todayStr = new Date().toISOString().slice(0, 10)
 
-// 今日数据：传给 GoalsCard 用
+// 今日对话次数：从热力图中查找今天的记录
 const todayChatCount = computed(() => {
   const cell = stats.value.heatmap.find(h => h.date === todayStr)
   return cell?.count ?? 0
@@ -222,7 +218,6 @@ function topicColor(index: number) {
   font-family: var(--font-mono); margin-bottom: 14px;
 }
 
-/* 主题卡 */
 .topic-card {
   background: var(--surface); border: 1px solid var(--line);
   border-radius: 12px; padding: 16px 18px;
@@ -237,7 +232,6 @@ function topicColor(index: number) {
 .tc-fill { height: 100%; border-radius: 99px; transition: width .4s; }
 .tc-footer { display: flex; justify-content: space-between; font-size: 10.5px; color: var(--ink-3); font-family: var(--font-mono); }
 
-/* 徽章 */
 .badge-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; }
 .badge { display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 12px 8px; border-radius: 10px; cursor: pointer; transition: transform .15s; }
 .badge:hover { transform: translateY(-2px); }
@@ -249,7 +243,6 @@ function topicColor(index: number) {
 .badge-name { font-size: 10px; font-weight: 500; text-align: center; color: var(--ink-2); line-height: 1.3; }
 .badge.unlocked .badge-name { color: var(--blue-2); }
 
-/* 时间线 */
 .timeline { display: flex; flex-direction: column; }
 .tl-item { display: flex; gap: 14px; padding: 10px 0; border-bottom: 0.5px solid var(--line); align-items: flex-start; }
 .tl-item:last-child { border-bottom: none; }

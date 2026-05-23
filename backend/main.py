@@ -5,12 +5,12 @@ from fastapi.staticfiles import StaticFiles
 from core.config import settings
 from core.database import Base, engine
 from routers import auth, topics, nodes, chat, progress
-import models  # 确保模型被注册
+import models  # 必须导入，确保所有 ORM 模型在 create_all 前已注册到 metadata
 
-# 创建尚未存在的表（已存在的表不会被覆盖）
+# 启动时自动建表，已存在的表不会被覆盖
 Base.metadata.create_all(bind=engine)
 
-# 头像上传目录
+# 头像文件存储目录，不存在时自动创建
 UPLOAD_DIR = Path(__file__).parent / "uploads" / "avatars"
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -20,7 +20,7 @@ app = FastAPI(
     version="1.0.0",
 )
 
-# CORS：允许的源通过 CORS_ORIGINS 环境变量配置（逗号分隔），生产环境需改为实际域名
+# 允许的前端源通过环境变量 CORS_ORIGINS 配置（逗号分隔），生产环境须改为实际域名
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins_list,
@@ -30,19 +30,20 @@ app.add_middleware(
     expose_headers=["*"],
 )
 
-# 静态文件（头像）
+# 将头像上传目录挂载为静态文件路由，前端通过 /static/avatars/<filename> 访问
 app.mount("/static/avatars", StaticFiles(directory=str(UPLOAD_DIR)), name="avatars")
 
-# 注册路由
 app.include_router(auth.router)
 app.include_router(topics.router)
 app.include_router(nodes.router)
 app.include_router(chat.router)
 app.include_router(progress.router)
 
+
 @app.get("/")
 def root():
-    return {"message": "SocraticMind API is running 🚀"}
+    return {"message": "SocraticMind API is running"}
+
 
 @app.get("/health")
 def health():

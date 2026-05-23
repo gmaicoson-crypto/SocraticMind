@@ -4,7 +4,6 @@
       <div v-if="show" class="manager-overlay" @click.self="emit('close')">
         <div class="manager-panel">
 
-          <!-- 头部 -->
           <div class="panel-header">
             <div>
               <div class="panel-title">我的主题</div>
@@ -13,7 +12,6 @@
             <button class="close-btn" @click="emit('close')">✕</button>
           </div>
 
-          <!-- 主题列表 -->
           <div class="topic-list">
             <div
               v-for="topic in store.topics"
@@ -28,7 +26,6 @@
                   <div class="topic-stats">
                     {{ topic.mastered }} / {{ topic.nodes }} 节点已掌握
                   </div>
-                  <!-- 进度条 -->
                   <div class="topic-track">
                     <div
                       class="topic-fill"
@@ -49,13 +46,11 @@
               </button>
             </div>
 
-            <!-- 空状态 -->
             <div v-if="store.topics.length === 0" class="empty-state">
               <div class="empty-text">还没有主题，在对话框告诉 AI 你想学什么吧！</div>
             </div>
           </div>
 
-          <!-- 删除确认 -->
           <Transition name="fade">
             <div v-if="confirmId" class="confirm-bar">
               <span>确定删除「{{ confirmTitle }}」吗？</span>
@@ -90,6 +85,7 @@ function selectTopic(id: string) {
   emit('close')
 }
 
+// 点击删除按钮先显示确认条，防止误操作
 function handleDelete(id: string, title: string) {
   confirmId.value = id
   confirmTitle.value = title
@@ -103,12 +99,11 @@ async function doDelete() {
   try {
     await deleteTopic(Number(id))
     await store.fetchTopics()
-    // 如果删的是当前主题，清空节点和图谱
+    // 删除的是当前主题时，切换到下一个或清空图谱
     if (store.activeTopicId === id) {
       if (store.topics.length > 0) {
         await store.setActiveTopic(store.topics[0].id)
       } else {
-        // 没有主题了，清空所有数据
         store.clearGraph()
       }
     }
@@ -296,7 +291,6 @@ async function doDelete() {
   line-height: 1.6;
 }
 
-/* 删除确认条 */
 .confirm-bar {
   padding: 12px 16px;
   border-top: 1px solid var(--line);
@@ -335,7 +329,6 @@ async function doDelete() {
   font-family: var(--font-sans);
 }
 
-/* 动画 */
 .slide-enter-active,
 .slide-leave-active {
   transition: opacity .2s ease;

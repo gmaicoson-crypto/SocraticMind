@@ -45,7 +45,6 @@
           </div>
 
           <div class="right-panel">
-            <!-- v-if + 异步组件：首次显示时才下载/挂载，KeepAlive 缓存已加载的实例 -->
             <KeepAlive>
               <KnowledgeGraph v-if="rightPanel === 'graph'" />
               <NotesPanel v-else-if="rightPanel === 'notes'" />
@@ -64,8 +63,7 @@ import { addStudyMinutes } from '../utils/dailyGoal'
 import TopBar from '../components/TopBar.vue'
 import Sidebar from '../components/Sidebar.vue'
 import SocraticDialogue from '../components/SocraticDialogue.vue'
-// KnowledgeGraph 含 confetti + 大量 SVG 计算；NotesPanel 含 marked + 画布
-// 异步加载让首屏 JS 体积下降，并配合 keep-alive 切 tab 时不重复加载
+// KnowledgeGraph 和 NotesPanel 体积较大，异步加载减少首屏 JS，KeepAlive 避免切换时重复挂载
 const KnowledgeGraph = defineAsyncComponent(() => import('../components/KnowledgeGraph.vue'))
 const NotesPanel = defineAsyncComponent(() => import('../components/NotesPanel.vue'))
 import { useLearningStore } from '../stores/learning'
@@ -85,19 +83,18 @@ const MIN_LEFT = 320
 const MIN_RIGHT = 380
 const DIVIDER_W = 10
 
-// 学习时长计时：1Hz 计时器；2 分钟无操作判定为 inactive 暂停计时
+// 学习时长计时：1Hz 计时器，记录用户活跃时间；2 分钟无操作则暂停计时
 let studyTimer: ReturnType<typeof setInterval> | null = null
 let studySeconds = 0
 
 const INACTIVE_TIMEOUT = 2 * 60 * 1000
 const ACTIVE_EVENTS = ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll']
-// 仅记录时间戳，避免每次 mousemove 都 clearTimeout/setTimeout
+// 只记录最后活跃时间戳，避免 mousemove 高频触发 clearTimeout/setTimeout
 let lastActiveAt = Date.now()
 
 function startStudyTimer() {
   if (studyTimer) return
   studyTimer = setInterval(() => {
-    // 在计时器内判定活跃，避免事件回调高频开销
     if (Date.now() - lastActiveAt > INACTIVE_TIMEOUT) return
     studySeconds++
     if (studySeconds % 60 === 0 && store.userInfo?.id) {
@@ -110,7 +107,7 @@ function stopStudyTimer() {
   if (!studyTimer) return
   clearInterval(studyTimer)
   studyTimer = null
-  // 不足 1 分钟但超过 30 秒按 1 分钟入账
+  // 不足 1 分钟但超过 30 秒，按 1 分钟计入学习时长
   const remaining = Math.floor(studySeconds % 60)
   if (remaining >= 30 && store.userInfo?.id) {
     addStudyMinutes(store.userInfo.id, 1)
@@ -122,7 +119,6 @@ function onUserActive() {
 }
 
 function handleVisibilityChange() {
-  // 切回前台视为一次活跃，防止误判 inactive 漏计时
   if (!document.hidden) onUserActive()
 }
 
@@ -136,8 +132,6 @@ onMounted(async () => {
     const total = mainRef.value.clientWidth - DIVIDER_W - 28
     leftWidth.value = Math.round(total * 0.45)
   }
-
-  // fetchTopics 已在 App.vue onMounted 中调用，此处不重复请求
 })
 
 onBeforeUnmount(() => {
@@ -146,6 +140,7 @@ onBeforeUnmount(() => {
   ACTIVE_EVENTS.forEach(e => window.removeEventListener(e, onUserActive))
 })
 
+// 拖拽分割线调整左右列宽度
 function startDrag(e: MouseEvent) {
   dragging.value = true
   e.preventDefault()

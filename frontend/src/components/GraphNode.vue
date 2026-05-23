@@ -6,7 +6,6 @@
     :class="{ 'node-mastered': node.state === 'mastered' }"
     @click="emit('click', node)"
   >
-    <!-- 选中虚线边框 -->
     <rect
       v-if="isSelected"
       :x="-W/2 - 4" :y="-H/2 - 4"
@@ -19,7 +18,6 @@
       opacity="0.7"
     />
 
-    <!-- 节点主体 -->
     <rect
       class="node-bg"
       :x="-W/2" :y="-H/2"
@@ -30,7 +28,6 @@
       stroke-width="1.3"
     />
 
-    <!-- 状态图标 -->
     <g v-if="node.state === 'mastered'" :transform="`translate(${-W/2 + 14}, 0)`">
       <path d="M-5 0 L-1 4 L6 -4" fill="none" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
     </g>
@@ -42,7 +39,6 @@
       <circle r="3" :fill="styles.icon" />
     </g>
 
-    <!-- 主标签：截断长文字 -->
     <text
       x="6" y="-4"
       text-anchor="middle"
@@ -52,7 +48,6 @@
       font-family="Inter, 'Noto Sans SC', sans-serif"
     >{{ truncate(node.label, 7) }}</text>
 
-    <!-- 副标签：截断长文字 -->
     <text
       x="6" y="13"
       text-anchor="middle"
@@ -84,12 +79,13 @@ const W = 120
 const H = 52
 const R = 14
 
-// 截断文字
+// 超长文字截断，避免 SVG 文字溢出节点边框
 function truncate(text: string, max: number): string {
   if (!text) return ''
   return text.length > max ? text.slice(0, max) + '…' : text
 }
 
+// 根据节点状态和深色模式返回样式配置
 const styles = computed(() => {
   const s = props.node.state
   const dark = store.isDark

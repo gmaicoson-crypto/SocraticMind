@@ -1,5 +1,7 @@
+// 知识节点状态：已掌握 / 可学习 / 未解锁
 export type NodeState = 'mastered' | 'available' | 'locked'
 
+// 知识图谱中的节点
 export interface KNode {
   id: string
   label: string
@@ -7,14 +9,16 @@ export interface KNode {
   x: number
   y: number
   state: NodeState
-  dbId?: number  // 数据库 id
+  dbId?: number
 }
 
+// 知识图谱中的有向边
 export interface KEdge {
   source: string
   target: string
 }
 
+// 学习主题
 export interface Topic {
   id: string
   title: string
@@ -23,13 +27,14 @@ export interface Topic {
   emoji: string
 }
 
+// 对话消息
 export interface Message {
   role: 'ai' | 'user'
   text: string
   time: string
   quote?: string
-  db_id?: number        // DB primary key for this message record
-  paired_db_id?: number // for AI messages auto-triggered by an invisible system prompt
-  choices?: { label: string; text: string }[]  // [CHOICES] 解析出的选项
-  selected_choice?: string  // 用户已选选项的 label，如 "A"
+  db_id?: number
+  paired_db_id?: number
+  choices?: { label: string; text: string }[]
+  selected_choice?: string
 }

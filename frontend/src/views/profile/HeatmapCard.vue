@@ -84,7 +84,7 @@ function onNext() {
 
 const startPad = computed(() => monthStartPad(selectedYear.value, selectedMonth.value))
 
-// 把 heatmap 数组建一次索引；之后切月份不会重建
+// 建立日期索引，切月份时复用，不重复遍历 heatmap 数组
 const heatmapByDate = computed(() =>
   Object.fromEntries(props.heatmap.map(h => [h.date, h.count]))
 )

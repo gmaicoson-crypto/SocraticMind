@@ -19,7 +19,7 @@ from models.progress import ChatMessage, LearningRecord
 
 UPLOAD_DIR = Path(__file__).resolve().parent.parent / "uploads" / "avatars"
 ALLOWED_AVATAR_EXT = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
-MAX_AVATAR_SIZE = 5 * 1024 * 1024  # 5MB
+MAX_AVATAR_SIZE = 5 * 1024 * 1024  # 头像文件上限 5 MB
 
 CODE_TTL_MINUTES = 10
 EMAIL_RE = re.compile(r"^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$")
@@ -27,8 +27,10 @@ EMAIL_RE = re.compile(r"^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$")
 router = APIRouter(prefix="/api/auth", tags=["认证"])
 
 
-# ── Pydantic ──
+# ── 请求 / 响应模型 ──
+
 def _validate_password(v: str) -> str:
+    """校验密码强度：至少 8 位，且必须同时包含字母和数字。"""
     if len(v) < 8:
         raise ValueError("密码至少 8 位")
     if not re.search(r"[A-Za-z]", v) or not re.search(r"\d", v):
@@ -37,6 +39,7 @@ def _validate_password(v: str) -> str:
 
 
 def _validate_email(v: str) -> str:
+    """统一转为小写并校验邮箱格式。"""
     v = v.strip().lower()
     if not EMAIL_RE.match(v):
         raise ValueError("邮箱格式不正确")
@@ -134,12 +137,13 @@ class ChangePasswordRequest(BaseModel):
 
 class DeleteAccountRequest(BaseModel):
     password: str
-    confirm: str  # 二次确认：要求前端把固定文案回传，避免误调用
+    confirm: str  # 前端须回传固定确认串（"DELETE"），防止误触注销
 
 
-# ── 内部工具 ──
+# ── 内部工具函数 ──
+
 def _client_ip(request: Request) -> str:
-    # 反代后取 X-Forwarded-For 第一段；裸跑时退回 client.host
+    """获取真实客户端 IP：反向代理后取 X-Forwarded-For 首段，直连时退回 client.host。"""
     fwd = request.headers.get("x-forwarded-for")
     if fwd:
         return fwd.split(",")[0].strip()
@@ -151,7 +155,10 @@ def _now_utc() -> datetime:
 
 
 def _consume_code(db: Session, email: str, code: str, purpose: str) -> None:
-    """匹配最新一条同 (email, purpose) 的未用未过期记录；命中即标记 used，避免重放。"""
+    """校验验证码并将其标记为已使用，防止同一验证码被重复使用（重放攻击）。
+
+    取该 (email, purpose) 下最新一条未使用未过期的记录进行匹配。
+    """
     rec = (
         db.query(EmailCode)
         .filter(
@@ -176,7 +183,7 @@ def _consume_code(db: Session, email: str, code: str, purpose: str) -> None:
 
 
 def init_default_topic(db: Session, user_id: int):
-    """注册时自动创建 Python 基础主题和节点"""
+    """新用户注册后自动创建一个 Python 基础主题，帮助用户快速上手，无需从零配置图谱。"""
     topic = Topic(user_id=user_id, title="Python 基础知识", emoji="🐍")
     db.add(topic)
     db.flush()
@@ -205,6 +212,7 @@ def init_default_topic(db: Session, user_id: int):
 
 
 # ── 验证码 ──
+
 @router.post("/send-code")
 def send_code(req: SendCodeRequest, request: Request, db: Session = Depends(get_db)):
     purpose = req.purpose.strip()
@@ -213,7 +221,7 @@ def send_code(req: SendCodeRequest, request: Request, db: Session = Depends(get_
 
     email = req.email.lower().strip()
 
-    # 反爬反骚扰：单邮箱 60s 一次、单 IP 每小时 10 次
+    # 双重限流：单邮箱 60 秒一次 + 单 IP 每小时 10 次，防止批量发送骚扰
     if not rate_limit.hit(f"sendcode:email:{email}", max_calls=1, window_seconds=60):
         wait = rate_limit.remaining_seconds(f"sendcode:email:{email}", 60)
         raise HTTPException(status_code=429, detail=f"请求过于频繁，请 {wait} 秒后再试")
@@ -225,7 +233,7 @@ def send_code(req: SendCodeRequest, request: Request, db: Session = Depends(get_
     if purpose == "register" and user_exists:
         raise HTTPException(status_code=400, detail="该邮箱已注册")
     if purpose == "reset" and not user_exists:
-        # 不暴露账号是否存在但仍消耗速率配额，避免邮箱枚举
+        # 不暴露该邮箱是否已注册，但仍消耗限流配额，防止邮箱枚举攻击
         return {"message": "如果该邮箱已注册，验证码已发送"}
 
     code = generate_code()
@@ -242,11 +250,12 @@ def send_code(req: SendCodeRequest, request: Request, db: Session = Depends(get_
 
 
 # ── 注册 ──
+
 @router.post("/register", response_model=TokenResponse)
 def register(req: RegisterRequest, request: Request, db: Session = Depends(get_db)):
     email = req.email.lower().strip()
 
-    # IP 注册速率：5 次/小时，挡住批量注册脚本
+    # IP 维度限流：同一 IP 每小时最多注册 5 次，阻止批量注册脚本
     ip = _client_ip(request)
     if not rate_limit.hit(f"register:ip:{ip}", max_calls=5, window_seconds=3600):
         raise HTTPException(status_code=429, detail="注册请求过于频繁，请稍后再试")
@@ -274,6 +283,7 @@ def register(req: RegisterRequest, request: Request, db: Session = Depends(get_d
 
 
 # ── 登录 ──
+
 @router.post("/login", response_model=TokenResponse)
 def login(
     request: Request,
@@ -282,11 +292,12 @@ def login(
 ):
     email = form.username.lower().strip()
 
+    # 账号维度：连续失败超过阈值后锁定，阻止针对特定账号的暴力破解
     locked = rate_limit.is_login_locked(email)
     if locked:
         raise HTTPException(status_code=429, detail=f"登录失败次数过多，请 {locked // 60 + 1} 分钟后再试")
 
-    # IP 限流，防止单点扫密码
+    # IP 维度：5 分钟内最多 20 次，防止单点扫密码
     ip = _client_ip(request)
     if not rate_limit.hit(f"login:ip:{ip}", max_calls=20, window_seconds=300):
         raise HTTPException(status_code=429, detail="登录请求过于频繁，请稍后再试")
@@ -302,6 +313,7 @@ def login(
 
 
 # ── 找回密码 ──
+
 @router.post("/reset-password")
 def reset_password(req: ResetPasswordRequest, request: Request, db: Session = Depends(get_db)):
     email = req.email.lower().strip()
@@ -312,7 +324,7 @@ def reset_password(req: ResetPasswordRequest, request: Request, db: Session = De
 
     user = db.query(User).filter(User.email == email).first()
     if not user:
-        # 同样不暴露账号是否存在
+        # 不暴露账号是否存在，统一返回模糊错误信息
         raise HTTPException(status_code=400, detail="验证码错误或已过期")
 
     _consume_code(db, email, req.code, "reset")
@@ -332,19 +344,25 @@ def get_me(current_user: User = Depends(get_current_user)):
 def update_me(
     req: UpdateProfileRequest,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
-    if req.username is not None: current_user.username = req.username
-    if req.bio is not None: current_user.bio = req.bio
-    if req.avatar_grad is not None: current_user.avatar_grad = req.avatar_grad
-    if req.daily_goal is not None: current_user.daily_goal = req.daily_goal
-    if req.ai_style is not None: current_user.ai_style = req.ai_style
+    if req.username is not None:
+        current_user.username = req.username
+    if req.bio is not None:
+        current_user.bio = req.bio
+    if req.avatar_grad is not None:
+        current_user.avatar_grad = req.avatar_grad
+    if req.daily_goal is not None:
+        current_user.daily_goal = req.daily_goal
+    if req.ai_style is not None:
+        current_user.ai_style = req.ai_style
     db.commit()
     db.refresh(current_user)
     return current_user
 
 
 def _delete_old_avatar(user: User):
+    """删除用户当前的头像文件；文件不存在或删除失败时静默忽略，不影响主流程。"""
     if not user.avatar_url:
         return
     fname = user.avatar_url.rsplit("/", 1)[-1]
@@ -375,6 +393,7 @@ async def upload_avatar(
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
     _delete_old_avatar(current_user)
 
+    # 用用户 ID + UUID 命名，避免文件名冲突
     fname = f"{current_user.id}_{uuid.uuid4().hex}{suffix}"
     fpath = UPLOAD_DIR / fname
     fpath.write_bytes(data)
@@ -419,7 +438,7 @@ def delete_account(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """注销账号：删光所有关联数据 + 头像文件。需要密码 + 固定确认串双重校验。"""
+    """注销账号：需要密码 + 固定确认串双重校验，通过后删除所有关联数据和头像文件。"""
     if req.confirm.strip().upper() != CONFIRM_PHRASE:
         raise HTTPException(status_code=400, detail="二次确认未通过")
     if not verify_password(req.password, current_user.hashed_password):
@@ -428,18 +447,19 @@ def delete_account(
     user_id = current_user.id
     user_email = current_user.email
 
-    # 1) 头像文件先删（数据库回滚也无法恢复磁盘文件，所以放在最前面验证已通过之后立刻执行）
+    # 先删磁盘文件：数据库回滚无法恢复文件，所以在校验通过后立即执行
     _delete_old_avatar(current_user)
 
-    # 2) 显式删聊天/打卡/邮箱验证码：模型未在 User 侧声明 cascade，靠 SQLAlchemy 自动级联不可靠
+    # 显式删除 ChatMessage / LearningRecord / EmailCode：
+    # 这些模型未在 User 侧声明 cascade，不能依赖 ORM 自动级联
     db.query(ChatMessage).filter(ChatMessage.user_id == user_id).delete(synchronize_session=False)
     db.query(LearningRecord).filter(LearningRecord.user_id == user_id).delete(synchronize_session=False)
     db.query(EmailCode).filter(EmailCode.email == user_email).delete(synchronize_session=False)
 
-    # 3) 删用户：topics → nodes 走 ORM cascade（user.topics 配置了 cascade="all, delete"）
+    # 删用户本身；topics → nodes 走 ORM cascade（user.topics 配置了 cascade="all, delete"）
     db.delete(current_user)
     db.commit()
 
-    # 顺带把登录失败计数清零，避免被锁的邮箱重新注册同邮箱后状态残留
+    # 清除登录失败计数，避免同邮箱重新注册后状态残留
     rate_limit.reset_login_fail(user_email)
     return {"message": "账号已注销"}

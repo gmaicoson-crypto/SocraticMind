@@ -8,7 +8,7 @@ export interface ChatMessage {
 
 export type ChatKind = 'qa' | 'topic_overview' | 'node_overview'
 
-// SSE 流式对话
+// SSE 流式对话：通过原生 fetch 建立流式连接，逐块回调文本
 export function chatStream(
   nodeKey: string,
   topicId: number,
@@ -25,16 +25,14 @@ export function chatStream(
   kind: ChatKind = 'qa',
 ) {
   const token = getToken()
-
-  // 使用外部传入的 controller，没有则新建
   const controller = controllers ?? new AbortController()
 
-  // 5分钟超时
+  // 5 分钟超时保护
   const timeout = setTimeout(() => controller.abort(), 5 * 60 * 1000)
 
   let reader: ReadableStreamDefaultReader<Uint8Array> | null = null
 
-  // 中断时同时取消 reader
+  // 重写 abort，中断时同步取消 reader
   const originalAbort = controller.abort.bind(controller)
   controller.abort = () => {
     originalAbort()
@@ -64,6 +62,7 @@ export function chatStream(
       const decoder = new TextDecoder('utf-8')
       let buffer = ''
 
+      // 解析 SSE 数据块，每个事件以 \n\n 分隔
       function processBuffer() {
         const events = buffer.split('\n\n')
         buffer = events.pop() ?? ''
@@ -85,7 +84,6 @@ export function chatStream(
               if (json.signal) onSignal?.(json.signal)
               if (json.msg_ids) onMsgIds?.(json.msg_ids.user, json.msg_ids.ai)
             } catch (e) {
-              // 流式传输偶发分片，但持续失败需关注
               console.warn('[SSE] JSON 解析失败，分片数据:', data.slice(0, 80), e)
             }
           }
@@ -105,7 +103,6 @@ export function chatStream(
           read()
         }).catch(err => {
           clearTimeout(timeout)
-          // AbortError 不触发 onError
           if (err?.name !== 'AbortError') onError(err)
         })
       }
@@ -118,23 +115,25 @@ export function chatStream(
     })
 }
 
-// 获取对话历史
+// 获取指定节点的历史对话
 export async function getChatHistory(nodeKey: string) {
   const res = await api.get(`/api/chat/history/${nodeKey}`)
   return res.data as { id: number; role: string; content: string }[]
 }
 
-// 从数据库获取用户所有消息（localStorage 空时回退）
+// 获取用户所有消息，供会话重建时回退使用
 export async function getAllMessages(limit = 200, offset = 0) {
   const res = await api.get(`/api/chat/messages?limit=${limit}&offset=${offset}`)
   return res.data as { id: number; role: string; content: string; node_key: string; mode: string; topic_id: number | null; created_at: string }[]
 }
 
+// 批量删除消息
 export async function deleteMessages(ids: number[]) {
   if (ids.length === 0) return
   await api.delete('/api/chat/messages', { data: { ids } })
 }
 
+// 获取对话建议（苏格拉底或普通模式）
 export async function getSuggestions(mode: 'socratic' | 'normal') {
   const res = await api.get(`/api/chat/suggestions?mode=${mode}`)
   return res.data.suggestions as string[]

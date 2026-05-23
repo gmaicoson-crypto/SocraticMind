@@ -3,26 +3,27 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from core.database import Base
 
+
 class Node(Base):
+    """知识图谱节点表：每个节点属于某个主题，在图谱中有坐标和学习状态。"""
+
     __tablename__ = "nodes"
 
     id = Column(Integer, primary_key=True, index=True)
-    # 加索引：search、joinedload 都按 topic_id 过滤
     topic_id = Column(Integer, ForeignKey("topics.id"), nullable=False, index=True)
-    node_key = Column(String(100), nullable=False)   # 前端用的 id，如 "py-basics"
+    node_key = Column(String(100), nullable=False)   # 前端用的唯一标识，如 "py-basics"
     label = Column(String(200), nullable=False)
-    sub = Column(String(500), default="")
-    # state 是搜索结果与统计的高频过滤列
+    sub = Column(String(500), default="")            # 副标题，通常为英文描述
     state = Column(String(20), default="locked", index=True)  # locked / available / mastered
-    x = Column(Float, default=0)
-    y = Column(Float, default=0)
-    parent_keys = Column(String(500), default="")    # 逗号分隔的父节点 key
+    x = Column(Float, default=0)                     # SVG 画布横坐标
+    y = Column(Float, default=0)                     # SVG 画布纵坐标
+    parent_keys = Column(String(500), default="")    # 逗号分隔的父节点 key，无父节点则为空
     mastered_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     topic = relationship("Topic", back_populates="nodes")
 
-    # 复合索引覆盖 "本主题下按状态过滤"（统计与解锁逻辑都会用到）
+    # 复合索引覆盖"按主题 + 状态过滤"的高频查询（统计已掌握节点数、解锁逻辑等）
     __table_args__ = (
         Index("ix_nodes_topic_state", "topic_id", "state"),
     )

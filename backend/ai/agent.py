@@ -21,15 +21,14 @@ def chat_stream(
     ai_style: str = "标准",
     kind: str = "qa",
 ) -> Generator[str, None, None]:
-    """yield 模型流式片段；调用方累积完整文本后扫描 [MASTERED] 等信号。
+    """向 AI 发起流式请求，逐块 yield 文本片段；调用方累积完整回复后再检测 [MASTERED] 等信号。
 
-    kind:
-      - "qa"             默认；socratic 模式下用 Socratic prompt，normal 模式用 NORMAL_CHAT_PROMPT
-      - "topic_overview" 主题概览（约 500 字）
-      - "node_overview"  节点概览（约 100 字 + 一个引导问题）
+    kind 参数说明：
+      - "qa"             默认 Q&A 模式；socratic 模式用苏格拉底式提问 prompt，normal 模式用普通 prompt
+      - "topic_overview" 生成约 500 字的主题概览介绍
+      - "node_overview"  生成约 100 字的节点概览 + 一个引导性问题
     """
     if kind == "topic_overview":
-        # node_label 此时承载的是主题名
         system_prompt = TOPIC_OVERVIEW_PROMPT
         user_content = build_topic_overview_prompt(node_label)
     elif kind == "node_overview":
@@ -42,9 +41,10 @@ def chat_stream(
         system_prompt = NORMAL_CHAT_PROMPT
         user_content = user_input
 
-    # overview 模式下不带历史（开场白）；qa 模式带最近若干轮以维持上下文
+    # overview 类请求是开场白，不携带历史消息；qa 模式带最近若干轮以维持上下文连贯性
     history_msgs = (
-        [] if kind in {"topic_overview", "node_overview"}
+        []
+        if kind in {"topic_overview", "node_overview"}
         else [m for m in messages if m.get("role") in {"user", "assistant"}]
     )
 

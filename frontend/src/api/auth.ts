@@ -25,7 +25,7 @@ export interface UserInfo {
   ai_style: string
 }
 
-// 登录
+// 登录（OAuth2 表单格式）
 export async function login(params: LoginParams) {
   const form = new FormData()
   form.append('username', params.email)
@@ -40,13 +40,13 @@ export async function register(params: RegisterParams) {
   return res.data as { access_token: string; user: UserInfo }
 }
 
-// 获取当前用户
+// 获取当前登录用户信息
 export async function getMe() {
   const res = await api.get('/api/auth/me')
   return res.data as UserInfo
 }
 
-// 更新资料
+// 更新个人资料
 export async function updateMe(data: Partial<UserInfo>) {
   const res = await api.put('/api/auth/me', data)
   return res.data as UserInfo
@@ -62,7 +62,7 @@ export async function uploadAvatar(file: File) {
   return res.data as UserInfo
 }
 
-// 重置为默认头像（清除上传的图片）
+// 重置为默认头像
 export async function resetAvatar() {
   const res = await api.delete('/api/auth/avatar')
   return res.data as UserInfo
@@ -92,9 +92,8 @@ export async function resetPassword(email: string, code: string, newPassword: st
   return res.data as { message: string }
 }
 
-// 注销账号：服务器端清除所有关联数据
+// 注销账号，服务端清除所有关联数据
 export async function deleteAccount(password: string, confirm: string) {
-  // axios delete 的 body 必须放在 data 字段里
   const res = await api.delete('/api/auth/me', {
     data: { password, confirm },
   })
