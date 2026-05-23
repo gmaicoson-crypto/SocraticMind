@@ -1,14 +1,21 @@
+import json
+import logging
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session, selectinload
 from pydantic import BaseModel
 from typing import List
+from core.config import settings
 from core.database import get_db
 from core.deps import get_current_user
+from core.ai_client import get_ai_client
 from models.user import User
 from models.topic import Topic
 from models.node import Node
 from ai.graph_generator import generate_graph, assign_positions
 from ai.prompts import RECOMMEND_TOPICS_PROMPT, build_recommend_prompt
+from ai.util import extract_json_from_markdown
+
+log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/topics", tags=["主题"])
 
@@ -161,11 +168,6 @@ def recommend_topics(
         prompt = "该用户还没有学习任何主题，请推荐 3 个适合初学者的热门技术学习主题。"
 
     try:
-        from core.config import settings
-        from core.ai_client import get_ai_client
-        from ai.util import extract_json_from_markdown
-        import json
-
         response = get_ai_client().chat.completions.create(
             model=settings.deepseek_model,
             messages=[
@@ -178,5 +180,5 @@ def recommend_topics(
         return json.loads(extract_json_from_markdown(response.choices[0].message.content))
     except Exception as e:
         # 推荐失败不阻塞首页加载，前端会展示空列表
-        print(f"[recommend_topics] 调用失败: {e}")
+        log.warning("recommend_topics 调用失败: %s", e)
         return {"recommendations": []}

@@ -62,15 +62,7 @@ def chat_stream(
         temperature=0.7,
     )
 
-    full_response = []
     for chunk in stream:
         delta = chunk.choices[0].delta
         if delta.content:
-            full_response.append(delta.content)
             yield delta.content
-
-    # Debug: 打印完整 AI 回复以排查 [CHOICES] 是否出现
-    full_text = "".join(full_response)
-    print(f"[DEBUG] AI 回复长度: {len(full_text)}, 包含 [CHOICES]: {'[CHOICES]' in full_text}, 包含 [ECHOICES]: {'[ECHOICES]' in full_text}")
-    if "[CHOICES]" not in full_text:
-        print(f"[DEBUG] AI 回复末尾 200 字符: ...{full_text[-200:]}")

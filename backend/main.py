@@ -2,6 +2,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from core.config import settings
 from core.database import Base, engine
 from routers import auth, topics, nodes, chat, progress
 import models  # 确保模型被注册
@@ -19,10 +20,10 @@ app = FastAPI(
     version="1.0.0",
 )
 
-# CORS
+# CORS：允许的源通过 CORS_ORIGINS 环境变量配置（逗号分隔），生产环境需改为实际域名
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=settings.cors_origins_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

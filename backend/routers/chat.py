@@ -4,13 +4,16 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import List, Optional
 import json
+from core.config import settings
 from core.database import get_db
 from core.deps import get_current_user
+from core.ai_client import get_ai_client
 from models.user import User
 from models.topic import Topic
 from models.node import Node
 from models.progress import ChatMessage
 from ai.agent import chat_stream
+from ai.util import extract_json_from_markdown
 
 router = APIRouter(prefix="/api/chat", tags=["对话"])
 
@@ -198,13 +201,7 @@ def get_suggestions(
     db: Session = Depends(get_db)
 ):
     """根据模式返回 AI 推荐的快捷建议"""
-    from core.config import settings
-    from core.ai_client import get_ai_client
-    from ai.util import extract_json_from_markdown
-    import json
-
     if mode == "socratic":
-        # 获取用户最近学习的节点
         recent_nodes = db.query(Node).join(Topic).filter(
             Topic.user_id == current_user.id,
             Node.state == "available"

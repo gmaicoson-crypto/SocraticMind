@@ -1,3 +1,4 @@
+# 学习主题表：每个主题对应一张知识图谱，包含若干节点
 from sqlalchemy import Column, Integer, String, ForeignKey, DateTime
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func

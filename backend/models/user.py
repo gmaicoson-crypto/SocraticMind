@@ -1,3 +1,4 @@
+# 用户表：存储账号基本信息及个性化设置（头像、每日目标、AI 风格）
 from sqlalchemy import Column, Integer, String, DateTime, Boolean
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func

@@ -1,3 +1,4 @@
+# 邮箱验证码表：注册/重置密码时生成，10 分钟有效，使用后标记为 used
 from sqlalchemy import Column, Integer, String, DateTime, Boolean, Index
 from sqlalchemy.sql import func
 from core.database import Base
