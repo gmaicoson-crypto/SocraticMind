@@ -48,7 +48,12 @@ def send_verification_email(to: str, code: str, purpose: str) -> None:
     """发送验证码邮件，支持 STARTTLS 和 SSL 两种加密方式。
 
     发送失败时记录错误日志并向上抛出异常，由调用方决定如何响应用户。
+    smtp_host 为空时退化为控制台打印，方便本地开发调试。
     """
+    if not settings.smtp_host:
+        log.warning("[DEV] 验证码 to=%s code=%s purpose=%s（SMTP 未配置，仅打印不发送）", to, code, purpose)
+        return
+
     msg = _build_message(to, code, purpose)
     try:
         if settings.smtp_use_tls:
