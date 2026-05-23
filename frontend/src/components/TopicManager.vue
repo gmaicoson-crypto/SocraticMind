@@ -68,6 +68,7 @@
 </template>
 
 <script setup lang="ts">
+// TopicManager 组件，封装局部界面和交互逻辑。
 import { ref } from 'vue'
 import { useLearningStore } from '../stores/learning'
 import { deleteTopic } from '../api/topic'
@@ -85,7 +86,6 @@ function selectTopic(id: string) {
   emit('close')
 }
 
-// 点击删除按钮先显示确认条，防止误操作
 function handleDelete(id: string, title: string) {
   confirmId.value = id
   confirmTitle.value = title
@@ -99,7 +99,7 @@ async function doDelete() {
   try {
     await deleteTopic(Number(id))
     await store.fetchTopics()
-    // 删除的是当前主题时，切换到下一个或清空图谱
+
     if (store.activeTopicId === id) {
       if (store.topics.length > 0) {
         await store.setActiveTopic(store.topics[0].id)
@@ -126,7 +126,9 @@ async function doDelete() {
 
 .manager-panel {
   position: absolute;
-  left: 0; top: 0; bottom: 0;
+  left: 0;
+  top: 0;
+  bottom: 0;
   width: 320px;
   background: var(--surface);
   border-right: 1px solid var(--line);
@@ -158,7 +160,8 @@ async function doDelete() {
 }
 
 .close-btn {
-  width: 28px; height: 28px;
+  width: 28px;
+  height: 28px;
   border-radius: 8px;
   background: transparent;
   border: 1px solid var(--line);
@@ -171,7 +174,10 @@ async function doDelete() {
   transition: all .15s;
   font-family: var(--font-sans);
 }
-.close-btn:hover { background: var(--bg-3); color: var(--ink); }
+.close-btn:hover {
+  background: var(--bg-3);
+  color: var(--ink);
+}
 
 .topic-list {
   flex: 1;
@@ -192,7 +198,9 @@ async function doDelete() {
   background: var(--surface);
   transition: all .15s;
 }
-.topic-item:hover { border-color: var(--blue-line); }
+.topic-item:hover {
+  border-color: var(--blue-line);
+}
 .topic-item.active {
   background: var(--blue-tint);
   border-color: var(--blue-line);
@@ -208,7 +216,8 @@ async function doDelete() {
 }
 
 .topic-emoji {
-  width: 36px; height: 36px;
+  width: 36px;
+  height: 36px;
   border-radius: 10px;
   background: var(--bg-2);
   display: flex;
@@ -218,7 +227,10 @@ async function doDelete() {
   flex-shrink: 0;
 }
 
-.topic-info { flex: 1; min-width: 0; }
+.topic-info {
+  flex: 1;
+  min-width: 0;
+}
 
 .topic-name {
   font-size: 13px;
@@ -252,7 +264,8 @@ async function doDelete() {
 }
 
 .delete-btn {
-  width: 28px; height: 28px;
+  width: 28px;
+  height: 28px;
   border-radius: 7px;
   background: transparent;
   border: 1px solid transparent;
@@ -269,10 +282,14 @@ async function doDelete() {
   border-color: #F7C1C1;
   color: #E24B4A;
 }
-.delete-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.delete-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
 
 .spinner {
-  width: 12px; height: 12px;
+  width: 12px;
+  height: 12px;
   border-radius: 50%;
   border: 2px solid var(--line);
   border-top-color: var(--blue-2);
@@ -304,7 +321,10 @@ async function doDelete() {
   flex-shrink: 0;
 }
 
-.confirm-btns { display: flex; gap: 6px; }
+.confirm-btns {
+  display: flex;
+  gap: 6px;
+}
 
 .confirm-cancel {
   padding: 5px 12px;
@@ -347,7 +367,11 @@ async function doDelete() {
 }
 
 .fade-enter-active,
-.fade-leave-active { transition: opacity .2s; }
+.fade-leave-active {
+  transition: opacity .2s;
+}
 .fade-enter-from,
-.fade-leave-to { opacity: 0; }
+.fade-leave-to {
+  opacity: 0;
+}
 </style>

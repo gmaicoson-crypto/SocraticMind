@@ -4,6 +4,7 @@
 </template>
 
 <script setup lang="ts">
+// InlineMarkdown 组件，封装局部界面和交互逻辑。
 import { ref, watch, onBeforeUnmount } from 'vue'
 import { marked } from 'marked'
 import hljs from 'highlight.js'
@@ -18,7 +19,6 @@ marked.setOptions({
   gfm: true,
 })
 
-// 自定义渲染器：代码块加高亮和语言标签
 const renderer = new marked.Renderer()
 
 renderer.code = ({ text, lang }: { text: string; lang?: string }) => {
@@ -38,8 +38,6 @@ renderer.codespan = ({ text }: { text: string }) => {
   return `<code class="inline-code">${text}</code>`
 }
 
-// CommonMark 规定 ** 后紧跟 Unicode 标点（如引号）时不构成左侧定界符，导致粗体渲染失败。
-// 插入零宽空格 U+200B（Cf 类，非标点非空白）使 ** 重新满足定界条件，且不影响可见输出。
 function preprocessMarkdown(md: string): string {
   const zwsp = String.fromCodePoint(0x200B)
   const quoteCPs = [
@@ -62,7 +60,6 @@ function preprocessMarkdown(md: string): string {
   return md
 }
 
-// rAF 节流：流式追加时每帧最多渲染一次，withCaret=true（流式态）才节流
 const renderedHtml = ref('')
 let pendingFrame: number | null = null
 
@@ -90,7 +87,8 @@ onBeforeUnmount(() => {
 <style scoped>
 .typing-caret {
   display: inline-block;
-  width: 7px; height: 14px;
+  width: 7px;
+  height: 14px;
   background: var(--blue-2);
   margin-left: 2px;
   vertical-align: -2px;
@@ -99,8 +97,12 @@ onBeforeUnmount(() => {
 }
 
 @keyframes blink {
-  0%, 60% { opacity: 1; }
-  70%, 100% { opacity: 0; }
+  0%, 60% {
+    opacity: 1;
+  }
+  70%, 100% {
+    opacity: 0;
+  }
 }
 </style>
 
@@ -109,26 +111,43 @@ onBeforeUnmount(() => {
   margin: 6px 0;
   line-height: 1.7;
 }
-.md-inline p:first-child { margin-top: 0; }
-.md-inline p:last-child { margin-bottom: 0; }
+.md-inline p:first-child {
+  margin-top: 0;
+}
+.md-inline p:last-child {
+  margin-bottom: 0;
+}
 
-.md-inline strong { font-weight: 600; }
-.md-inline em { font-style: italic; }
+.md-inline strong {
+  font-weight: 600;
+}
+.md-inline em {
+  font-style: italic;
+}
 
 .md-inline h1, .md-inline h2, .md-inline h3 {
   font-weight: 600;
   margin: 12px 0 6px;
   line-height: 1.4;
 }
-.md-inline h1 { font-size: 17px; }
-.md-inline h2 { font-size: 15px; }
-.md-inline h3 { font-size: 13.5px; }
+.md-inline h1 {
+  font-size: 17px;
+}
+.md-inline h2 {
+  font-size: 15px;
+}
+.md-inline h3 {
+  font-size: 13.5px;
+}
 
 .md-inline ul, .md-inline ol {
   padding-left: 20px;
   margin: 6px 0;
 }
-.md-inline li { margin: 4px 0; line-height: 1.6; }
+.md-inline li {
+  margin: 4px 0;
+  line-height: 1.6;
+}
 
 .md-inline blockquote {
   border-left: 3px solid var(--blue-line);
@@ -210,31 +229,52 @@ onBeforeUnmount(() => {
 }
 
 .md-inline .hljs-keyword,
-.md-inline .hljs-selector-tag { color: #cba6f7; }
+.md-inline .hljs-selector-tag {
+  color: #cba6f7;
+}
 
 .md-inline .hljs-string,
-.md-inline .hljs-attr { color: #a6e3a1; }
+.md-inline .hljs-attr {
+  color: #a6e3a1;
+}
 
 .md-inline .hljs-number,
-.md-inline .hljs-literal { color: #fab387; }
+.md-inline .hljs-literal {
+  color: #fab387;
+}
 
-.md-inline .hljs-comment { color: #6c7086; font-style: italic; }
+.md-inline .hljs-comment {
+  color: #6c7086;
+  font-style: italic;
+}
 
 .md-inline .hljs-function,
-.md-inline .hljs-title { color: #89b4fa; }
+.md-inline .hljs-title {
+  color: #89b4fa;
+}
 
 .md-inline .hljs-variable,
-.md-inline .hljs-name { color: #cdd6f4; }
+.md-inline .hljs-name {
+  color: #cdd6f4;
+}
 
 .md-inline .hljs-type,
-.md-inline .hljs-class { color: #f9e2af; }
+.md-inline .hljs-class {
+  color: #f9e2af;
+}
 
-.md-inline .hljs-built_in { color: #89dceb; }
+.md-inline .hljs-built_in {
+  color: #89dceb;
+}
 
 .md-inline .hljs-operator,
-.md-inline .hljs-punctuation { color: #89dceb; }
+.md-inline .hljs-punctuation {
+  color: #89dceb;
+}
 
-.md-inline .hljs-property { color: #f38ba8; }
+.md-inline .hljs-property {
+  color: #f38ba8;
+}
 
 .md-inline table {
   border-collapse: collapse;
@@ -251,5 +291,7 @@ onBeforeUnmount(() => {
   background: var(--bg-3);
   font-weight: 600;
 }
-.md-inline tr:nth-child(even) { background: var(--bg-2); }
+.md-inline tr:nth-child(even) {
+  background: var(--bg-2);
+}
 </style>

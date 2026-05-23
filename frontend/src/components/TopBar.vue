@@ -141,6 +141,7 @@
 </template>
 
 <script setup lang="ts">
+// TopBar 组件，封装局部界面和交互逻辑。
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useLearningStore } from '../stores/learning'
@@ -163,10 +164,9 @@ const inputRef = ref<HTMLInputElement | null>(null)
 
 const pct = computed(() => Math.round((store.masteredCount / store.totalCount) * 100))
 
-// 跨主题节点搜索结果（后端接口），带 200ms 防抖
 const nodeResults = ref<SearchedNode[]>([])
 let searchTimer: ReturnType<typeof setTimeout> | null = null
-// 序号递增解决并发请求乱序返回导致旧结果覆盖新结果的问题
+
 let searchSeq = 0
 
 watch(query, (q) => {
@@ -188,7 +188,6 @@ watch(query, (q) => {
   }, 200)
 })
 
-// 主题搜索：本地过滤
 const topicResults = computed(() => {
   if (!query.value.trim()) return []
   const q = query.value.toLowerCase()
@@ -221,7 +220,6 @@ function selectCurrent() {
   }
 }
 
-// 选中节点：切换到对应主题 → 激活节点（触发对话跳转）
 async function selectNode(item: SearchedNode) {
   closeSearch()
   router.push('/')
@@ -260,7 +258,6 @@ function onBlur() {
   }, 150)
 }
 
-// ⌘K / Ctrl+K 聚焦搜索框
 function handleKeydown(e: KeyboardEvent) {
   if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
     e.preventDefault()
@@ -303,7 +300,8 @@ onBeforeUnmount(() => {
   gap: 10px;
 }
 .logo-icon {
-  width: 30px; height: 30px;
+  width: 30px;
+  height: 30px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -317,7 +315,9 @@ onBeforeUnmount(() => {
   letter-spacing: -0.01em;
   color: var(--ink);
 }
-.logo-text span { color: var(--blue-2); }
+.logo-text span {
+  color: var(--blue-2);
+}
 .logo-sub {
   font-size: 9.5px;
   color: var(--ink-3);
@@ -327,7 +327,8 @@ onBeforeUnmount(() => {
   margin-top: -1px;
 }
 .divider {
-  width: 1px; height: 28px;
+  width: 1px;
+  height: 28px;
   background: var(--line);
 }
 
@@ -360,7 +361,9 @@ onBeforeUnmount(() => {
   color: var(--ink);
   font-family: var(--font-sans);
 }
-.search-wrap input::placeholder { color: var(--ink-3); }
+.search-wrap input::placeholder {
+  color: var(--ink-3);
+}
 .kbd {
   font-size: 10px;
   font-family: var(--font-mono);
@@ -382,12 +385,15 @@ onBeforeUnmount(() => {
   border-radius: 4px;
   transition: color .15s;
 }
-.clear-btn:hover { color: var(--ink); }
+.clear-btn:hover {
+  color: var(--ink);
+}
 
 .search-dropdown {
   position: absolute;
   top: calc(100% + 6px);
-  left: 0; right: 0;
+  left: 0;
+  right: 0;
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 12px;
@@ -420,7 +426,8 @@ onBeforeUnmount(() => {
 }
 
 .item-icon {
-  width: 28px; height: 28px;
+  width: 28px;
+  height: 28px;
   border-radius: 8px;
   display: flex;
   align-items: center;
@@ -445,7 +452,10 @@ onBeforeUnmount(() => {
   background: var(--bg-2);
 }
 
-.item-content { flex: 1; min-width: 0; }
+.item-content {
+  flex: 1;
+  min-width: 0;
+}
 
 .item-title {
   font-size: 13px;
@@ -507,7 +517,10 @@ onBeforeUnmount(() => {
   color: var(--ink-3);
   font-family: var(--font-mono);
 }
-.progress-count { color: var(--ink-2); font-weight: 600; }
+.progress-count {
+  color: var(--ink-2);
+  font-weight: 600;
+}
 .progress-track {
   height: 6px;
   border-radius: 999px;
@@ -530,8 +543,12 @@ onBeforeUnmount(() => {
   border-radius: 10px;
   transition: background .15s;
 }
-.profile-wrap:hover { background: var(--bg-2); }
-.profile-info { text-align: right; }
+.profile-wrap:hover {
+  background: var(--bg-2);
+}
+.profile-info {
+  text-align: right;
+}
 .profile-name {
   font-size: 12.5px;
   font-weight: 600;
@@ -545,7 +562,8 @@ onBeforeUnmount(() => {
   margin-top: 1px;
 }
 .avatar {
-  width: 36px; height: 36px;
+  width: 36px;
+  height: 36px;
   background: linear-gradient(135deg, oklch(0.85 0.06 60), oklch(0.7 0.10 35));
   color: white;
   font-size: 13px;
@@ -557,6 +575,8 @@ onBeforeUnmount(() => {
   overflow: hidden;
 }
 .avatar .avatar-img {
-  width: 100%; height: 100%; object-fit: cover;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 </style>

@@ -3,6 +3,7 @@
 </template>
 
 <script setup lang="ts">
+// 应用根组件，负责初始化学习记录和全局布局。
 import { RouterView } from 'vue-router'
 import { onMounted } from 'vue'
 import { useLearningStore } from './stores/learning'
@@ -14,7 +15,7 @@ onMounted(async () => {
   store.loadUserFromStorage()
   if (getToken()) {
     await store.fetchTopics()
-    // 必须先 await recordLearning，确保 streak 数据写入后其他组件才读取，避免数据不一致
+
     await store.recordLearning()
   }
 })

@@ -58,12 +58,13 @@
 </template>
 
 <script setup lang="ts">
+// Home 页面组件，承载对应页面的主要交互。
 import { ref, onMounted, onBeforeUnmount, defineAsyncComponent } from 'vue'
 import { addStudyMinutes } from '../utils/dailyGoal'
 import TopBar from '../components/TopBar.vue'
 import Sidebar from '../components/Sidebar.vue'
 import SocraticDialogue from '../components/SocraticDialogue.vue'
-// KnowledgeGraph 和 NotesPanel 体积较大，异步加载减少首屏 JS，KeepAlive 避免切换时重复挂载
+
 const KnowledgeGraph = defineAsyncComponent(() => import('../components/KnowledgeGraph.vue'))
 const NotesPanel = defineAsyncComponent(() => import('../components/NotesPanel.vue'))
 import { useLearningStore } from '../stores/learning'
@@ -83,13 +84,12 @@ const MIN_LEFT = 320
 const MIN_RIGHT = 380
 const DIVIDER_W = 10
 
-// 学习时长计时：1Hz 计时器，记录用户活跃时间；2 分钟无操作则暂停计时
 let studyTimer: ReturnType<typeof setInterval> | null = null
 let studySeconds = 0
 
 const INACTIVE_TIMEOUT = 2 * 60 * 1000
 const ACTIVE_EVENTS = ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll']
-// 只记录最后活跃时间戳，避免 mousemove 高频触发 clearTimeout/setTimeout
+
 let lastActiveAt = Date.now()
 
 function startStudyTimer() {
@@ -107,7 +107,7 @@ function stopStudyTimer() {
   if (!studyTimer) return
   clearInterval(studyTimer)
   studyTimer = null
-  // 不足 1 分钟但超过 30 秒，按 1 分钟计入学习时长
+
   const remaining = Math.floor(studySeconds % 60)
   if (remaining >= 30 && store.userInfo?.id) {
     addStudyMinutes(store.userInfo.id, 1)
@@ -140,7 +140,6 @@ onBeforeUnmount(() => {
   ACTIVE_EVENTS.forEach(e => window.removeEventListener(e, onUserActive))
 })
 
-// 拖拽分割线调整左右列宽度
 function startDrag(e: MouseEvent) {
   dragging.value = true
   e.preventDefault()
@@ -207,7 +206,9 @@ function startDrag(e: MouseEvent) {
   user-select: none;
 }
 .divider:hover,
-.divider.dragging { background: var(--blue-tint); }
+.divider.dragging {
+  background: var(--blue-tint);
+}
 .divider-handle {
   display: flex;
   flex-direction: column;
@@ -223,7 +224,9 @@ function startDrag(e: MouseEvent) {
   transition: background .15s;
 }
 .divider:hover .divider-handle span,
-.divider.dragging .divider-handle span { background: var(--blue-2); }
+.divider.dragging .divider-handle span {
+  background: var(--blue-2);
+}
 .right-col {
   flex: 1;
   min-width: 0;
@@ -259,7 +262,10 @@ function startDrag(e: MouseEvent) {
   font-family: var(--font-sans);
   transition: all .15s;
 }
-.right-tab:hover { background: var(--bg-3); color: var(--ink); }
+.right-tab:hover {
+  background: var(--bg-3);
+  color: var(--ink);
+}
 .right-tab.active {
   background: var(--surface);
   color: var(--blue-2);

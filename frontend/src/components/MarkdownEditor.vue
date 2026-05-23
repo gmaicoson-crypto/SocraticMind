@@ -1,7 +1,6 @@
 <template>
   <div class="md-wrap">
 
-    <!-- Toolbar -->
     <div class="md-toolbar">
       <div class="view-switch">
         <button
@@ -35,7 +34,6 @@
       </div>
     </div>
 
-    <!-- Editor / Preview -->
     <div class="md-body" :class="viewMode">
       <textarea
         v-if="viewMode !== 'preview'"
@@ -57,6 +55,7 @@
 </template>
 
 <script setup lang="ts">
+// MarkdownEditor 组件，封装局部界面和交互逻辑。
 import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { marked } from 'marked'
 import hljs from 'highlight.js'
@@ -89,7 +88,6 @@ const views = [
   { key: 'preview' as const, label: '预览' },
 ]
 
-// 自定义 renderer：代码块走 hljs 语法高亮，行内代码加专属样式
 const renderer = new marked.Renderer()
 
 renderer.code = ({ text, lang }: { text: string; lang?: string }) => {
@@ -104,8 +102,6 @@ renderer.code = ({ text, lang }: { text: string; lang?: string }) => {
 
 renderer.codespan = ({ text }: { text: string }) => `<code class="md-inline-code">${text}</code>`
 
-// 全量启用 GFM：表格 / 删除线 / 自动链接 / 任务列表（默认输出 <input type="checkbox" disabled>，
-// 由下面 CSS 直接命中 li > input[type=checkbox] 即可，无需自定义 renderer）
 marked.setOptions({
   gfm: true,
   breaks: true,
@@ -122,7 +118,6 @@ function saveContent() {
   localStorage.setItem(STORAGE_KEY, content.value)
 }
 
-// 防抖批量写：连续按键不会每次都触发 localStorage IO
 let saveTimer: ReturnType<typeof setTimeout> | null = null
 watch(content, () => {
   if (saveTimer) clearTimeout(saveTimer)
@@ -196,8 +191,11 @@ function handleDownload() {
 }
 
 .help-btn {
-  width: 22px; height: 22px;
-  display: inline-flex; align-items: center; justify-content: center;
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   background: transparent;
   border: 1px solid var(--line);
   border-radius: 50%;
@@ -237,8 +235,12 @@ function handleDownload() {
   display: grid;
   gap: 8px;
 }
-.md-body.split { grid-template-columns: 1fr 1fr; }
-.md-body.edit, .md-body.preview { grid-template-columns: 1fr; }
+.md-body.split {
+  grid-template-columns: 1fr 1fr;
+}
+.md-body.edit, .md-body.preview {
+  grid-template-columns: 1fr;
+}
 
 .md-editor {
   font-family: var(--font-mono);
@@ -260,7 +262,10 @@ function handleDownload() {
   box-shadow: 0 0 0 3px oklch(0.72 0.085 235 / 0.15);
   background: var(--surface);
 }
-.md-editor::placeholder { color: var(--ink-3); line-height: 1.8; }
+.md-editor::placeholder {
+  color: var(--ink-3);
+  line-height: 1.8;
+}
 
 .md-preview {
   padding: 14px 18px;
@@ -273,7 +278,6 @@ function handleDownload() {
   color: var(--ink);
 }
 
-/* ── 标题 1-6 ── */
 .md-preview :deep(h1),
 .md-preview :deep(h2),
 .md-preview :deep(h3),
@@ -285,34 +289,59 @@ function handleDownload() {
   font-weight: 600;
   line-height: 1.35;
 }
-.md-preview :deep(h1) { font-size: 19px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
-.md-preview :deep(h2) { font-size: 16.5px; padding-bottom: 4px; border-bottom: 1px solid var(--line); }
-.md-preview :deep(h3) { font-size: 14.5px; }
-.md-preview :deep(h4) { font-size: 13.5px; }
-.md-preview :deep(h5) { font-size: 12.5px; }
-.md-preview :deep(h6) { font-size: 12px; color: var(--ink-2); }
+.md-preview :deep(h1) {
+  font-size: 19px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--line);
+}
+.md-preview :deep(h2) {
+  font-size: 16.5px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--line);
+}
+.md-preview :deep(h3) {
+  font-size: 14.5px;
+}
+.md-preview :deep(h4) {
+  font-size: 13.5px;
+}
+.md-preview :deep(h5) {
+  font-size: 12.5px;
+}
+.md-preview :deep(h6) {
+  font-size: 12px;
+  color: var(--ink-2);
+}
 
-.md-preview :deep(p) { margin: 8px 0; }
+.md-preview :deep(p) {
+  margin: 8px 0;
+}
 
-/* 强调 */
-.md-preview :deep(strong) { font-weight: 600; }
-.md-preview :deep(em) { font-style: italic; }
-.md-preview :deep(del) { text-decoration: line-through; color: var(--ink-3); }
+.md-preview :deep(strong) {
+  font-weight: 600;
+}
+.md-preview :deep(em) {
+  font-style: italic;
+}
+.md-preview :deep(del) {
+  text-decoration: line-through;
+  color: var(--ink-3);
+}
 .md-preview :deep(mark) {
   background: oklch(0.94 0.10 90);
   padding: 0 3px;
   border-radius: 2px;
 }
 
-/* 链接 */
 .md-preview :deep(a) {
   color: var(--blue-2);
   text-decoration: none;
   border-bottom: 1px solid var(--blue-line);
 }
-.md-preview :deep(a:hover) { border-bottom-color: var(--blue-2); }
+.md-preview :deep(a:hover) {
+  border-bottom-color: var(--blue-2);
+}
 
-/* 行内代码 */
 .md-preview :deep(.md-inline-code),
 .md-preview :deep(code) {
   font-family: var(--font-mono);
@@ -323,7 +352,6 @@ function handleDownload() {
   border-radius: 4px;
 }
 
-/* 代码块 */
 .md-preview :deep(.md-code-block) {
   margin: 10px 0;
   border-radius: 8px;
@@ -332,7 +360,8 @@ function handleDownload() {
   background: #1e1e2e;
 }
 .md-preview :deep(.md-code-header) {
-  display: flex; justify-content: flex-end;
+  display: flex;
+  justify-content: flex-end;
   padding: 4px 12px;
   background: #2a2a3e;
   border-bottom: 1px solid rgba(255,255,255,0.08);
@@ -362,36 +391,57 @@ function handleDownload() {
   color: #cdd6f4;
 }
 
-/* highlight.js 颜色（Catppuccin Mocha 风） */
 .md-preview :deep(.hljs-keyword),
-.md-preview :deep(.hljs-selector-tag) { color: #cba6f7; }
+.md-preview :deep(.hljs-selector-tag) {
+  color: #cba6f7;
+}
 .md-preview :deep(.hljs-string),
-.md-preview :deep(.hljs-attr) { color: #a6e3a1; }
+.md-preview :deep(.hljs-attr) {
+  color: #a6e3a1;
+}
 .md-preview :deep(.hljs-number),
-.md-preview :deep(.hljs-literal) { color: #fab387; }
-.md-preview :deep(.hljs-comment) { color: #6c7086; font-style: italic; }
+.md-preview :deep(.hljs-literal) {
+  color: #fab387;
+}
+.md-preview :deep(.hljs-comment) {
+  color: #6c7086;
+  font-style: italic;
+}
 .md-preview :deep(.hljs-function),
-.md-preview :deep(.hljs-title) { color: #89b4fa; }
+.md-preview :deep(.hljs-title) {
+  color: #89b4fa;
+}
 .md-preview :deep(.hljs-variable),
-.md-preview :deep(.hljs-name) { color: #cdd6f4; }
+.md-preview :deep(.hljs-name) {
+  color: #cdd6f4;
+}
 .md-preview :deep(.hljs-type),
-.md-preview :deep(.hljs-class) { color: #f9e2af; }
-.md-preview :deep(.hljs-built_in) { color: #89dceb; }
+.md-preview :deep(.hljs-class) {
+  color: #f9e2af;
+}
+.md-preview :deep(.hljs-built_in) {
+  color: #89dceb;
+}
 .md-preview :deep(.hljs-operator),
-.md-preview :deep(.hljs-punctuation) { color: #89dceb; }
-.md-preview :deep(.hljs-property) { color: #f38ba8; }
+.md-preview :deep(.hljs-punctuation) {
+  color: #89dceb;
+}
+.md-preview :deep(.hljs-property) {
+  color: #f38ba8;
+}
 
-/* 列表 */
 .md-preview :deep(ul),
 .md-preview :deep(ol) {
   padding-left: 22px;
   margin: 8px 0;
 }
-.md-preview :deep(li) { margin: 3px 0; }
-.md-preview :deep(li > p) { margin: 4px 0; }
+.md-preview :deep(li) {
+  margin: 3px 0;
+}
+.md-preview :deep(li > p) {
+  margin: 4px 0;
+}
 
-/* 任务列表（GFM）：marked 默认在 li 里输出 <input type="checkbox" disabled>，
-   用 :has 隐藏圆点；不支持 :has 的旧浏览器也不影响内容显示，只是会保留圆点 */
 .md-preview :deep(li:has(> input[type=checkbox])) {
   list-style: none;
   margin-left: -18px;
@@ -402,7 +452,6 @@ function handleDownload() {
   accent-color: var(--blue-2);
 }
 
-/* 引用块 */
 .md-preview :deep(blockquote) {
   border-left: 3px solid var(--blue-line);
   padding: 4px 12px;
@@ -416,14 +465,12 @@ function handleDownload() {
   background: transparent;
 }
 
-/* 分隔线 */
 .md-preview :deep(hr) {
   border: none;
   border-top: 1px solid var(--line);
   margin: 14px 0;
 }
 
-/* 表格（GFM） */
 .md-preview :deep(table) {
   border-collapse: collapse;
   margin: 10px 0;
@@ -433,7 +480,9 @@ function handleDownload() {
   display: block;
   overflow-x: auto;
 }
-.md-preview :deep(thead) { background: var(--bg-3); }
+.md-preview :deep(thead) {
+  background: var(--bg-3);
+}
 .md-preview :deep(th),
 .md-preview :deep(td) {
   border: 1px solid var(--line);
@@ -441,17 +490,19 @@ function handleDownload() {
   text-align: left;
   vertical-align: top;
 }
-.md-preview :deep(th) { font-weight: 600; }
-.md-preview :deep(tbody tr:nth-child(even)) { background: var(--bg-2); }
+.md-preview :deep(th) {
+  font-weight: 600;
+}
+.md-preview :deep(tbody tr:nth-child(even)) {
+  background: var(--bg-2);
+}
 
-/* 图片 */
 .md-preview :deep(img) {
   max-width: 100%;
   border-radius: 6px;
   margin: 6px 0;
 }
 
-/* 键盘按键 */
 .md-preview :deep(kbd) {
   font-family: var(--font-mono);
   font-size: 11.5px;
@@ -463,7 +514,6 @@ function handleDownload() {
   box-shadow: inset 0 -1px 0 var(--line-2);
 }
 
-/* details / summary */
 .md-preview :deep(details) {
   border: 1px solid var(--line);
   border-radius: 6px;

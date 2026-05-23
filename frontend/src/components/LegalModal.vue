@@ -96,15 +96,21 @@
 </template>
 
 <script setup lang="ts">
+// LegalModal 组件，封装局部界面和交互逻辑。
 defineProps<{ show: boolean; kind: 'terms' | 'privacy' }>()
 defineEmits<{ (e: 'close'): void }>()
 </script>
 
 <style scoped>
 .legal-overlay {
-  position: fixed; inset: 0; z-index: 350;
-  background: rgba(0,0,0,0.36); backdrop-filter: blur(4px);
-  display: flex; align-items: center; justify-content: center;
+  position: fixed;
+  inset: 0;
+  z-index: 350;
+  background: rgba(0,0,0,0.36);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
   padding: 24px;
 }
 .legal-modal {
@@ -113,62 +119,112 @@ defineEmits<{ (e: 'close'): void }>()
   border-radius: 16px;
   width: min(720px, 100%);
   height: min(640px, 100%);
-  display: flex; flex-direction: column;
+  display: flex;
+  flex-direction: column;
   box-shadow: 0 12px 48px rgba(0,0,0,0.18);
   overflow: hidden;
 }
 .legal-header {
-  display: flex; align-items: center; justify-content: space-between;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   padding: 14px 20px;
   border-bottom: 1px solid var(--line);
   flex-shrink: 0;
 }
-.legal-title { font-size: 14px; font-weight: 600; color: var(--ink); }
-.legal-close {
-  background: transparent; border: none; cursor: pointer;
-  font-size: 14px; color: var(--ink-3); padding: 2px 6px; border-radius: 4px;
+.legal-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
 }
-.legal-close:hover { background: var(--bg-2); color: var(--ink); }
+.legal-close {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--ink-3);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+.legal-close:hover {
+  background: var(--bg-2);
+  color: var(--ink);
+}
 
 .legal-body {
-  flex: 1; min-height: 0; overflow-y: auto;
-  padding: 18px 24px; font-size: 13px; line-height: 1.75; color: var(--ink-2);
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 18px 24px;
+  font-size: 13px;
+  line-height: 1.75;
+  color: var(--ink-2);
 }
 .legal-body :deep(h3) {
-  font-size: 13.5px; font-weight: 600; color: var(--ink);
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ink);
   margin: 18px 0 6px;
 }
-.legal-body :deep(h3:first-child) { margin-top: 0; }
-.legal-body :deep(p) { margin: 6px 0; }
-.legal-body :deep(ul) { padding-left: 20px; margin: 6px 0; }
-.legal-body :deep(li) { margin: 3px 0; }
-.legal-body :deep(strong) { color: var(--ink); font-weight: 600; }
+.legal-body :deep(h3:first-child) {
+  margin-top: 0;
+}
+.legal-body :deep(p) {
+  margin: 6px 0;
+}
+.legal-body :deep(ul) {
+  padding-left: 20px;
+  margin: 6px 0;
+}
+.legal-body :deep(li) {
+  margin: 3px 0;
+}
+.legal-body :deep(strong) {
+  color: var(--ink);
+  font-weight: 600;
+}
 .legal-body :deep(code) {
   font-family: var(--font-mono);
-  background: var(--bg-3); padding: 1px 5px; border-radius: 3px;
+  background: var(--bg-3);
+  padding: 1px 5px;
+  border-radius: 3px;
   font-size: 12px;
 }
 .legal-meta {
-  font-size: 11.5px; color: var(--ink-3);
-  padding-bottom: 10px; margin-bottom: 10px;
+  font-size: 11.5px;
+  color: var(--ink-3);
+  padding-bottom: 10px;
+  margin-bottom: 10px;
   border-bottom: 1px dashed var(--line);
 }
 
 .legal-footer {
   border-top: 1px solid var(--line);
   padding: 12px 20px;
-  display: flex; justify-content: flex-end;
+  display: flex;
+  justify-content: flex-end;
   flex-shrink: 0;
 }
 .legal-ok {
-  height: 34px; padding: 0 18px;
-  border-radius: 8px; border: none;
+  height: 34px;
+  padding: 0 18px;
+  border-radius: 8px;
+  border: none;
   background: linear-gradient(135deg, var(--blue), var(--blue-2));
-  color: white; font-size: 12.5px; font-weight: 600;
-  cursor: pointer; font-family: var(--font-sans);
+  color: white;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: var(--font-sans);
 }
-.legal-ok:hover { opacity: 0.9; }
+.legal-ok:hover {
+  opacity: 0.9;
+}
 
-.fade-enter-active, .fade-leave-active { transition: opacity .2s ease; }
-.fade-enter-from, .fade-leave-to { opacity: 0; }
+.fade-enter-active, .fade-leave-active {
+  transition: opacity .2s ease;
+}
+.fade-enter-from, .fade-leave-to {
+  opacity: 0;
+}
 </style>

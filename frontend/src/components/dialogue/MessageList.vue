@@ -1,5 +1,5 @@
 <template>
-  <!-- 滚动到底部按钮：当容器距底部 > 80px 时浮现 -->
+
   <Transition name="scroll-btn">
     <button
       v-if="showScrollBtn"
@@ -14,8 +14,7 @@
   </Transition>
 
   <div ref="scrollRef" class="dlg-messages" @scroll="onMessagesScroll">
-    <!-- v-memo：消息内容、悬浮态、复制态没变就跳过 vnode diff -->
-    <!-- 流式输出 stream chunk 触发父级重渲染时，已完成的旧消息行直接复用 -->
+
     <div
       v-for="(msg, i) in messages"
       :key="(msg.db_id ?? `${msg.role}-${msg.time}-${i}`)"
@@ -43,7 +42,7 @@
         <div class="bubble" :class="msg.role">
           <InlineMarkdown :text="msg.text" :with-caret="false" />
         </div>
-        <!-- 历史 AI 选项（非最后一条）：静态展示，已选高亮，不可点击 -->
+
         <div
           v-if="msg.choices && msg.choices.length && msg.role === 'ai' && i < messages.length - 1"
           class="choices-row historical"
@@ -58,7 +57,7 @@
             <span class="choice-text">{{ c.text }}</span>
           </div>
         </div>
-        <!-- 最后一条 AI 选项：可点击，已选高亮 -->
+
         <div
           v-if="msg.choices && msg.choices.length && msg.role === 'ai' && i === messages.length - 1 && !isThinking"
           class="choices-row"
@@ -106,7 +105,6 @@
       </div>
     </div>
 
-    <!-- 流式输出中 -->
     <div v-if="streamingText" class="msg-row ai">
       <div class="ai-avatar sm">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
@@ -131,7 +129,6 @@
       </div>
     </div>
 
-    <!-- 思考中 dots -->
     <div v-if="isThinking && !streamingText" class="msg-row ai">
       <div class="ai-avatar sm">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
@@ -148,6 +145,7 @@
 </template>
 
 <script setup lang="ts">
+// MessageList 组件，封装局部界面和交互逻辑。
 import { ref, computed, nextTick, onBeforeUnmount } from 'vue'
 import type { Message } from '../../types'
 import InlineMarkdown from '../InlineMarkdown.vue'
@@ -172,21 +170,19 @@ const props = defineProps<{
 
 const displayStreamingText = computed(() => {
   let text = props.streamingText
-  // 去掉完整的 [CHOICES]...[ECHOICES] 块
+
   text = text.replace(/\s*\[CHOICES\][\s\S]*?\[ECHOICES\]\s*/g, '')
-  // [CHOICES] 已到但 [ECHOICES] 还没到 → 截断，不暴露裸标签
+
   const idx = text.indexOf('[CHOICES]')
   if (idx !== -1) text = text.slice(0, idx)
   return text
 })
-
 
 const scrollRef = ref<HTMLElement | null>(null)
 const showScrollBtn = ref(false)
 const hoveredIndex = ref<number | null>(null)
 const copiedIndex = ref<number | null>(null)
 
-// rAF 节流：scroll 事件 ~60Hz，每帧只检查一次距底部距离
 let scrollFrame: number | null = null
 function onMessagesScroll() {
   if (scrollFrame !== null) return
@@ -204,7 +200,6 @@ function scrollToBottom() {
   })
 }
 
-// 复制本身在子组件完成（独立的"已复制"反馈），交互结束后通知父组件以便它做埋点等
 async function onCopy(msg: Message, index: number) {
   try {
     await navigator.clipboard.writeText(msg.text)
@@ -215,7 +210,6 @@ async function onCopy(msg: Message, index: number) {
   }
 }
 
-
 onBeforeUnmount(() => {
   if (scrollFrame !== null) cancelAnimationFrame(scrollFrame)
 })
@@ -225,99 +219,212 @@ defineExpose({ scrollToBottom })
 
 <style scoped>
 .dlg-messages {
-  flex: 1; min-height: 0; overflow-y: auto;
-  padding: 16px 20px; display: flex; flex-direction: column; gap: 14px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
   background: var(--bg);
 }
-.msg-row { display: flex; gap: 10px; align-items: flex-start; }
-.msg-row.ai .msg-content { max-width: 75%; }
-.msg-row.user { flex-direction: row-reverse; }
-.msg-row.user .msg-content { max-width: 75%; align-items: flex-end; }
-.msg-content { display: flex; flex-direction: column; gap: 4px; }
+.msg-row {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+.msg-row.ai .msg-content {
+  max-width: 75%;
+}
+.msg-row.user {
+  flex-direction: row-reverse;
+}
+.msg-row.user .msg-content {
+  max-width: 75%;
+  align-items: flex-end;
+}
+.msg-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
 
 .ai-avatar.sm {
-  width: 28px; height: 28px; flex-shrink: 0;
-  border-radius: 8px; background: linear-gradient(135deg, var(--blue), var(--blue-2));
-  display: flex; align-items: center; justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  background: linear-gradient(135deg, var(--blue), var(--blue-2));
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 .user-avatar {
-  width: 28px; height: 28px; flex-shrink: 0; border-radius: 8px;
-  background: var(--bg-3); color: var(--ink-2); font-weight: 600;
-  display: flex; align-items: center; justify-content: center; font-size: 12px;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  background: var(--bg-3);
+  color: var(--ink-2);
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
   overflow: hidden;
 }
 .user-avatar-img {
-  width: 100%; height: 100%; object-fit: cover;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
   border-radius: inherit;
 }
 
 .msg-quote {
-  display: flex; gap: 8px; align-items: stretch; padding: 4px 0;
-  font-size: 11.5px; color: var(--ink-3);
-  font-style: italic; max-width: 100%;
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+  padding: 4px 0;
+  font-size: 11.5px;
+  color: var(--ink-3);
+  font-style: italic;
+  max-width: 100%;
 }
-.quote-bar { width: 3px; background: var(--blue-line); border-radius: 2px; flex-shrink: 0; }
+.quote-bar {
+  width: 3px;
+  background: var(--blue-line);
+  border-radius: 2px;
+  flex-shrink: 0;
+}
 .quote-text {
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
 }
 
 .bubble {
-  padding: 10px 14px; border-radius: 12px; line-height: 1.65;
-  font-size: 13.5px; word-wrap: break-word; overflow-wrap: anywhere;
+  padding: 10px 14px;
+  border-radius: 12px;
+  line-height: 1.65;
+  font-size: 13.5px;
+  word-wrap: break-word;
+  overflow-wrap: anywhere;
 }
-.bubble.ai { background: var(--surface); border: 1px solid var(--line); color: var(--ink); }
-.bubble.user { background: var(--blue-2); color: white; }
+.bubble.ai {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  color: var(--ink);
+}
+.bubble.user {
+  background: var(--blue-2);
+  color: white;
+}
 
 .msg-actions {
-  display: flex; align-items: center; justify-content: space-between;
-  font-size: 10.5px; color: var(--ink-3);
-  opacity: 0; transition: opacity .15s; min-height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 10.5px;
+  color: var(--ink-3);
+  opacity: 0;
+  transition: opacity .15s;
+  min-height: 18px;
 }
-.msg-actions.visible { opacity: 1; }
-.msg-row.user .msg-actions { flex-direction: row-reverse; }
-.msg-time { font-family: var(--font-mono); }
-.action-btns { display: flex; gap: 4px; }
+.msg-actions.visible {
+  opacity: 1;
+}
+.msg-row.user .msg-actions {
+  flex-direction: row-reverse;
+}
+.msg-time {
+  font-family: var(--font-mono);
+}
+.action-btns {
+  display: flex;
+  gap: 4px;
+}
 .action-btn {
-  background: transparent; border: none; cursor: pointer; padding: 3px;
-  border-radius: 4px; color: var(--ink-3); display: flex; align-items: center;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 3px;
+  border-radius: 4px;
+  color: var(--ink-3);
+  display: flex;
+  align-items: center;
   transition: all .15s;
 }
-.action-btn:hover { background: var(--bg-3); color: var(--ink); }
-.action-btn.delete:hover { color: #c14545; background: oklch(0.96 0.025 25); }
+.action-btn:hover {
+  background: var(--bg-3);
+  color: var(--ink);
+}
+.action-btn.delete:hover {
+  color: #c14545;
+  background: oklch(0.96 0.025 25);
+}
 
 .dot {
-  width: 6px; height: 6px; border-radius: 50%;
-  background: var(--ink-3); animation: dot 1.2s infinite;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ink-3);
+  animation: dot 1.2s infinite;
 }
 @keyframes dot {
-  0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); }
-  40% { opacity: 1; transform: scale(1); }
+  0%, 80%, 100% {
+    opacity: 0.3;
+    transform: scale(0.8);
+  }
+  40% {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
-/* 选项按钮 */
 .choices-row {
-  display: flex; flex-direction: column; gap: 5px; margin-top: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 4px;
 }
 .choice-btn {
-  display: flex; align-items: center; gap: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   padding: 8px 12px;
-  background: var(--surface); border: 1px solid var(--blue-line); border-radius: 8px;
-  cursor: pointer; text-align: left; font-family: var(--font-sans);
+  background: var(--surface);
+  border: 1px solid var(--blue-line);
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: left;
+  font-family: var(--font-sans);
   transition: all .15s;
 }
 .choice-btn:hover {
-  background: var(--blue-tint); border-color: var(--blue-2);
+  background: var(--blue-tint);
+  border-color: var(--blue-2);
   transform: translateX(2px);
 }
 .choice-label {
-  width: 22px; height: 22px;
-  display: flex; align-items: center; justify-content: center;
-  background: var(--blue-soft); color: var(--blue-2);
-  font-size: 11px; font-weight: 700; border-radius: 5px; flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--blue-soft);
+  color: var(--blue-2);
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 5px;
+  flex-shrink: 0;
 }
 .choice-text {
-  font-size: 12.5px; color: var(--ink-2); line-height: 1.4;
+  font-size: 12.5px;
+  color: var(--ink-2);
+  line-height: 1.4;
 }
 .choice-btn.selected {
   background: var(--blue-tint);
@@ -341,15 +448,33 @@ defineExpose({ scrollToBottom })
 }
 
 .scroll-to-bottom {
-  position: absolute; bottom: 132px; right: 18px;
-  width: 34px; height: 34px; border-radius: 50%;
-  background: var(--surface); border: 1px solid var(--line);
-  box-shadow: 0 2px 8px rgba(0,0,0,0.12); color: var(--ink-2);
-  display: flex; align-items: center; justify-content: center;
-  cursor: pointer; z-index: 10;
+  position: absolute;
+  bottom: 132px;
+  right: 18px;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+  color: var(--ink-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 10;
   transition: background .15s, color .15s, box-shadow .15s;
 }
-.scroll-to-bottom:hover { background: var(--blue-tint); color: var(--blue-2); border-color: var(--blue-line); }
-.scroll-btn-enter-active, .scroll-btn-leave-active { transition: opacity .2s, transform .2s; }
-.scroll-btn-enter-from, .scroll-btn-leave-to { opacity: 0; transform: translateY(8px); }
+.scroll-to-bottom:hover {
+  background: var(--blue-tint);
+  color: var(--blue-2);
+  border-color: var(--blue-line);
+}
+.scroll-btn-enter-active, .scroll-btn-leave-active {
+  transition: opacity .2s, transform .2s;
+}
+.scroll-btn-enter-from, .scroll-btn-leave-to {
+  opacity: 0;
+  transform: translateY(8px);
+}
 </style>

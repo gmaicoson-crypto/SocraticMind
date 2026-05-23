@@ -28,8 +28,9 @@
 </template>
 
 <script setup lang="ts">
+// NotesPanel 组件，封装局部界面和交互逻辑。
 import { ref, h, defineAsyncComponent } from 'vue'
-// MarkdownEditor 和 CanvasSketch 按 tab 异步加载，切换时才下载对应代码
+
 const MarkdownEditor = defineAsyncComponent(() => import('./MarkdownEditor.vue'))
 const CanvasSketch = defineAsyncComponent(() => import('./CanvasSketch.vue'))
 

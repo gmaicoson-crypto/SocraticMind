@@ -233,13 +233,13 @@
 </template>
 
 <script setup lang="ts">
+// Login 页面组件，承载对应页面的主要交互。
 import { ref, computed, h, watch, onBeforeUnmount, defineAsyncComponent } from 'vue'
 import { useRouter } from 'vue-router'
 import { login, register, sendVerificationCode } from '../api/auth'
 import { useLearningStore } from '../stores/learning'
 import { setAuth } from '../utils/token'
 
-// 弹窗组件异步加载，减少登录页初始 JS 体积
 const ForgotPasswordModal = defineAsyncComponent(() => import('../components/ForgotPasswordModal.vue'))
 const LegalModal = defineAsyncComponent(() => import('../components/LegalModal.vue'))
 
@@ -263,7 +263,6 @@ const blankForm = () => ({
 })
 const form = ref(blankForm())
 
-// 切换模式时清空表单，防止上一模式的数据残留
 watch(mode, () => {
   form.value = blankForm()
   errorMsg.value = ''
@@ -288,7 +287,6 @@ const emailValid = computed(() =>
 )
 const canSendCode = computed(() => emailValid.value && codeCooldown.value === 0 && !sendingCode.value)
 
-// 启动 60 秒冷却倒计时
 function startCooldown() {
   codeCooldown.value = 60
   cooldownTimer = window.setInterval(() => {
@@ -316,12 +314,10 @@ async function onSendCode() {
   }
 }
 
-// 组件卸载时清理计时器，防止内存泄漏
 onBeforeUnmount(() => {
   if (cooldownTimer !== null) clearInterval(cooldownTimer)
 })
 
-// 密码强度评分：长度 + 大写 + 数字/特殊字符各 25 分
 const strengthPct = computed(() => {
   const p = form.value.password
   if (!p) return 0
@@ -393,7 +389,6 @@ async function handleSubmit() {
   }
 }
 
-// 左侧品牌区特性列表（使用渲染函数避免引入额外组件文件）
 const features = [
   {
     title: '苏格拉底式 AI 对话',
@@ -463,7 +458,8 @@ const features = [
 }
 
 .brand-icon {
-  width: 36px; height: 36px;
+  width: 36px;
+  height: 36px;
   border-radius: 10px;
   background: linear-gradient(135deg, var(--blue), var(--blue-2));
   display: flex;
@@ -478,7 +474,9 @@ const features = [
   color: var(--ink);
   letter-spacing: -0.01em;
 }
-.brand-name span { color: var(--blue-2); }
+.brand-name span {
+  color: var(--blue-2);
+}
 
 .brand-tagline {
   font-size: 9.5px;
@@ -529,7 +527,8 @@ const features = [
 }
 
 .feat-icon {
-  width: 32px; height: 32px;
+  width: 32px;
+  height: 32px;
   border-radius: 8px;
   background: var(--blue-tint);
   border: 0.5px solid var(--blue-line);
@@ -644,7 +643,10 @@ const features = [
   box-shadow: 0 0 0 3px oklch(0.72 0.085 235 / 0.12);
 }
 
-.field-input svg { opacity: 0.4; flex-shrink: 0; }
+.field-input svg {
+  opacity: 0.4;
+  flex-shrink: 0;
+}
 
 .field-input input {
   flex: 1;
@@ -656,7 +658,9 @@ const features = [
   font-family: var(--font-sans);
 }
 
-.field-input input::placeholder { color: var(--ink-3); }
+.field-input input::placeholder {
+  color: var(--ink-3);
+}
 
 .pwd-toggle {
   background: transparent;
@@ -667,7 +671,9 @@ const features = [
   display: flex;
   align-items: center;
 }
-.pwd-toggle:hover { color: var(--ink-2); }
+.pwd-toggle:hover {
+  color: var(--ink-2);
+}
 
 .strength-wrap {
   display: flex;
@@ -711,14 +717,18 @@ const features = [
   color: var(--ink-2);
   cursor: pointer;
 }
-.remember input { accent-color: var(--blue-2); }
+.remember input {
+  accent-color: var(--blue-2);
+}
 
 .forgot {
   font-size: 12px;
   color: var(--blue-2);
   cursor: pointer;
 }
-.forgot:hover { text-decoration: underline; }
+.forgot:hover {
+  text-decoration: underline;
+}
 
 .terms {
   display: flex;
@@ -727,8 +737,15 @@ const features = [
   font-size: 11.5px;
   color: var(--ink-2);
 }
-.terms input { accent-color: var(--blue-2); margin-top: 2px; flex-shrink: 0; }
-.terms a { color: var(--blue-2); cursor: pointer; }
+.terms input {
+  accent-color: var(--blue-2);
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+.terms a {
+  color: var(--blue-2);
+  cursor: pointer;
+}
 
 .field-error {
   font-size: 11px;
@@ -762,11 +779,17 @@ const features = [
   transition: opacity .15s;
 }
 
-.submit-btn:hover:not(:disabled) { opacity: 0.88; }
-.submit-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.submit-btn:hover:not(:disabled) {
+  opacity: 0.88;
+}
+.submit-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
 
 .spinner {
-  width: 16px; height: 16px;
+  width: 16px;
+  height: 16px;
   border: 2px solid rgba(255,255,255,0.4);
   border-top-color: white;
   border-radius: 50%;
@@ -790,20 +813,37 @@ const features = [
   background: var(--line);
 }
 
-.code-row { display: flex; gap: 8px; align-items: stretch; }
-.code-row .field-input { flex: 1; min-width: 0; }
+.code-row {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+.code-row .field-input {
+  flex: 1;
+  min-width: 0;
+}
 .code-send-btn {
   flex-shrink: 0;
-  height: 42px; padding: 0 14px;
-  border: 1px solid var(--blue-line); border-radius: 9px;
-  background: var(--surface); color: var(--blue-2);
-  font-size: 12px; font-weight: 600; cursor: pointer;
+  height: 42px;
+  padding: 0 14px;
+  border: 1px solid var(--blue-line);
+  border-radius: 9px;
+  background: var(--surface);
+  color: var(--blue-2);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
   font-family: var(--font-sans);
   white-space: nowrap;
   transition: all .15s;
 }
-.code-send-btn:hover:not(:disabled) { background: var(--blue-tint); }
-.code-send-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.code-send-btn:hover:not(:disabled) {
+  background: var(--blue-tint);
+}
+.code-send-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
 
 .field-success {
   font-size: 11px;
@@ -812,7 +852,9 @@ const features = [
 }
 
 .security-hint {
-  display: flex; align-items: center; gap: 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
   padding: 8px 10px;
   background: var(--blue-tint);
   border: 1px solid var(--blue-line);
@@ -821,9 +863,15 @@ const features = [
   color: var(--ink-2);
   line-height: 1.5;
 }
-.security-hint svg { color: var(--blue-2); flex-shrink: 0; }
+.security-hint svg {
+  color: var(--blue-2);
+  flex-shrink: 0;
+}
 
-.social-btns { display: flex; gap: 8px; }
+.social-btns {
+  display: flex;
+  gap: 8px;
+}
 
 .social-btn {
   flex: 1;
@@ -842,7 +890,9 @@ const features = [
   font-family: var(--font-sans);
   transition: background .15s;
 }
-.social-btn:hover { background: var(--bg-2); }
+.social-btn:hover {
+  background: var(--bg-2);
+}
 
 .form-footer {
   text-align: center;
@@ -854,5 +904,7 @@ const features = [
   cursor: pointer;
   font-weight: 500;
 }
-.form-footer a:hover { text-decoration: underline; }
+.form-footer a:hover {
+  text-decoration: underline;
+}
 </style>

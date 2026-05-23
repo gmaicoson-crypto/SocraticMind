@@ -51,6 +51,7 @@
 </template>
 
 <script setup lang="ts">
+// HeatmapCard 页面组件，承载对应页面的主要交互。
 import { ref, computed } from 'vue'
 import {
   heatColors, heatColor, monthNames,
@@ -84,7 +85,6 @@ function onNext() {
 
 const startPad = computed(() => monthStartPad(selectedYear.value, selectedMonth.value))
 
-// 建立日期索引，切月份时复用，不重复遍历 heatmap 数组
 const heatmapByDate = computed(() =>
   Object.fromEntries(props.heatmap.map(h => [h.date, h.count]))
 )
@@ -98,52 +98,143 @@ const monthChatCount = computed(() => monthDays.value.reduce((s, d) => s + d.cou
 
 <style scoped>
 .card {
-  background: var(--surface); border: 1px solid var(--line);
-  border-radius: 12px; padding: 18px 20px;
-  display: flex; flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
 }
 .card-title {
-  font-size: 11px; font-weight: 600; color: var(--ink-3);
-  text-transform: uppercase; letter-spacing: 0.07em;
-  font-family: var(--font-mono); margin-bottom: 14px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink-3);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  font-family: var(--font-mono);
+  margin-bottom: 14px;
 }
 .heatmap-card {
-  display: flex; flex-direction: column; gap: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
   justify-content: space-between;
 }
-.hm-header { display: flex; align-items: center; justify-content: space-between; }
-.hm-controls { display: flex; align-items: center; gap: 6px; }
+.hm-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.hm-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
 .hm-nav-btn {
-  width: 26px; height: 26px;
-  display: flex; align-items: center; justify-content: center;
-  background: var(--bg-2); border: 1px solid var(--line); border-radius: 6px;
-  color: var(--ink-2); cursor: pointer; transition: all .15s;
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--ink-2);
+  cursor: pointer;
+  transition: all .15s;
 }
-.hm-nav-btn:hover:not(:disabled) { background: var(--blue-tint); border-color: var(--blue-line); color: var(--blue-2); }
-.hm-nav-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+.hm-nav-btn:hover:not(:disabled) {
+  background: var(--blue-tint);
+  border-color: var(--blue-line);
+  color: var(--blue-2);
+}
+.hm-nav-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
 .hm-select {
-  font-size: 12px; font-family: var(--font-sans); color: var(--ink);
-  background: var(--bg-2); border: 1px solid var(--line);
-  border-radius: 6px; padding: 3px 6px; cursor: pointer; outline: none;
+  font-size: 12px;
+  font-family: var(--font-sans);
+  color: var(--ink);
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 3px 6px;
+  cursor: pointer;
+  outline: none;
 }
-.hm-month-wrap { display: flex; justify-content: center; align-items: center; flex: 1; }
-.hm-grid-wrap { display: flex; flex-direction: column; gap: 4px; width: fit-content; }
-.hm-week-row { display: grid; grid-template-columns: repeat(7, 20px); gap: 4px; }
+.hm-month-wrap {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex: 1;
+}
+.hm-grid-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: fit-content;
+}
+.hm-week-row {
+  display: grid;
+  grid-template-columns: repeat(7, 20px);
+  gap: 4px;
+}
 .hm-week-row span {
-  width: 20px; height: 14px;
-  font-size: 9px; color: var(--ink-3); font-family: var(--font-mono);
-  text-align: center; display: flex; align-items: center; justify-content: center;
+  width: 20px;
+  height: 14px;
+  font-size: 9px;
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 .hm-month-grid {
-  display: grid; grid-template-columns: repeat(7, 20px); grid-auto-rows: 20px;
-  gap: 4px; width: fit-content;
+  display: grid;
+  grid-template-columns: repeat(7, 20px);
+  grid-auto-rows: 20px;
+  gap: 4px;
+  width: fit-content;
 }
-.hm-cell { width: 20px; height: 20px; border-radius: 3px; transition: transform .1s; cursor: default; }
-.hm-cell:hover { transform: scale(1.2); }
-.hm-cell.empty { background: transparent !important; }
-.hm-cell.today { outline: 2px solid var(--blue-2); outline-offset: 1px; }
-.hm-footer { display: flex; align-items: center; justify-content: space-between; }
-.hm-legend { display: flex; align-items: center; gap: 4px; font-size: 10px; color: var(--ink-3); }
-.hm-leg-cell { width: 10px; height: 10px; border-radius: 2px; }
-.hm-month-stat { font-size: 11px; color: var(--ink-3); font-family: var(--font-mono); }
+.hm-cell {
+  width: 20px;
+  height: 20px;
+  border-radius: 3px;
+  transition: transform .1s;
+  cursor: default;
+}
+.hm-cell:hover {
+  transform: scale(1.2);
+}
+.hm-cell.empty {
+  background: transparent !important;
+}
+.hm-cell.today {
+  outline: 2px solid var(--blue-2);
+  outline-offset: 1px;
+}
+.hm-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.hm-legend {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  color: var(--ink-3);
+}
+.hm-leg-cell {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+}
+.hm-month-stat {
+  font-size: 11px;
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+}
 </style>

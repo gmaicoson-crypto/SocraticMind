@@ -1,10 +1,9 @@
 <template>
   <div class="canvas-wrap">
 
-    <!-- Toolbar -->
     <div class="canvas-toolbar">
       <div class="tool-group">
-        <!-- 工具选择 -->
+
         <div class="tool-switch">
           <button class="tool-btn" :class="{ active: tool === 'pen' }" title="画笔" @click="tool = 'pen'">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -18,7 +17,6 @@
           </button>
         </div>
 
-        <!-- 颜色 -->
         <div class="color-group">
           <button
             v-for="c in colors"
@@ -32,7 +30,6 @@
           />
         </div>
 
-        <!-- 粗细 -->
         <input
           type="range" min="1" max="8" step="0.5"
           v-model.number="brushSize"
@@ -40,9 +37,8 @@
         />
       </div>
 
-      <!-- 右侧按钮组 -->
       <div class="btn-group">
-        <!-- 缩放控制 -->
+
         <div class="zoom-btns">
           <button class="tool-btn" title="缩小" @click="zoomOut" :disabled="scaleVal <= MIN_SCALE">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
@@ -69,7 +65,6 @@
       </div>
     </div>
 
-    <!-- Canvas 容器 -->
     <div class="canvas-container" ref="containerRef" @wheel.prevent="onWheel">
       <div
         class="canvas-scaler"
@@ -97,6 +92,7 @@
 </template>
 
 <script setup lang="ts">
+// CanvasSketch 组件，封装局部界面和交互逻辑。
 import { ref, computed, onMounted } from 'vue'
 
 const canvasRef = ref<HTMLCanvasElement | null>(null)
@@ -107,9 +103,8 @@ const activeColor = ref('oklch(0.62 0.10 235)')
 const brushSize = ref(2.5)
 const isDrawing = ref(false)
 const lastPos = ref({ x: 0, y: 0 })
-const hasDrawn = ref(false) // 是否已开始绘画
+const hasDrawn = ref(false)
 
-// 缩放
 const scaleVal = ref(1)
 const MIN_SCALE = 0.5
 const MAX_SCALE = 3
@@ -156,7 +151,6 @@ onMounted(() => {
   const dpr = window.devicePixelRatio || 1
   const containerRect = container.getBoundingClientRect()
 
-  // 画布实际尺寸设为容器的 3 倍，保证缩小后仍有足够绘画空间
   const W = containerRect.width * 3
   const H = containerRect.height * 3
 
@@ -193,7 +187,7 @@ function getPos(e: MouseEvent | TouchEvent) {
   const canvas = canvasRef.value!
   const rect = canvas.getBoundingClientRect()
   const t = 'touches' in e ? e.touches[0] : e
-  // rect 已经包含了 CSS scale 变换，直接用即可
+
   const x = (t.clientX - rect.left) * (canvas.width / rect.width / (window.devicePixelRatio || 1))
   const y = (t.clientY - rect.top) * (canvas.height / rect.height / (window.devicePixelRatio || 1))
   return { x, y }
@@ -201,7 +195,7 @@ function getPos(e: MouseEvent | TouchEvent) {
 
 function onDown(e: MouseEvent | TouchEvent) {
   isDrawing.value = true
-  // 第一次绘画时清除提示词
+
   if (!hasDrawn.value) {
     hasDrawn.value = true
     const c = canvasRef.value
@@ -282,7 +276,8 @@ function downloadCanvas() {
 }
 
 .tool-btn {
-  width: 28px; height: 26px;
+  width: 28px;
+  height: 26px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -302,7 +297,9 @@ function downloadCanvas() {
   opacity: 0.35;
   cursor: not-allowed;
 }
-.tool-btn:not(:disabled):hover { background: var(--bg-3); }
+.tool-btn:not(:disabled):hover {
+  background: var(--bg-3);
+}
 
 .color-group {
   display: flex;
@@ -310,7 +307,8 @@ function downloadCanvas() {
 }
 
 .color-dot {
-  width: 18px; height: 18px;
+  width: 18px;
+  height: 18px;
   border-radius: 50%;
   cursor: pointer;
   border: 2px solid var(--surface);
@@ -318,7 +316,9 @@ function downloadCanvas() {
   padding: 0;
   transition: transform .15s;
 }
-.color-dot:hover { transform: scale(1.15); }
+.color-dot:hover {
+  transform: scale(1.15);
+}
 
 .size-slider {
   width: 70px;
@@ -373,7 +373,9 @@ function downloadCanvas() {
   gap: 4px;
   transition: background .15s;
 }
-.canvas-action-btn:hover { background: var(--bg-3); }
+.canvas-action-btn:hover {
+  background: var(--bg-3);
+}
 
 .canvas-container {
   flex: 1;
@@ -394,7 +396,7 @@ function downloadCanvas() {
 
 .canvas-scaler {
   position: absolute;
-  /* 画布比容器大3倍，居中显示 */
+
   width: 300%;
   height: 300%;
   top: -100%;

@@ -1,3 +1,5 @@
+// chat 接口模块，封装后端请求方法。
+
 import api from './index'
 import { getToken } from '../utils/token'
 
@@ -8,7 +10,6 @@ export interface ChatMessage {
 
 export type ChatKind = 'qa' | 'topic_overview' | 'node_overview'
 
-// SSE 流式对话：通过原生 fetch 建立流式连接，逐块回调文本
 export function chatStream(
   nodeKey: string,
   topicId: number,
@@ -27,12 +28,10 @@ export function chatStream(
   const token = getToken()
   const controller = controllers ?? new AbortController()
 
-  // 5 分钟超时保护
   const timeout = setTimeout(() => controller.abort(), 5 * 60 * 1000)
 
   let reader: ReadableStreamDefaultReader<Uint8Array> | null = null
 
-  // 重写 abort，中断时同步取消 reader
   const originalAbort = controller.abort.bind(controller)
   controller.abort = () => {
     originalAbort()
@@ -62,7 +61,6 @@ export function chatStream(
       const decoder = new TextDecoder('utf-8')
       let buffer = ''
 
-      // 解析 SSE 数据块，每个事件以 \n\n 分隔
       function processBuffer() {
         const events = buffer.split('\n\n')
         buffer = events.pop() ?? ''
@@ -115,25 +113,21 @@ export function chatStream(
     })
 }
 
-// 获取指定节点的历史对话
 export async function getChatHistory(nodeKey: string) {
   const res = await api.get(`/api/chat/history/${nodeKey}`)
   return res.data as { id: number; role: string; content: string }[]
 }
 
-// 获取用户所有消息，供会话重建时回退使用
 export async function getAllMessages(limit = 200, offset = 0) {
   const res = await api.get(`/api/chat/messages?limit=${limit}&offset=${offset}`)
   return res.data as { id: number; role: string; content: string; node_key: string; mode: string; topic_id: number | null; created_at: string }[]
 }
 
-// 批量删除消息
 export async function deleteMessages(ids: number[]) {
   if (ids.length === 0) return
   await api.delete('/api/chat/messages', { data: { ids } })
 }
 
-// 获取对话建议（苏格拉底或普通模式）
 export async function getSuggestions(mode: 'socratic' | 'normal') {
   const res = await api.get(`/api/chat/suggestions?mode=${mode}`)
   return res.data.suggestions as string[]

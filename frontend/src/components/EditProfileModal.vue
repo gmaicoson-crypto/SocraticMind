@@ -3,7 +3,6 @@
     <div class="overlay" @click.self="emit('close')">
       <div class="modal">
 
-        <!-- 头部 -->
         <div class="modal-header">
           <div>
             <div class="modal-title">编辑个人资料</div>
@@ -14,7 +13,6 @@
 
         <div class="modal-body">
 
-          <!-- 基本信息 -->
           <div>
             <div class="section-label">基本信息</div>
             <div class="avatar-row">
@@ -114,7 +112,6 @@
 
           <div class="modal-divider" />
 
-          <!-- 账号安全 -->
           <div>
             <div class="section-label">账号安全</div>
             <div class="danger-list">
@@ -183,7 +180,6 @@
           @confirm="handleDeleteAccount"
         />
 
-        <!-- 底部 -->
         <div class="modal-footer">
           <button class="cancel-btn" @click="emit('close')">取消</button>
           <button
@@ -210,6 +206,7 @@
 </template>
 
 <script setup lang="ts">
+// EditProfileModal 组件，封装局部界面和交互逻辑。
 import { ref, reactive, computed, onBeforeUnmount, defineAsyncComponent } from 'vue'
 import { useRouter } from 'vue-router'
 import { useLearningStore } from '../stores/learning'
@@ -227,11 +224,10 @@ const focusField = ref('')
 const saving = ref(false)
 const savedDone = ref(false)
 
-// 头像上传
 const fileInput = ref<HTMLInputElement | null>(null)
 const uploading = ref(false)
-const localPreview = ref<string | null>(null) // 选完图片后的本地预览（dataURL）
-const avatarUrl = ref<string | null>(null)    // 后端返回的相对路径
+const localPreview = ref<string | null>(null)
+const avatarUrl = ref<string | null>(null)
 
 const hasImage = computed(() => !!(localPreview.value || avatarUrl.value))
 const avatarPreview = computed(() => localPreview.value ?? avatarSrc(avatarUrl.value))
@@ -240,18 +236,17 @@ function triggerUpload() {
   fileInput.value?.click()
 }
 
-// FileReader 仅用作本地预览，真实文件通过 uploadAvatar 上传，后端返回的 url 才是持久来源
 async function onFileChange(e: Event) {
   const input = e.target as HTMLInputElement
   const file = input.files?.[0]
-  // 立刻清空 input，否则连续选择同一张图不会触发 change 事件
+
   input.value = ''
   if (!file) return
   if (file.size > 5 * 1024 * 1024) {
     alert('图片大小不能超过 5MB')
     return
   }
-  // 本地即时预览
+
   const reader = new FileReader()
   reader.onload = () => { localPreview.value = String(reader.result) }
   reader.readAsDataURL(file)
@@ -287,7 +282,6 @@ async function handleResetAvatar() {
   }
 }
 
-// 修改密码
 const showPwdPanel = ref(false)
 const pwdSaving = ref(false)
 const pwdMsg = ref('')
@@ -336,7 +330,6 @@ async function submitPassword() {
   }
 }
 
-// 持有定时器引用，保证组件提前关闭时不会回写已销毁的状态
 let pwdHideTimer: ReturnType<typeof setTimeout> | null = null
 let savedCloseTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -364,7 +357,7 @@ async function handleSave() {
       bio: form.bio,
       avatar_grad: form.avatarGrad,
     })
-    // 更新本地存储和 store
+
     updateUser(updated)
     store.setUserInfo(updated)
     savedDone.value = true
@@ -385,13 +378,12 @@ function handleLogout() {
   emit('close')
 }
 
-// 注销账号
 const showDeleteModal = ref(false)
 const deleting = ref(false)
 const deleteError = ref('')
 
 function clearAllUserScopedStorage() {
-  // 清除所有会话快照缓存（固定 key）+ 笔记草稿
+
   const sessionKeys = [
     'sm_socratic_sessions', 'sm_normal_sessions',
     'sm_socratic_cur', 'sm_normal_cur',
@@ -399,7 +391,7 @@ function clearAllUserScopedStorage() {
   ]
   for (const s of [localStorage, sessionStorage]) {
     for (const k of sessionKeys) s.removeItem(k)
-    // 笔记编辑器的草稿键
+
     for (let i = s.length - 1; i >= 0; i--) {
       const k = s.key(i)
       if (k && (k.startsWith('sm_note_') || k === 'sm_note_draft')) {
@@ -481,7 +473,8 @@ async function handleDeleteAccount(payload: { password: string; confirm: string 
 }
 
 .close-btn {
-  width: 28px; height: 28px;
+  width: 28px;
+  height: 28px;
   border-radius: 8px;
   background: transparent;
   border: 1px solid var(--line);
@@ -494,7 +487,10 @@ async function handleDeleteAccount(payload: { password: string; confirm: string 
   transition: all .15s;
   font-family: var(--font-sans);
 }
-.close-btn:hover { background: var(--bg-3); color: var(--ink); }
+.close-btn:hover {
+  background: var(--bg-3);
+  color: var(--ink);
+}
 
 .modal-body {
   padding: 20px 24px;
@@ -522,7 +518,8 @@ async function handleDeleteAccount(payload: { password: string; confirm: string 
 }
 
 .big-avatar {
-  width: 64px; height: 64px;
+  width: 64px;
+  height: 64px;
   border-radius: 16px;
   flex-shrink: 0;
   color: white;
@@ -535,15 +532,20 @@ async function handleDeleteAccount(payload: { password: string; confirm: string 
   cursor: pointer;
   transition: filter .15s;
 }
-.big-avatar:hover { filter: brightness(0.9); }
+.big-avatar:hover {
+  filter: brightness(0.9);
+}
 .avatar-img {
-  width: 100%; height: 100%;
+  width: 100%;
+  height: 100%;
   object-fit: cover;
   border-radius: 16px;
 }
 
 .avatar-actions {
-  display: flex; gap: 6px; margin-bottom: 6px;
+  display: flex;
+  gap: 6px;
+  margin-bottom: 6px;
 }
 .avatar-action-btn {
   font-size: 11.5px;
@@ -556,14 +558,22 @@ async function handleDeleteAccount(payload: { password: string; confirm: string 
   font-family: var(--font-sans);
   transition: opacity .15s;
 }
-.avatar-action-btn:hover:not(:disabled) { opacity: 0.85; }
-.avatar-action-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.avatar-action-btn:hover:not(:disabled) {
+  opacity: 0.85;
+}
+.avatar-action-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
 .avatar-action-btn.ghost {
   background: transparent;
   color: var(--ink-2);
   border: 1px solid var(--line);
 }
-.color-swatches.disabled { opacity: 0.4; pointer-events: none; }
+.color-swatches.disabled {
+  opacity: 0.4;
+  pointer-events: none;
+}
 
 .pwd-panel {
   margin-top: 10px;
@@ -571,18 +581,29 @@ async function handleDeleteAccount(payload: { password: string; confirm: string 
   background: var(--bg-2);
   border: 1px solid var(--line);
   border-radius: 10px;
-  display: flex; flex-direction: column; gap: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
-.pwd-msg { font-size: 11.5px; color: #E24B4A; }
-.pwd-msg.ok { color: #1D9E75; }
+.pwd-msg {
+  font-size: 11.5px;
+  color: #E24B4A;
+}
+.pwd-msg.ok {
+  color: #1D9E75;
+}
 .pwd-actions {
-  display: flex; justify-content: flex-end; gap: 8px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 .avatar-edit {
   position: absolute;
-  bottom: -4px; right: -4px;
-  width: 20px; height: 20px;
+  bottom: -4px;
+  right: -4px;
+  width: 20px;
+  height: 20px;
   border-radius: 6px;
   background: var(--blue-2);
   border: 2px solid var(--surface);
@@ -590,7 +611,10 @@ async function handleDeleteAccount(payload: { password: string; confirm: string 
   align-items: center;
   justify-content: center;
 }
-.avatar-edit svg { width: 10px; height: 10px; }
+.avatar-edit svg {
+  width: 10px;
+  height: 10px;
+}
 
 .avatar-hint {
   font-size: 11px;
@@ -598,21 +622,37 @@ async function handleDeleteAccount(payload: { password: string; confirm: string 
   margin-bottom: 6px;
 }
 
-.color-swatches { display: flex; gap: 6px; }
+.color-swatches {
+  display: flex;
+  gap: 6px;
+}
 
 .swatch {
-  width: 22px; height: 22px;
+  width: 22px;
+  height: 22px;
   border-radius: 6px;
   cursor: pointer;
   border: 2px solid transparent;
   transition: transform .1s;
 }
-.swatch:hover { transform: scale(1.1); }
-.swatch.active { border-color: var(--ink); }
+.swatch:hover {
+  transform: scale(1.1);
+}
+.swatch.active {
+  border-color: var(--ink);
+}
 
-.fields { display: flex; flex-direction: column; gap: 12px; }
+.fields {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
 
-.field { display: flex; flex-direction: column; gap: 5px; }
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
 
 .field label {
   font-size: 11.5px;
@@ -631,7 +671,10 @@ async function handleDeleteAccount(payload: { password: string; confirm: string 
   height: 40px;
   transition: all .15s;
 }
-.field-input svg { opacity: 0.4; flex-shrink: 0; }
+.field-input svg {
+  opacity: 0.4;
+  flex-shrink: 0;
+}
 .field-input.focused {
   border-color: var(--blue);
   background: var(--surface);
@@ -650,7 +693,10 @@ async function handleDeleteAccount(payload: { password: string; confirm: string 
   color: var(--ink);
   font-family: var(--font-sans);
 }
-.field-input input:disabled { color: var(--ink-3); cursor: not-allowed; }
+.field-input input:disabled {
+  color: var(--ink-3);
+  cursor: not-allowed;
+}
 
 .char-count {
   font-size: 10.5px;
@@ -664,7 +710,10 @@ async function handleDeleteAccount(payload: { password: string; confirm: string 
   align-items: center;
   gap: 12px;
 }
-.goal-slider { flex: 1; accent-color: var(--blue-2); }
+.goal-slider {
+  flex: 1;
+  accent-color: var(--blue-2);
+}
 .slider-val {
   min-width: 28px;
   text-align: center;
@@ -700,7 +749,10 @@ async function handleDeleteAccount(payload: { password: string; confirm: string 
   box-shadow: 0 1px 3px rgba(0,0,0,0.06);
 }
 
-.toggle-list { display: flex; flex-direction: column; }
+.toggle-list {
+  display: flex;
+  flex-direction: column;
+}
 
 .toggle-row {
   display: flex;
@@ -709,13 +761,23 @@ async function handleDeleteAccount(payload: { password: string; confirm: string 
   padding: 10px 0;
   border-bottom: 0.5px solid var(--line);
 }
-.toggle-row:last-child { border-bottom: none; }
+.toggle-row:last-child {
+  border-bottom: none;
+}
 
-.toggle-info { font-size: 12.5px; color: var(--ink); }
-.toggle-sub { font-size: 11px; color: var(--ink-3); margin-top: 1px; }
+.toggle-info {
+  font-size: 12.5px;
+  color: var(--ink);
+}
+.toggle-sub {
+  font-size: 11px;
+  color: var(--ink-3);
+  margin-top: 1px;
+}
 
 .toggle {
-  width: 36px; height: 20px;
+  width: 36px;
+  height: 20px;
   border-radius: 10px;
   background: var(--bg-3);
   border: 1px solid var(--line);
@@ -724,17 +786,24 @@ async function handleDeleteAccount(payload: { password: string; confirm: string 
   transition: background .2s;
   flex-shrink: 0;
 }
-.toggle.on { background: var(--blue-2); border-color: var(--blue-2); }
+.toggle.on {
+  background: var(--blue-2);
+  border-color: var(--blue-2);
+}
 .toggle-thumb {
   position: absolute;
-  top: 2px; left: 2px;
-  width: 14px; height: 14px;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
   border-radius: 50%;
   background: white;
   box-shadow: 0 1px 3px rgba(0,0,0,0.15);
   transition: left .2s;
 }
-.toggle.on .toggle-thumb { left: 18px; }
+.toggle.on .toggle-thumb {
+  left: 18px;
+}
 
 .modal-divider {
   height: 0.5px;
@@ -742,7 +811,10 @@ async function handleDeleteAccount(payload: { password: string; confirm: string 
   margin: 0 -24px;
 }
 
-.danger-list { display: flex; flex-direction: column; }
+.danger-list {
+  display: flex;
+  flex-direction: column;
+}
 
 .danger-row {
   display: flex;
@@ -751,10 +823,19 @@ async function handleDeleteAccount(payload: { password: string; confirm: string 
   padding: 10px 0;
   border-bottom: 0.5px solid var(--line);
 }
-.danger-row:last-child { border-bottom: none; }
+.danger-row:last-child {
+  border-bottom: none;
+}
 
-.danger-info { font-size: 12.5px; color: var(--ink); }
-.danger-sub { font-size: 11px; color: var(--ink-3); margin-top: 1px; }
+.danger-info {
+  font-size: 12.5px;
+  color: var(--ink);
+}
+.danger-sub {
+  font-size: 11px;
+  color: var(--ink-3);
+  margin-top: 1px;
+}
 
 .danger-btn {
   padding: 6px 14px;
@@ -770,13 +851,17 @@ async function handleDeleteAccount(payload: { password: string; confirm: string 
   border: 1px solid var(--line);
   color: var(--ink-2);
 }
-.danger-btn.outline:hover { background: var(--bg-2); }
+.danger-btn.outline:hover {
+  background: var(--bg-2);
+}
 .danger-btn.red {
   background: #FCEBEB;
   border: 1px solid #F7C1C1;
   color: #E24B4A;
 }
-.danger-btn.red:hover { background: #F7C1C1; }
+.danger-btn.red:hover {
+  background: #F7C1C1;
+}
 
 .modal-footer {
   padding: 16px 24px;
@@ -801,7 +886,9 @@ async function handleDeleteAccount(payload: { password: string; confirm: string 
   font-family: var(--font-sans);
   transition: background .15s;
 }
-.cancel-btn:hover { background: var(--bg-2); }
+.cancel-btn:hover {
+  background: var(--bg-2);
+}
 
 .save-btn {
   padding: 8px 20px;
@@ -818,12 +905,20 @@ async function handleDeleteAccount(payload: { password: string; confirm: string 
   gap: 6px;
   transition: opacity .15s;
 }
-.save-btn:hover:not(:disabled) { opacity: 0.88; }
-.save-btn:disabled { opacity: 0.7; cursor: not-allowed; }
-.save-btn.saved { background: linear-gradient(135deg, #1D9E75, #0F6E56); }
+.save-btn:hover:not(:disabled) {
+  opacity: 0.88;
+}
+.save-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+.save-btn.saved {
+  background: linear-gradient(135deg, #1D9E75, #0F6E56);
+}
 
 .spinner {
-  width: 13px; height: 13px;
+  width: 13px;
+  height: 13px;
   border-radius: 50%;
   border: 2px solid rgba(255,255,255,0.4);
   border-top-color: white;

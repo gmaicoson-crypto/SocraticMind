@@ -59,6 +59,7 @@
 </template>
 
 <script setup lang="ts">
+// DialogueHistoryPanel 组件，封装局部界面和交互逻辑。
 import { ref, watch, nextTick } from 'vue'
 import type { Message } from '../../types'
 
@@ -93,7 +94,6 @@ defineEmits<{
 
 const editInputRef = ref<HTMLInputElement | null>(null)
 
-// 进入编辑态时自动聚焦输入框
 watch(() => props.editingSessionId, (id) => {
   if (id) nextTick(() => editInputRef.value?.focus())
 })
@@ -101,81 +101,202 @@ watch(() => props.editingSessionId, (id) => {
 
 <style scoped>
 .history-panel {
-  position: absolute; top: 0; left: 0; bottom: 0; width: 260px;
-  background: var(--surface); border-right: 1px solid var(--line);
-  z-index: 50; display: flex; flex-direction: column;
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 260px;
+  background: var(--surface);
+  border-right: 1px solid var(--line);
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
 }
 .history-header {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 12px 14px; border-bottom: 1px solid var(--line); flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
 }
-.history-title { font-size: 12.5px; font-weight: 600; color: var(--ink); }
+.history-title {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink);
+}
 .history-close {
-  background: transparent; border: none; cursor: pointer;
-  color: var(--ink-3); font-size: 14px; padding: 2px 6px; border-radius: 4px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--ink-3);
+  font-size: 14px;
+  padding: 2px 6px;
+  border-radius: 4px;
 }
-.history-close:hover { background: var(--bg-3); color: var(--ink); }
+.history-close:hover {
+  background: var(--bg-3);
+  color: var(--ink);
+}
 
 .history-list {
-  flex: 1; min-height: 0; overflow-y: auto; padding: 6px;
-  display: flex; flex-direction: column; gap: 4px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 .history-item {
-  display: flex; align-items: center; gap: 4px;
-  padding: 8px 10px; border-radius: 8px; cursor: pointer;
-  transition: background .15s; min-height: 48px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background .15s;
+  min-height: 48px;
 }
-.history-item:hover { background: var(--bg-2); }
-.history-item.active { background: var(--blue-tint); }
-.history-item-content { flex: 1; min-width: 0; }
-.history-name-wrap { display: flex; align-items: center; gap: 6px; }
+.history-item:hover {
+  background: var(--bg-2);
+}
+.history-item.active {
+  background: var(--blue-tint);
+}
+.history-item-content {
+  flex: 1;
+  min-width: 0;
+}
+.history-name-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
 .history-name {
-  font-size: 12.5px; font-weight: 500; color: var(--ink); flex: 1;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--ink);
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .history-count {
-  font-size: 10px; color: var(--ink-3); font-family: var(--font-mono); flex-shrink: 0;
+  font-size: 10px;
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  flex-shrink: 0;
 }
 .history-time {
-  font-size: 10px; color: var(--ink-3); font-family: var(--font-mono); margin-top: 2px;
+  font-size: 10px;
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  margin-top: 2px;
 }
 
-.history-edit { display: flex; align-items: center; gap: 4px; }
+.history-edit {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
 .history-name-input {
-  flex: 1; min-width: 0;
-  font-size: 12px; padding: 3px 6px; border: 1px solid var(--blue);
-  border-radius: 4px; outline: none; background: var(--surface); color: var(--ink);
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  padding: 3px 6px;
+  border: 1px solid var(--blue);
+  border-radius: 4px;
+  outline: none;
+  background: var(--surface);
+  color: var(--ink);
   font-family: var(--font-sans);
 }
 .history-save-btn, .history-cancel-btn {
-  width: 22px; height: 22px; border: 1px solid var(--line);
-  background: var(--bg-2); border-radius: 4px; cursor: pointer;
-  font-size: 11px; display: flex; align-items: center; justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: 1px solid var(--line);
+  background: var(--bg-2);
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
 }
-.history-save-btn { color: var(--blue-2); }
-.history-save-btn:hover { background: var(--blue-tint); border-color: var(--blue-line); }
-.history-cancel-btn { color: var(--ink-3); }
-.history-cancel-btn:hover { background: var(--bg-3); color: var(--ink); }
-
-.history-item-actions { display: flex; gap: 2px; flex-shrink: 0; opacity: 0; transition: opacity .15s; }
-.history-item:hover .history-item-actions { opacity: 1; }
-.history-action-btn {
-  width: 22px; height: 22px; border: none; background: transparent;
-  border-radius: 4px; cursor: pointer; color: var(--ink-3);
-  display: flex; align-items: center; justify-content: center;
+.history-save-btn {
+  color: var(--blue-2);
 }
-.history-action-btn:hover { background: var(--bg-3); color: var(--ink); }
-.history-action-btn.delete:hover { color: #c14545; }
+.history-save-btn:hover {
+  background: var(--blue-tint);
+  border-color: var(--blue-line);
+}
+.history-cancel-btn {
+  color: var(--ink-3);
+}
+.history-cancel-btn:hover {
+  background: var(--bg-3);
+  color: var(--ink);
+}
+
+.history-item-actions {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity .15s;
+}
+.history-item:hover .history-item-actions {
+  opacity: 1;
+}
+.history-action-btn {
+  width: 22px;
+  height: 22px;
+  border: none;
+  background: transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--ink-3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.history-action-btn:hover {
+  background: var(--bg-3);
+  color: var(--ink);
+}
+.history-action-btn.delete:hover {
+  color: #c14545;
+}
 
 .history-new-btn {
-  display: flex; align-items: center; justify-content: center; gap: 6px;
-  margin: 8px; padding: 8px 12px; background: var(--blue-2); color: white;
-  border: none; border-radius: 8px; font-size: 12.5px; font-weight: 500; cursor: pointer;
-  font-family: var(--font-sans); transition: background .15s; flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin: 8px;
+  padding: 8px 12px;
+  background: var(--blue-2);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  transition: background .15s;
+  flex-shrink: 0;
 }
-.history-new-btn:hover { background: var(--blue); }
+.history-new-btn:hover {
+  background: var(--blue);
+}
 
-.slide-left-enter-active, .slide-left-leave-active { transition: transform .2s ease, opacity .2s ease; }
-.slide-left-enter-from, .slide-left-leave-to { transform: translateX(-100%); opacity: 0; }
+.slide-left-enter-active, .slide-left-leave-active {
+  transition: transform .2s ease, opacity .2s ease;
+}
+.slide-left-enter-from, .slide-left-leave-to {
+  transform: translateX(-100%);
+  opacity: 0;
+}
 </style>

@@ -53,6 +53,7 @@
 </template>
 
 <script setup lang="ts">
+// WeeklyCard 页面组件，承载对应页面的主要交互。
 import { computed } from 'vue'
 
 interface WeeklyStats {
@@ -71,7 +72,6 @@ const props = defineProps<{
 
 const weekDayLabels = ['一', '二', '三', '四', '五', '六', '日']
 
-// JS getDay() 0=周日，这里映射为 0=周一 … 6=周日
 const weekDays = computed(() => {
   const heatmapMap = Object.fromEntries(props.heatmap.map(h => [h.date, h.count]))
   const today = new Date()
@@ -94,37 +94,110 @@ const maxWeekCount = computed(() => Math.max(...weekDays.value.map(d => d.count)
 
 <style scoped>
 .card {
-  background: var(--surface); border: 1px solid var(--line);
-  border-radius: 12px; padding: 18px 20px;
-  display: flex; flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
 }
 .card-title {
-  font-size: 11px; font-weight: 600; color: var(--ink-3);
-  text-transform: uppercase; letter-spacing: 0.07em;
-  font-family: var(--font-mono); margin-bottom: 14px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink-3);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  font-family: var(--font-mono);
+  margin-bottom: 14px;
 }
-.weekly-card { display: flex; flex-direction: column; gap: 12px; justify-content: space-between; }
-.weekly-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.weekly-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  justify-content: space-between;
+}
+.weekly-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
 .weekly-item {
-  display: flex; align-items: center; gap: 8px;
-  padding: 8px 10px; background: var(--bg-2); border-radius: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--bg-2);
+  border-radius: 8px;
 }
-.weekly-icon { font-size: 15px; }
-.weekly-num { font-size: 15px; font-weight: 700; color: var(--ink); font-family: var(--font-mono); }
-.weekly-label { font-size: 10px; color: var(--ink-3); margin-top: 1px; }
+.weekly-icon {
+  font-size: 15px;
+}
+.weekly-num {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ink);
+  font-family: var(--font-mono);
+}
+.weekly-label {
+  font-size: 10px;
+  color: var(--ink-3);
+  margin-top: 1px;
+}
 
 .weekly-peak {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 7px 10px; background: var(--blue-tint);
-  border-radius: 8px; border: 1px solid var(--blue-line);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 10px;
+  background: var(--blue-tint);
+  border-radius: 8px;
+  border: 1px solid var(--blue-line);
 }
-.weekly-peak-label { font-size: 11px; color: var(--ink-3); }
-.weekly-peak-val { font-size: 12px; font-weight: 600; color: var(--blue-2); font-family: var(--font-mono); }
+.weekly-peak-label {
+  font-size: 11px;
+  color: var(--ink-3);
+}
+.weekly-peak-val {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--blue-2);
+  font-family: var(--font-mono);
+}
 
-.weekly-days { display: flex; gap: 4px; align-items: flex-end; height: 56px; }
-.weekly-day { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; height: 100%; }
-.weekly-day-bar-wrap { flex: 1; width: 100%; display: flex; align-items: flex-end; justify-content: center; }
-.weekly-day-bar { width: 100%; min-height: 4px; border-radius: 3px 3px 0 0; transition: height .4s ease; }
-.weekly-day-label { font-size: 9px; color: var(--ink-3); font-family: var(--font-mono); }
-.weekly-day-label.today { color: var(--blue-2); font-weight: 600; }
+.weekly-days {
+  display: flex;
+  gap: 4px;
+  align-items: flex-end;
+  height: 56px;
+}
+.weekly-day {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  height: 100%;
+}
+.weekly-day-bar-wrap {
+  flex: 1;
+  width: 100%;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+.weekly-day-bar {
+  width: 100%;
+  min-height: 4px;
+  border-radius: 3px 3px 0 0;
+  transition: height .4s ease;
+}
+.weekly-day-label {
+  font-size: 9px;
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+}
+.weekly-day-label.today {
+  color: var(--blue-2);
+  font-weight: 600;
+}
 </style>

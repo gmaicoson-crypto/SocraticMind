@@ -28,6 +28,7 @@
 </template>
 
 <script setup lang="ts">
+// TopicNameBar 组件，封装局部界面和交互逻辑。
 import { ref, watch, nextTick } from 'vue'
 
 const props = defineProps<{
@@ -44,7 +45,7 @@ defineEmits<{
 }>()
 
 const inputRef = ref<HTMLInputElement | null>(null)
-// 进入编辑态自动聚焦
+
 watch(() => props.editing, (val) => {
   if (val) nextTick(() => inputRef.value?.focus())
 })
@@ -52,34 +53,74 @@ watch(() => props.editing, (val) => {
 
 <style scoped>
 .topic-bar {
-  display: flex; align-items: center; gap: 6px;
-  padding: 5px 14px; flex-shrink: 0;
-  background: var(--blue-tint); border-bottom: 1px solid var(--blue-line);
-  font-size: 11.5px; color: var(--ink-2);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 14px;
+  flex-shrink: 0;
+  background: var(--blue-tint);
+  border-bottom: 1px solid var(--blue-line);
+  font-size: 11.5px;
+  color: var(--ink-2);
 }
 .topic-bar-name {
-  font-weight: 500; color: var(--ink); flex: 1; min-width: 0;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-weight: 500;
+  color: var(--ink);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .topic-name-input {
-  flex: 1; font-size: 12px; padding: 2px 8px;
-  border: 1px solid var(--blue); border-radius: 4px;
-  outline: none; background: var(--surface); color: var(--ink);
+  flex: 1;
+  font-size: 12px;
+  padding: 2px 8px;
+  border: 1px solid var(--blue);
+  border-radius: 4px;
+  outline: none;
+  background: var(--surface);
+  color: var(--ink);
   font-family: var(--font-sans);
 }
 .topic-edit-btn {
-  background: transparent; border: none; cursor: pointer;
-  color: var(--ink-3); padding: 2px 4px; border-radius: 4px;
-  display: flex; align-items: center;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--ink-3);
+  padding: 2px 4px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
 }
-.topic-edit-btn:hover { background: var(--surface); color: var(--ink); }
+.topic-edit-btn:hover {
+  background: var(--surface);
+  color: var(--ink);
+}
 .topic-ctrl-btn {
-  width: 22px; height: 22px; border: 1px solid var(--line);
-  background: var(--surface); border-radius: 4px; cursor: pointer;
-  font-size: 11px; display: flex; align-items: center; justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
-.topic-ctrl-btn.confirm { color: var(--blue-2); }
-.topic-ctrl-btn.confirm:hover { background: var(--blue-tint); border-color: var(--blue-line); }
-.topic-ctrl-btn.cancel { color: var(--ink-3); }
-.topic-ctrl-btn.cancel:hover { background: var(--bg-3); color: var(--ink); }
+.topic-ctrl-btn.confirm {
+  color: var(--blue-2);
+}
+.topic-ctrl-btn.confirm:hover {
+  background: var(--blue-tint);
+  border-color: var(--blue-line);
+}
+.topic-ctrl-btn.cancel {
+  color: var(--ink-3);
+}
+.topic-ctrl-btn.cancel:hover {
+  background: var(--bg-3);
+  color: var(--ink);
+}
 </style>

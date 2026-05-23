@@ -60,6 +60,7 @@
 </template>
 
 <script setup lang="ts">
+// GraphNode 组件，封装局部界面和交互逻辑。
 import { computed } from 'vue'
 import type { KNode } from '../types'
 import { useLearningStore } from '../stores/learning'
@@ -79,13 +80,11 @@ const W = 120
 const H = 52
 const R = 14
 
-// 超长文字截断，避免 SVG 文字溢出节点边框
 function truncate(text: string, max: number): string {
   if (!text) return ''
   return text.length > max ? text.slice(0, max) + '…' : text
 }
 
-// 根据节点状态和深色模式返回样式配置
 const styles = computed(() => {
   const s = props.node.state
   const dark = store.isDark
@@ -118,7 +117,11 @@ const styles = computed(() => {
   animation: pulseGlow 3.4s ease-in-out infinite;
 }
 @keyframes pulseGlow {
-  0%, 100% { filter: drop-shadow(0 0 0 oklch(0.72 0.085 235 / 0)); }
-  50%       { filter: drop-shadow(0 0 6px oklch(0.72 0.085 235 / 0.6)); }
+  0%, 100% {
+    filter: drop-shadow(0 0 0 oklch(0.72 0.085 235 / 0));
+  }
+  50% {
+    filter: drop-shadow(0 0 6px oklch(0.72 0.085 235 / 0.6));
+  }
 }
 </style>

@@ -1,4 +1,4 @@
-// 将后端返回的相对头像路径拼接为完整 URL
+// avatar 工具模块，提供可复用的纯函数。
 export function avatarSrc(url: string | null | undefined): string {
   if (!url) return ''
   if (/^https?:\/\//.test(url)) return url

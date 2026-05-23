@@ -18,7 +18,6 @@
       @update:editing-name="editingName = $event"
     />
 
-    <!-- Header -->
     <div class="dlg-header">
       <div class="dlg-header-left">
         <div class="ai-avatar" :class="{ thinking: isThinking }">
@@ -97,6 +96,7 @@
 </template>
 
 <script setup lang="ts">
+// SocraticDialogue 组件，封装局部界面和交互逻辑。
 import { ref, watch, nextTick, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useLearningStore } from '../stores/learning'
 import type { Message } from '../types'
@@ -120,7 +120,6 @@ interface Session {
 
 const store = useLearningStore()
 
-// 子组件引用：MessageList 暴露 scrollToBottom，InputBar 暴露 reset/focus
 const messageListRef = ref<InstanceType<typeof MessageList> | null>(null)
 const inputBarRef = ref<InstanceType<typeof DialogueInputBar> | null>(null)
 
@@ -137,7 +136,7 @@ const editingName = ref('')
 let abortController: AbortController | null = null
 let saveTimer: ReturnType<typeof setTimeout> | null = null
 let pendingMsgIds: { user: number; ai: number } | null = null
-// 页面刷新后，组件首次 hydrate 完成前禁止触发 topic_overview
+
 let isHydrated = false
 
 const pendingTopicName = ref('')
@@ -150,7 +149,6 @@ const chatMode = ref<'socratic' | 'normal'>('socratic')
 const aiStyleOptions = ['温和', '标准', '严格'] as const
 const aiStyle = ref<string>(store.userInfo?.ai_style ?? '标准')
 
-// 会话快照缓存键（固定 key，非用户隔离；clearAuth 时清除）
 const SK_SOCRATIC = 'sm_socratic_sessions'
 const SK_NORMAL = 'sm_normal_sessions'
 const SK_SOCRATIC_CUR = 'sm_socratic_cur'
@@ -189,7 +187,6 @@ const currentSession = computed(() =>
 
 const currentSessionName = computed(() => currentSession.value?.name ?? '苏格拉底式对话')
 
-// 模式切换 badge：当前模式下"非欢迎语"消息数量
 const socraticBadge = computed(() => Math.max(0, currentSocraticSession.value.messages.length - 1))
 const normalBadge = computed(() => Math.max(0, currentNormalSession.value.messages.length - 1))
 
@@ -295,7 +292,6 @@ function saveSessions() {
   }, 300)
 }
 
-// 主题 ↔ 学习对话 1:1 绑定：找不到就懒创建一个，名字默认取主题名
 function findOrCreateTopicSession(topicId: number): Session {
   const existing = socraticSessions.value.find(s => s.topicId === topicId)
   if (existing) return existing
@@ -353,7 +349,6 @@ function newSession() {
   scrollToBottom()
 }
 
-// 从后端全量拉取消息，按 topic_id 分组重建会话（后端为唯一数据源）
 async function rebuildFromBackend() {
   try {
     const msgs = await getAllMessages(500, 0)
@@ -362,7 +357,6 @@ async function rebuildFromBackend() {
     const socraticMsgs = msgs.filter(m => m.mode === 'socratic')
     const normalMsgs = msgs.filter(m => m.mode !== 'socratic')
 
-    // 保留当前会话中未持久化的临时消息（刚发送、无 db_id）
     const ephemeralByTopic = new Map<number, Message[]>()
     for (const s of socraticSessions.value) {
       if (s.topicId != null) {
@@ -371,9 +365,8 @@ async function rebuildFromBackend() {
       }
     }
 
-    // 按 topic_id 分组 socratic 消息；无 topic_id 的消息按 node_key 分组作为回退
     const topicMsgMap = new Map<number, Message[]>()
-    const nodeKeyMsgMap = new Map<string, Message[]>()  // 回退：无 topic_id 时按 node_key 分组
+    const nodeKeyMsgMap = new Map<string, Message[]>()
 
     function convertBackendMsg(m: typeof socraticMsgs[number]): Message | null {
       if (m.role === 'ai') {
@@ -392,7 +385,7 @@ async function rebuildFromBackend() {
         arr.push(msg)
         topicMsgMap.set(m.topic_id, arr)
       } else {
-        // 回退：无 topic_id 时按 node_key 分组
+
         const nk = m.node_key || 'unknown'
         const arr = nodeKeyMsgMap.get(nk) || []
         arr.push(msg)
@@ -400,7 +393,6 @@ async function rebuildFromBackend() {
       }
     }
 
-    // 重建 socratic 会话
     const newSocratic: Session[] = []
 
     function buildSessions(map: Map<number, Message[]>) {
@@ -423,13 +415,12 @@ async function rebuildFromBackend() {
 
     buildSessions(topicMsgMap)
 
-    // 回退：无 topic_id 的消息，尝试匹配到当前活跃 topic 的会话
     if (nodeKeyMsgMap.size > 0) {
       const cid = currentTopicId.value
       for (const [nk, msgs] of nodeKeyMsgMap) {
         msgs.sort((a, b) => (a.time || '').localeCompare(b.time || ''))
         inferSelectedChoices(msgs)
-        // 尝试在 store.nodes 中查找此 node_key 对应的节点（当前 topic）
+
         const node = store.nodes.find(n => n.id === nk)
         const topic = node ? store.topics.find(t => Number(t.id) === cid) : null
         newSocratic.push({
@@ -443,7 +434,6 @@ async function rebuildFromBackend() {
       }
     }
 
-    // 保留无 topic 绑定的孤儿会话（用户手动创建的）
     for (const s of socraticSessions.value) {
       if (s.topicId == null && !newSocratic.find(ns => ns.id === s.id)) {
         newSocratic.push(s)
@@ -455,7 +445,6 @@ async function rebuildFromBackend() {
     }
     socraticSessions.value = newSocratic
 
-    // 重建 normal 会话
     if (normalMsgs.length) {
       const normalSession: Session = { id: genId(), name: '历史对话', messages: [], updatedAt: nowDate() }
       for (const m of normalMsgs) {
@@ -475,7 +464,6 @@ async function rebuildFromBackend() {
   }
 }
 
-// 按相邻 AI→user 消息对推断 selected_choice（修复 saveSessions 防抖导致的丢失）
 function inferSelectedChoices(messages: Message[]) {
   for (let i = 0; i < messages.length - 1; i++) {
     const msg = messages[i]
@@ -495,12 +483,9 @@ onMounted(() => {
   const cached = loadCachedChips(chatMode.value)
   chips.value = cached.length > 0 ? cached : defaultChips[chatMode.value]
 
-  // 标记组件已完成初次挂载，后续 topic_overview 允许触发
   isHydrated = true
 })
 
-// topics 就绪 + 已登录时，从后端全量拉取消息重建会话（后端为唯一数据源）
-// immediate: true — 覆盖登录后跳转时 topics 已加载完毕、length 不再变化的情况
 watch(() => store.topics.length, (len) => {
   if (len > 0 && store.userInfo?.id) {
     rebuildFromBackend()
@@ -508,14 +493,12 @@ watch(() => store.topics.length, (len) => {
 }, { immediate: true })
 
 watch(chatMode, () => {
-  // 切模式仅读缓存，避免来回切换都打 AI；缓存为空才走默认词
+
   const cached = loadCachedChips(chatMode.value)
   chips.value = cached.length > 0 ? cached : defaultChips[chatMode.value]
   scrollToBottom()
 })
 
-// 主题 → 会话自动切换：activeTopicId 或 chatMode 变化都重新对齐
-// 用 Sidebar 点击主题、TopBar 搜索跳转、生成新主题等都会触发 setActiveTopic
 watch([() => store.activeTopicId, chatMode], async () => {
   if (chatMode.value !== 'socratic') return
   const numId = Number(store.activeTopicId)
@@ -527,15 +510,14 @@ watch([() => store.activeTopicId, chatMode], async () => {
     saveSessions()
     scrollToBottom()
   }
-  // 消费"待概览"标记：刚生成 / 加入推荐主题时由发起方设置；首屏挂载不会带 flag
+
   if (store.pendingTopicOverviewId === numId && isHydrated) {
     const title = store.topics.find(t => Number(t.id) === numId)?.title
-    store.requestTopicOverview(null)  // 先清，避免重复触发
+    store.requestTopicOverview(null)
     if (title) await streamOverview('topic', title)
   }
 }, { immediate: true })
 
-// 主题列表变化时同步会话名 + 清理已删除主题对应的孤儿会话
 watch(() => store.topics, (topics) => {
   const validIds = new Set(topics.map(t => Number(t.id)))
   let mutated = false
@@ -546,20 +528,20 @@ watch(() => store.topics, (topics) => {
       continue
     }
     if (!validIds.has(s.topicId)) {
-      // 主题被删除 → 同步删除其绑定会话
+
       mutated = true
       continue
     }
     const t = topics.find(x => Number(x.id) === s.topicId)
     if (t && (s.topicTitle !== t.title || s.name !== t.title.slice(0, 12))) {
-      // 主题改名 → 会话名同步
+
       s.topicTitle = t.title
       s.name = t.title.slice(0, 12)
       mutated = true
     }
     next.push(s)
   }
-  // 至少留一个会话兜底（未绑定主题的默认对话）
+
   if (next.length === 0) {
     next.push(defaultSession('socratic'))
     mutated = true
@@ -625,7 +607,7 @@ function saveSessionName(id: string) {
 }
 
 function quoteMessage(msg: Message) {
-  // 引用时去掉 markdown 噪声字符，截断 200 字防过长
+
   quotedText.value = msg.text.replace(/[#*`>]/g, '').trim().slice(0, 200)
   nextTick(() => inputBarRef.value?.focus())
 }
@@ -713,17 +695,10 @@ async function saveTopicName() {
   editingTopicName.value = false
 }
 
-// 把流式片段里的 [MASTERED]/[CONFIRM_MASTER] 信号 token 剔掉
 function stripSignals(s: string): string {
   return s.replace(/\[MASTERED\]/g, '').replace(/\[CONFIRM_MASTER\]/g, '')
 }
 
-// 去掉 [CHOICES]...[ECHOICES] 块，用于流式展示
-function stripChoicesBlock(s: string): string {
-  return s.replace(/\s*\[CHOICES\][\s\S]*?\[ECHOICES\]\s*/g, '')
-}
-
-// 流式过程中检测完整的 [CHOICES]...[ECHOICES] 块，有则提前解析出选项
 function checkStreamingChoices() {
   if (!streamingChoices.value) {
     const { choices } = parseChoices(streamingText.value)
@@ -731,7 +706,6 @@ function checkStreamingChoices() {
   }
 }
 
-// 从 AI 回复中提取 [CHOICES]...[ECHOICES] 选项块，返回清洗后的正文 + 选项数组
 function parseChoices(text: string): { cleanText: string; choices: { label: string; text: string }[] | null } {
   const match = text.match(/\[CHOICES\]([\s\S]*?)\[ECHOICES\]/)
   if (!match) return { cleanText: text, choices: null }
@@ -747,13 +721,10 @@ function parseChoices(text: string): { cleanText: string; choices: { label: stri
   return { cleanText, choices: choices.length >= 2 ? choices : null }
 }
 
-// 用户点击选项按钮时，直接作为用户消息发送，无需手动输入
 function sendChoiceText(choiceText: string) {
   if (isGenerating.value) return
-  // 流式进行中点击选项：先中止当前流，commit 已有内容，再发送选择
   if (isThinking.value) abortChat()
 
-  // 找到当前会话中最后一条有 choices 的 AI 消息，记录已选 label
   const msgs = currentSession.value?.messages
   if (msgs) {
     const matchLabel = choiceText.match(/^([A-F])[.、]/)
@@ -820,14 +791,12 @@ async function send() {
     return
   }
 
-  // 同一对话只能绑定一个主题（避免历史记录串台）
   if (currentSession.value?.topicId && isNewTopicIntent(v)) {
     pushMessage({ role: 'ai', text: `本对话已绑定「**${currentSession.value.topicTitle}**」主题，每个学习对话只能学习一个主题。\n\n如需学习新主题，请点击右上角「＋」新建对话。`, time: now() })
     scrollToBottom()
     return
   }
 
-  // 待确认主题：上一轮 AI 询问"确认生成吗？"，此轮判断用户回答
   if (pendingTopicName.value) {
     if (isConfirmation(v)) {
       const topicName = pendingTopicName.value
@@ -856,7 +825,6 @@ async function send() {
     return
   }
 
-  // 节点必须属于当前会话绑定的主题；否则提示用户先选对主题的节点
   if (currentSession.value?.topicId && !store.nodes.some(n => n.id === store.activeNode!.id)) {
     pushMessage({
       role: 'ai',
@@ -957,14 +925,12 @@ async function handleGenerateTopic(topicName: string) {
   scrollToBottom()
   try {
     const topic = await generateTopic(topicName)
-    // 先把当前未绑定的会话"认领"为新主题的会话，再 setActiveTopic 触发 watcher
     if (currentSession.value && currentSession.value.topicId == null) {
       currentSession.value.topicId = topic.id
       currentSession.value.topicTitle = topic.title
       currentSession.value.name = topic.title.slice(0, 12)
       saveSessions()
     }
-    // 先标记这个主题需要概览，再切主题；watcher 切完会话后会消费这个标记
     store.requestTopicOverview(topic.id)
     await store.fetchTopics()
     await store.setActiveTopic(String(topic.id))
@@ -978,10 +944,6 @@ async function handleGenerateTopic(topicName: string) {
   }
 }
 
-// 统一的概览流：复用现有 chatStream，仅传 kind 改变 prompt
-// identifier 含义因 kind 而异：
-//   topic → 主题标题（后端 topic_overview 分支直接读 req.node_key 当主题名）
-//   node  → 节点的 node_key（后端走 DB 查询取出 label/sub 给 NODE_OVERVIEW prompt）
 function streamOverview(kind: 'topic' | 'node', identifier: string): Promise<void> {
   return new Promise((resolve) => {
     isThinking.value = true
@@ -1032,13 +994,11 @@ function streamOverview(kind: 'topic' | 'node', identifier: string): Promise<voi
 }
 
 watch(() => store.activeNode?.id, async (id) => {
-  // 节点切换：先给 100 字概览，再衔接苏格拉底引导问题（已掌握节点直接走复习提问）
   if (!id) return
   if (chatMode.value !== 'socratic') return
   const node = store.activeNode!
 
   if (node.state === 'mastered') {
-    // 已掌握 → 走复习提问，不再走概览
     isThinking.value = true
     streamingText.value = ''
     scrollToBottom()
@@ -1082,13 +1042,10 @@ watch(() => store.activeNode?.id, async (id) => {
     return
   }
 
-  // 未掌握 → 节点概览（100 字 + 一个引导问题）
-  // 后端按 node_key 查 DB 拿到 label/sub，所以这里传 node.id（前端的 KNode.id 即 node_key）
   await streamOverview('node', node.id)
 })
 
 onBeforeUnmount(() => {
-  // 路由切换时清理：未触发的写盘 timer + 未结束的流式请求
   if (saveTimer) clearTimeout(saveTimer)
   abortController?.abort()
 })
@@ -1096,42 +1053,87 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .dialogue-wrap {
-  display: flex; flex-direction: column;
-  background: var(--surface); border: 1px solid var(--line);
-  border-radius: var(--radius); overflow: hidden;
-  min-height: 0; height: 100%; flex: 1; position: relative;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+  min-height: 0;
+  height: 100%;
+  flex: 1;
+  position: relative;
 }
 
-/* ── Header ── */
 .dlg-header {
-  padding: 12px 16px; border-bottom: 1px solid var(--line);
-  display: flex; align-items: center; justify-content: space-between;
-  background: linear-gradient(180deg, var(--bg-2), var(--surface)); flex-shrink: 0;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: linear-gradient(180deg, var(--bg-2), var(--surface));
+  flex-shrink: 0;
 }
-.dlg-header-left { display: flex; align-items: center; gap: 10px; }
+.dlg-header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
 .ai-avatar {
-  width: 32px; height: 32px; flex-shrink: 0;
-  border-radius: 10px; background: linear-gradient(135deg, var(--blue), var(--blue-2));
-  display: flex; align-items: center; justify-content: center; position: relative;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border-radius: 10px;
+  background: linear-gradient(135deg, var(--blue), var(--blue-2));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
 }
 .thinking-dot {
-  position: absolute; right: -3px; bottom: -3px;
-  width: 10px; height: 10px; border-radius: 50%;
-  background: oklch(0.72 0.12 145); border: 2px solid var(--surface);
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: oklch(0.72 0.12 145);
+  border: 2px solid var(--surface);
 }
 .dlg-title {
-  font-weight: 600; font-size: 13.5px;
-  display: flex; align-items: center; gap: 6px;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px;
+  font-weight: 600;
+  font-size: 13.5px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
 }
 
-.dlg-sub { font-size: 11px; color: var(--ink-3); margin-top: 1px; }
-.dlg-actions { display: flex; gap: 6px; }
-.hdr-btn {
-  width: 28px; height: 28px; background: transparent;
-  border: 1px solid var(--line); border-radius: 8px;
-  color: var(--ink-2); cursor: pointer;
-  display: flex; align-items: center; justify-content: center;
+.dlg-sub {
+  font-size: 11px;
+  color: var(--ink-3);
+  margin-top: 1px;
 }
-.hdr-btn:hover { background: var(--bg-2); }
+.dlg-actions {
+  display: flex;
+  gap: 6px;
+}
+.hdr-btn {
+  width: 28px;
+  height: 28px;
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink-2);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.hdr-btn:hover {
+  background: var(--bg-2);
+}
 </style>

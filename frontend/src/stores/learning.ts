@@ -1,3 +1,5 @@
+// learning 状态模块，集中管理学习相关共享状态。
+
 import { defineStore } from 'pinia'
 import { ref, shallowRef, computed } from 'vue'
 import type { KNode, KEdge, Topic, Message } from '../types'
@@ -7,7 +9,6 @@ import { recordToday, getStreak } from '../api/progress'
 import type { StreakData } from '../api/progress'
 import { loadUser } from '../utils/token'
 
-// 读取持久化主题设置，优先本地存储，其次系统偏好
 function getInitialTheme(): boolean {
   const stored = localStorage.getItem('sm_theme')
   if (stored !== null) return stored === 'dark'
@@ -23,7 +24,6 @@ export const useLearningStore = defineStore('learning', () => {
   const isDark = ref(getInitialTheme())
   applyTheme(isDark.value)
 
-  // shallowRef：节点/边/主题数组只做整体替换，不需要深层响应式，节省性能开销
   const nodes = shallowRef<KNode[]>([])
   const edges = shallowRef<KEdge[]>([])
   const topics = shallowRef<Topic[]>([])
@@ -33,7 +33,6 @@ export const useLearningStore = defineStore('learning', () => {
   const lastMasteredId = ref<string | null>(null)
   const recommendations = shallowRef<{ title: string; emoji: string; reason: string }[]>([])
 
-  // 跨组件信号：新生成主题后通知对话框触发一次概览推送，消费后清零
   const pendingTopicOverviewId = ref<number | null>(null)
   function requestTopicOverview(topicId: number | null) {
     pendingTopicOverviewId.value = topicId
@@ -69,7 +68,6 @@ export const useLearningStore = defineStore('learning', () => {
     if (data) userInfo.value = data as typeof userInfo.value
   }
 
-  // 加载指定主题的节点，并从 parent_keys 字段解析边关系
   async function fetchNodes(topicId: number) {
     try {
       const data = await getNodes(topicId)
@@ -96,7 +94,6 @@ export const useLearningStore = defineStore('learning', () => {
     }
   }
 
-  // 加载所有主题，默认激活第一个并加载其节点
   async function fetchTopics() {
     try {
       const data = await getTopics()
@@ -117,7 +114,6 @@ export const useLearningStore = defineStore('learning', () => {
     }
   }
 
-  // 仅更新主题列表，不重置当前激活主题
   async function fetchTopicsOnly() {
     try {
       const data = await getTopics()
@@ -141,7 +137,6 @@ export const useLearningStore = defineStore('learning', () => {
     }
   }
 
-  // 记录今日学习并刷新 streak 数据
   async function recordLearning() {
     try {
       await recordToday()
@@ -160,7 +155,6 @@ export const useLearningStore = defineStore('learning', () => {
     }
   }
 
-  // 切换激活主题，切换时清空 activeNode 防止对话错位
   async function setActiveTopic(id: string) {
     if (activeTopicId.value !== id) {
       activeNode.value = null
@@ -174,7 +168,6 @@ export const useLearningStore = defineStore('learning', () => {
     activeNode.value = node
   }
 
-  // 标记节点已掌握，并解锁所有满足前置条件的后继节点
   async function masterNode(nodeId: string) {
     const node = nodes.value.find(n => n.id === nodeId)
     if (!node || !node.dbId) return
@@ -204,7 +197,6 @@ export const useLearningStore = defineStore('learning', () => {
     messages.value.push(msg)
   }
 
-  // 切换深色/浅色主题并持久化
   function toggleTheme() {
     isDark.value = !isDark.value
     localStorage.setItem('sm_theme', isDark.value ? 'dark' : 'light')

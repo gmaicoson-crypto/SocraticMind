@@ -15,7 +15,6 @@
             <button class="md-help-close" @click="$emit('close')">✕</button>
           </div>
 
-          <!-- 分类侧栏 + 内容区 -->
           <div class="md-help-body">
             <nav class="md-help-nav">
               <button
@@ -46,6 +45,7 @@
 </template>
 
 <script setup lang="ts">
+// MarkdownHelpModal 组件，封装局部界面和交互逻辑。
 import { ref, computed } from 'vue'
 import { marked } from 'marked'
 
@@ -63,7 +63,6 @@ interface Group {
   rules: (Rule & { html: string })[]
 }
 
-// 用同一份 marked 渲染示例，确保左侧源码与右侧预览效果完全一致
 function render(src: string): string {
   return marked.parse(src, { breaks: true, gfm: true }) as string
 }
@@ -161,9 +160,14 @@ const activeGroup = ref(rawGroups[0].id)
 
 <style scoped>
 .md-help-overlay {
-  position: fixed; inset: 0; z-index: 320;
-  background: rgba(0,0,0,0.32); backdrop-filter: blur(4px);
-  display: flex; align-items: center; justify-content: center;
+  position: fixed;
+  inset: 0;
+  z-index: 320;
+  background: rgba(0,0,0,0.32);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
   padding: 24px;
 }
 .md-help-modal {
@@ -172,33 +176,54 @@ const activeGroup = ref(rawGroups[0].id)
   border-radius: 16px;
   width: min(900px, 100%);
   height: min(640px, 100%);
-  display: flex; flex-direction: column;
+  display: flex;
+  flex-direction: column;
   box-shadow: 0 12px 48px rgba(0,0,0,0.18);
   overflow: hidden;
 }
 .md-help-header {
-  display: flex; align-items: center; justify-content: space-between;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   padding: 14px 20px;
   border-bottom: 1px solid var(--line);
   flex-shrink: 0;
 }
 .md-help-title {
-  display: inline-flex; align-items: center; gap: 8px;
-  font-size: 14px; font-weight: 600; color: var(--ink);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
 }
-.md-help-title svg { color: var(--blue-2); }
+.md-help-title svg {
+  color: var(--blue-2);
+}
 .md-help-close {
-  background: transparent; border: none; cursor: pointer;
-  font-size: 14px; color: var(--ink-3); padding: 2px 6px; border-radius: 4px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--ink-3);
+  padding: 2px 6px;
+  border-radius: 4px;
 }
-.md-help-close:hover { background: var(--bg-2); color: var(--ink); }
+.md-help-close:hover {
+  background: var(--bg-2);
+  color: var(--ink);
+}
 
 .md-help-body {
-  flex: 1; min-height: 0;
-  display: grid; grid-template-columns: 140px 1fr;
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 140px 1fr;
 }
 .md-help-nav {
-  display: flex; flex-direction: column; gap: 2px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
   padding: 12px 8px;
   border-right: 1px solid var(--line);
   background: var(--bg-2);
@@ -216,7 +241,10 @@ const activeGroup = ref(rawGroups[0].id)
   cursor: pointer;
   transition: all .15s;
 }
-.md-help-nav-item:hover { background: var(--bg-3); color: var(--ink); }
+.md-help-nav-item:hover {
+  background: var(--bg-3);
+  color: var(--ink);
+}
 .md-help-nav-item.active {
   background: var(--surface);
   border-color: var(--blue-line);
@@ -229,14 +257,21 @@ const activeGroup = ref(rawGroups[0].id)
   overflow-y: auto;
 }
 
-.md-rule { margin-bottom: 18px; }
-.md-rule:last-child { margin-bottom: 0; }
+.md-rule {
+  margin-bottom: 18px;
+}
+.md-rule:last-child {
+  margin-bottom: 0;
+}
 .md-rule-title {
-  font-size: 13px; font-weight: 600; color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
   margin-bottom: 4px;
 }
 .md-rule-note {
-  font-size: 11.5px; color: var(--ink-3);
+  font-size: 11.5px;
+  color: var(--ink-3);
   margin-bottom: 6px;
   line-height: 1.55;
 }
@@ -269,57 +304,125 @@ const activeGroup = ref(rawGroups[0].id)
   overflow: auto;
 }
 
-/* 让预览区里的 markdown 元素跟编辑器主预览一致 */
-.md-rule-preview :deep(h1) { font-size: 16px; margin: 4px 0; font-weight: 600; }
-.md-rule-preview :deep(h2) { font-size: 14px; margin: 4px 0; font-weight: 600; }
-.md-rule-preview :deep(h3) { font-size: 13px; margin: 4px 0; font-weight: 600; }
-.md-rule-preview :deep(h4) { font-size: 12.5px; margin: 4px 0; font-weight: 600; }
-.md-rule-preview :deep(h5) { font-size: 12px; margin: 4px 0; font-weight: 600; }
-.md-rule-preview :deep(h6) { font-size: 11.5px; margin: 4px 0; font-weight: 600; color: var(--ink-2); }
-.md-rule-preview :deep(p) { margin: 4px 0; }
+.md-rule-preview :deep(h1) {
+  font-size: 16px;
+  margin: 4px 0;
+  font-weight: 600;
+}
+.md-rule-preview :deep(h2) {
+  font-size: 14px;
+  margin: 4px 0;
+  font-weight: 600;
+}
+.md-rule-preview :deep(h3) {
+  font-size: 13px;
+  margin: 4px 0;
+  font-weight: 600;
+}
+.md-rule-preview :deep(h4) {
+  font-size: 12.5px;
+  margin: 4px 0;
+  font-weight: 600;
+}
+.md-rule-preview :deep(h5) {
+  font-size: 12px;
+  margin: 4px 0;
+  font-weight: 600;
+}
+.md-rule-preview :deep(h6) {
+  font-size: 11.5px;
+  margin: 4px 0;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+.md-rule-preview :deep(p) {
+  margin: 4px 0;
+}
 .md-rule-preview :deep(code) {
-  font-family: var(--font-mono); font-size: 11.5px;
-  background: var(--blue-tint); color: var(--blue-2);
-  padding: 1px 5px; border-radius: 3px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  background: var(--blue-tint);
+  color: var(--blue-2);
+  padding: 1px 5px;
+  border-radius: 3px;
 }
 .md-rule-preview :deep(pre) {
-  background: var(--bg-3); padding: 8px 10px;
-  border-radius: 5px; margin: 4px 0;
-  border: 1px solid var(--line); overflow-x: auto;
+  background: var(--bg-3);
+  padding: 8px 10px;
+  border-radius: 5px;
+  margin: 4px 0;
+  border: 1px solid var(--line);
+  overflow-x: auto;
 }
-.md-rule-preview :deep(pre code) { background: transparent; padding: 0; color: var(--ink); }
+.md-rule-preview :deep(pre code) {
+  background: transparent;
+  padding: 0;
+  color: var(--ink);
+}
 .md-rule-preview :deep(ul),
-.md-rule-preview :deep(ol) { padding-left: 18px; margin: 4px 0; }
-.md-rule-preview :deep(li) { margin: 2px 0; }
+.md-rule-preview :deep(ol) {
+  padding-left: 18px;
+  margin: 4px 0;
+}
+.md-rule-preview :deep(li) {
+  margin: 2px 0;
+}
 .md-rule-preview :deep(blockquote) {
   border-left: 3px solid var(--blue-line);
-  padding-left: 8px; margin: 4px 0; color: var(--ink-2);
+  padding-left: 8px;
+  margin: 4px 0;
+  color: var(--ink-2);
 }
 .md-rule-preview :deep(table) {
-  border-collapse: collapse; margin: 4px 0;
+  border-collapse: collapse;
+  margin: 4px 0;
   font-size: 11.5px;
 }
 .md-rule-preview :deep(th),
 .md-rule-preview :deep(td) {
   border: 1px solid var(--line);
-  padding: 4px 8px; text-align: left;
+  padding: 4px 8px;
+  text-align: left;
 }
-.md-rule-preview :deep(th) { background: var(--bg-3); font-weight: 600; }
+.md-rule-preview :deep(th) {
+  background: var(--bg-3);
+  font-weight: 600;
+}
 .md-rule-preview :deep(hr) {
-  border: none; border-top: 1px solid var(--line); margin: 6px 0;
+  border: none;
+  border-top: 1px solid var(--line);
+  margin: 6px 0;
 }
-.md-rule-preview :deep(input[type='checkbox']) { margin-right: 4px; }
-.md-rule-preview :deep(del) { text-decoration: line-through; color: var(--ink-3); }
-.md-rule-preview :deep(a) { color: var(--blue-2); text-decoration: underline; }
-.md-rule-preview :deep(img) { max-width: 100%; border-radius: 4px; }
+.md-rule-preview :deep(input[type='checkbox']) {
+  margin-right: 4px;
+}
+.md-rule-preview :deep(del) {
+  text-decoration: line-through;
+  color: var(--ink-3);
+}
+.md-rule-preview :deep(a) {
+  color: var(--blue-2);
+  text-decoration: underline;
+}
+.md-rule-preview :deep(img) {
+  max-width: 100%;
+  border-radius: 4px;
+}
 .md-rule-preview :deep(kbd) {
-  font-family: var(--font-mono); font-size: 11px;
-  background: var(--bg-3); color: var(--ink);
-  padding: 1px 5px; border-radius: 3px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  background: var(--bg-3);
+  color: var(--ink);
+  padding: 1px 5px;
+  border-radius: 3px;
   border: 1px solid var(--line);
   box-shadow: inset 0 -1px 0 var(--line-2);
 }
 
-.fade-enter-active, .fade-leave-active { transition: opacity .2s ease; }
-.fade-enter-from, .fade-leave-to { opacity: 0; }
+.fade-enter-active, .fade-leave-active {
+  transition: opacity .2s ease;
+}
+.fade-enter-from, .fade-leave-to {
+  opacity: 0;
+}
 </style>

@@ -1,4 +1,4 @@
-// 根据累计对话次数计算用户等级
+// level 工具模块，提供可复用的纯函数。
 const LEVEL_THRESHOLDS = [0, 1000, 3000, 7000, 15000, 30000, 60000, 120000]
 
 export function computeLevel(chatCount: number): number {

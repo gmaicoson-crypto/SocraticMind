@@ -1,7 +1,6 @@
-// 知识节点状态：已掌握 / 可学习 / 未解锁
+// 前端共享类型定义，统一描述知识图谱、主题和消息结构。
 export type NodeState = 'mastered' | 'available' | 'locked'
 
-// 知识图谱中的节点
 export interface KNode {
   id: string
   label: string
@@ -12,13 +11,11 @@ export interface KNode {
   dbId?: number
 }
 
-// 知识图谱中的有向边
 export interface KEdge {
   source: string
   target: string
 }
 
-// 学习主题
 export interface Topic {
   id: string
   title: string
@@ -27,7 +24,6 @@ export interface Topic {
   emoji: string
 }
 
-// 对话消息
 export interface Message {
   role: 'ai' | 'user'
   text: string

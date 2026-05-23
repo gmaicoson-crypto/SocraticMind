@@ -1,3 +1,5 @@
+// progress 接口模块，封装后端请求方法。
+
 import api from './index'
 
 export interface StreakData {
@@ -6,12 +8,10 @@ export interface StreakData {
   recent: { date: string; learned: boolean }[]
 }
 
-// 记录今日学习
 export async function recordToday() {
   await api.post('/api/progress/record')
 }
 
-// 获取连续学习天数和最近记录
 export async function getStreak() {
   const res = await api.get('/api/progress/streak')
   return res.data as StreakData
@@ -34,7 +34,6 @@ export interface ProfileStats {
   }
 }
 
-// 获取个人统计页所需的完整数据
 export async function getProfileStats() {
   const res = await api.get('/api/progress/stats')
   return res.data as ProfileStats

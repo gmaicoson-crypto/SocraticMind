@@ -103,13 +103,13 @@
 </template>
 
 <script setup lang="ts">
+// KnowledgeGraph 组件，封装局部界面和交互逻辑。
 import { ref, computed, onMounted, onBeforeUnmount, watch, h, nextTick } from 'vue'
 import { useLearningStore } from '../stores/learning'
 import type { KNode } from '../types'
 import GraphNode from './GraphNode.vue'
 import GraphEdge from './GraphEdge.vue'
 
-// 图例使用渲染函数，避免为简单展示创建独立组件文件
 const LegendItem = (props: { label: string; count: number; variant: string }) => {
   const dotStyle: Record<string, { bg: string; border: string }> = {
     mastered: { bg: 'var(--blue)', border: 'var(--blue-2)' },
@@ -142,7 +142,6 @@ const showScaleHint = ref(false)
 let VW = 900
 let VH = 720
 
-// 节点加载后扩展画布范围并重置视图
 watch(() => store.nodes, (nodes) => {
   if (nodes.length === 0) {
     VW = 900
@@ -169,7 +168,6 @@ const viewBoxParts = computed(() =>
   viewBox.value.split(' ').map(Number)
 )
 
-// 通过改变 viewBox 实现缩放，同时将节点包围盒中心居中
 const viewBox = computed(() => {
   const w = VW / scale.value
   const h = VH / scale.value
@@ -177,7 +175,7 @@ const viewBox = computed(() => {
   let offsetX = 0
   let offsetY = 0
   if (store.nodes.length > 0) {
-    // 用 for 循环避免 Math.min(...arr) 在节点数千时栈溢出
+
     let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity
     for (const n of store.nodes) {
       if (n.x < minX) minX = n.x
@@ -202,7 +200,6 @@ const currentTopicTitle = computed(() => {
 let confettiInstance: any = null
 let hintTimer: ReturnType<typeof setTimeout> | null = null
 
-// 节点 id → KNode 的快速索引，供 GraphEdge 查找端点坐标
 const nodeMap = computed(() =>
   Object.fromEntries(store.nodes.map(n => [n.id, n]))
 )
@@ -237,7 +234,6 @@ const isDragging = ref(false)
 const dragStart = ref({ x: 0, y: 0 })
 const panStart = ref({ x: 0, y: 0 })
 
-// 限制平移范围，防止图形完全拖出视口
 function clampPan(x: number, y: number) {
   const limit = 300
   return {
@@ -246,7 +242,6 @@ function clampPan(x: number, y: number) {
   }
 }
 
-// 将 SVG 用户坐标转换为容器归一化坐标，供 confetti 的 origin 参数使用
 function getNodeScreenPos(node: KNode) {
   if (!containerRef.value || !svgRef.value) return { x: 0.5, y: 0.5 }
   const containerRect = containerRef.value.getBoundingClientRect()
@@ -276,7 +271,6 @@ function fireConfettiAt(node: KNode) {
   })
 }
 
-// 全部节点已掌握时触发三波全屏庆祝彩纸
 function fireCelebration() {
   if (!confettiInstance) return
   confettiInstance({
@@ -323,7 +317,6 @@ onMounted(() => {
     })
   }
 
-  // 首次进入时为已掌握节点依次播放彩纸
   initialConfettiTimer = setTimeout(() => {
     masteredNodes.value.forEach((n, i) => {
       const t = setTimeout(() => fireConfettiAt(n), i * 220)
@@ -360,7 +353,6 @@ function onMouseDown(e: MouseEvent) {
   e.preventDefault()
 }
 
-// rAF 节流：mousemove 高频触发，合并成每帧最多一次 viewBox 重算
 let panFrame: number | null = null
 let lastMouseEvent: MouseEvent | null = null
 function onMouseMove(e: MouseEvent) {
@@ -404,7 +396,6 @@ onBeforeUnmount(() => {
   window.removeEventListener('mouseup', onMouseUp)
 })
 
-// 用 Set 差集 O(n) 找出新增已掌握节点，只为新节点播放彩纸
 watch(
   () => store.nodes.filter(n => n.state === 'mastered').map(n => n.id),
   (newIds, oldIds) => {
@@ -451,7 +442,9 @@ function handleClick(node: KNode) {
 
 .graph-header {
   position: absolute;
-  top: 0; left: 0; right: 0;
+  top: 0;
+  left: 0;
+  right: 0;
   padding: 14px 18px;
   display: flex;
   align-items: center;
@@ -492,7 +485,9 @@ function handleClick(node: KNode) {
   display: block;
   cursor: grab;
 }
-.graph-svg:active { cursor: grabbing; }
+.graph-svg:active {
+  cursor: grabbing;
+}
 
 .empty-graph {
   position: absolute;
@@ -525,7 +520,8 @@ function handleClick(node: KNode) {
 
 .scale-hint {
   position: absolute;
-  bottom: 56px; right: 14px;
+  bottom: 56px;
+  right: 14px;
   background: oklch(0.22 0.012 250);
   color: white;
   font-size: 12px;
@@ -538,13 +534,18 @@ function handleClick(node: KNode) {
 }
 
 .fade-enter-active,
-.fade-leave-active { transition: opacity .2s ease; }
+.fade-leave-active {
+  transition: opacity .2s ease;
+}
 .fade-enter-from,
-.fade-leave-to { opacity: 0; }
+.fade-leave-to {
+  opacity: 0;
+}
 
 .controls {
   position: absolute;
-  bottom: 14px; right: 14px;
+  bottom: 14px;
+  right: 14px;
   display: flex;
   gap: 4px;
   background: var(--surface);
@@ -554,7 +555,8 @@ function handleClick(node: KNode) {
 }
 
 .ctrl-btn {
-  width: 28px; height: 28px;
+  width: 28px;
+  height: 28px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -564,5 +566,7 @@ function handleClick(node: KNode) {
   border-radius: 6px;
   cursor: pointer;
 }
-.ctrl-btn:hover { background: var(--bg-3); }
+.ctrl-btn:hover {
+  background: var(--bg-3);
+}
 </style>

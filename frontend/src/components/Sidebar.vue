@@ -142,15 +142,16 @@
 </template>
 
 <script setup lang="ts">
+// Sidebar 组件，封装局部界面和交互逻辑。
 import { ref, computed, onBeforeUnmount, defineAsyncComponent } from 'vue'
 import { useLearningStore } from '../stores/learning'
-// TopicManager 体积较大，仅在用户点击"管理主题"时才加载
+
 const TopicManager = defineAsyncComponent(() => import('./TopicManager.vue'))
 import { generateTopic } from '../api/topic'
 
 const store = useLearningStore()
 const showManager = ref(false)
-// 首次点击后保持挂载，避免反复销毁重建
+
 const hasOpenedManager = ref(false)
 
 function openManager() {
@@ -187,7 +188,6 @@ async function refreshRecommend() {
   }
 }
 
-// 点击推荐：生成主题图谱，切换并触发概览推送
 async function handleRecommend(title: string, emoji: string) {
   if (generatingTitle.value) return
   generatingTitle.value = title
@@ -206,7 +206,6 @@ async function handleRecommend(title: string, emoji: string) {
   }
 }
 
-// 31 天循环热力格：颜色随当前周期内进度由浅到深
 function getBarStyle(i: number) {
   const streak = store.streakData.streak
   const lit = streak % 31 === 0 && streak > 0 ? 31 : streak % 31
@@ -277,7 +276,8 @@ onBeforeUnmount(() => {
 }
 
 .manage-btn {
-  width: 26px; height: 26px;
+  width: 26px;
+  height: 26px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -295,7 +295,8 @@ onBeforeUnmount(() => {
 }
 
 .theme-btn {
-  width: 28px; height: 28px;
+  width: 28px;
+  height: 28px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -340,7 +341,9 @@ onBeforeUnmount(() => {
   transition: background .15s;
   font-family: var(--font-sans);
 }
-.topic-row:hover { background: var(--bg-3); }
+.topic-row:hover {
+  background: var(--bg-3);
+}
 .topic-row.active {
   background: var(--blue-tint);
   border-color: var(--blue-line);
@@ -353,7 +356,8 @@ onBeforeUnmount(() => {
 }
 
 .topic-emoji {
-  width: 26px; height: 26px;
+  width: 26px;
+  height: 26px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -370,7 +374,10 @@ onBeforeUnmount(() => {
   color: white;
 }
 
-.topic-info { flex: 1; min-width: 0; }
+.topic-info {
+  flex: 1;
+  min-width: 0;
+}
 
 .topic-title {
   font-size: 12.5px;
@@ -400,7 +407,9 @@ onBeforeUnmount(() => {
   border-radius: 999px;
   transition: width .4s;
 }
-.fill-active { background: var(--blue-2); }
+.fill-active {
+  background: var(--blue-2);
+}
 
 .expand-btn {
   width: 100%;
@@ -445,10 +454,13 @@ onBeforeUnmount(() => {
   font-family: var(--font-sans);
   transition: background .15s;
 }
-.recommend-row:hover { background: var(--bg-3); }
+.recommend-row:hover {
+  background: var(--bg-3);
+}
 
 .rec-dot {
-  width: 6px; height: 6px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
   background: var(--blue);
   flex-shrink: 0;
@@ -468,10 +480,15 @@ onBeforeUnmount(() => {
 }
 
 .rec-emoji {
-  width: 28px; height: 28px;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 16px; flex-shrink: 0;
-  background: var(--bg-2); border-radius: 8px;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  flex-shrink: 0;
+  background: var(--bg-2);
+  border-radius: 8px;
 }
 
 .rec-reason {
@@ -583,6 +600,8 @@ onBeforeUnmount(() => {
 }
 
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 </style>

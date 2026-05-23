@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// HelloWorld 组件，封装局部界面和交互逻辑。
 import { ref } from 'vue'
 import viteLogo from '../assets/vite.svg'
 import heroImg from '../assets/hero.png'
