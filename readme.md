@@ -17,24 +17,24 @@
 
 ## 项目简介
 
-SocraticMind 是一个基于 **Vue 3 + TypeScript + FastAPI + MySQL** 构建的 AI 驱动学习平台。平台的核心理念来自苏格拉底问答法——AI 不直接给出答案，而是通过引导式提问激发用户的主动思考与自我建构。
+SocraticMind 是一个基于 **Vue 3 + TypeScript + FastAPI + MySQL** 构建的 AI 驱动学习平台。
 
 系统围绕三个核心维度展开：**知识图谱**将学习内容拆解为带依赖关系的结构化节点；**苏格拉底对话**根据当前节点与用户掌握程度动态调整问答策略；**学习追踪**以打卡、连续天数、热力图和成就徽章完整记录学习历程。
 
-前端通过 **Server-Sent Events** 实时接收 AI 流式回复，后端基于 LangChain / LangGraph 编排多轮对话逻辑，适合个人学习、知识梳理与课程设计等场景。
+前端通过 **Server-Sent Events** 实时接收 AI 流式回复，后端基于 LangChain / LangGraph 编排多轮对话逻辑。
 
 ---
 
-## 🌟 核心特性
+## 核心特性
 
-### 🗺️ 知识图谱
+### 知识图谱
 
 - AI 一键生成指定主题的结构化知识图谱
 - 节点带父子依赖关系，父节点掌握后自动解锁子节点
 - 节点三态管理：锁定 → 可学习 → 已掌握
 - 基于 Vue Flow + Dagre 的交互式图谱可视化，支持拖拽与缩放
 
-### 💬 苏格拉底 AI 对话
+### 苏格拉底 AI 对话
 
 - **苏格拉底模式**：AI 以启发式提问代替直接告知
 - **普通聊天模式**：自由问答，支持任意上下文
@@ -43,13 +43,13 @@ SocraticMind 是一个基于 **Vue 3 + TypeScript + FastAPI + MySQL** 构建的 
 - AI 快捷回复建议，辅助用户进入下一步
 - 对话历史持久化，随时回顾学习过程
 
-### 📊 学习统计与成就
+### 学习统计与成就
 
 - 每日学习打卡，记录学习连续天数
 - 年度热力图，记录学习进度
 - 周统计与多维度成就徽章系统
 - 节点掌握庆祝动效
-### 👤 用户系统
+### 用户系统
 
 - 注册 / 登录，邮箱验证码找回密码
 - JWT Bearer Token 鉴权，默认 7 天有效期
@@ -57,7 +57,7 @@ SocraticMind 是一个基于 **Vue 3 + TypeScript + FastAPI + MySQL** 构建的 
 - 个人资料编辑：简介、每日目标、AI 教学风格偏好
 - 账户注销
 
-### 📝 Markdown 笔记
+### Markdown 笔记
 
 - 富文本 Markdown 编辑器
 - 代码块语法高亮
@@ -66,7 +66,7 @@ SocraticMind 是一个基于 **Vue 3 + TypeScript + FastAPI + MySQL** 构建的 
 
 ---
 
-## 🏗️ 系统架构
+## 系统架构
 
 ```mermaid
 flowchart LR
@@ -84,7 +84,7 @@ flowchart LR
 
 ---
 
-## 🛠️ 技术栈
+## 技术栈
 
 ### 前端 (Frontend)
 
@@ -118,7 +118,7 @@ flowchart LR
 
 ---
 
-## 🚀 快速开始
+## 快速启动
 
 ### 环境要求
 
@@ -162,7 +162,7 @@ copy .env.example .env   # Windows
 cp .env.example .env     # macOS / Linux
 ```
 
-编辑 `backend/.env`，至少配置以下必填项：
+编辑 `backend/.env`，至少配置以下必填项（建议配置所有选项）：
 
 ```env
 DEEPSEEK_API_KEY=your_api_key_here
@@ -199,26 +199,26 @@ VITE_API_BASE=http://127.0.0.1:8000
 
 ---
 
-## ⚙️ 环境变量说明
+## 环境变量说明
 
 ### 后端 `backend/.env`
 
 | 变量 | 必填 | 说明 | 默认值 |
 |------|:----:|------|--------|
-| `DEEPSEEK_API_KEY` | ✅ | AI 服务 API Key | — |
-| `DEEPSEEK_BASE_URL` | | OpenAI 兼容 API 地址 | `https://api.deepseek.com` |
-| `DEEPSEEK_MODEL` | | 模型名称 | `deepseek-chat` |
-| `SECRET_KEY` | ✅ | JWT 签名密钥（建议 32 位以上随机字符串） | — |
-| `DATABASE_URL` | ✅ | SQLAlchemy 连接串 | `mysql+pymysql://root@localhost:3306/socraticmind` |
-| `CORS_ORIGINS` | | 允许的前端来源（逗号分隔） | `http://localhost:5173` |
-| `ACCESS_TOKEN_EXPIRE_MINUTES` | | Token 有效期（分钟） | `10080`（7 天） |
-| `SMTP_HOST` | | SMTP 服务器地址 | — |
-| `SMTP_PORT` | | SMTP 端口 | `587` |
-| `SMTP_USER` | | SMTP 用户名 | — |
-| `SMTP_PASSWORD` | | SMTP 密码或授权码 | — |
-| `SMTP_FROM` | | 发件人地址 | — |
-| `SMTP_USE_TLS` | | 是否启用 TLS | `true` |
-| `APP_NAME` | | 邮件中显示的应用名称 | `SocraticMind` |
+| `DEEPSEEK_API_KEY` | 是 | AI 服务 API Key | — |
+| `DEEPSEEK_BASE_URL` | 否 | OpenAI 兼容 API 地址 | `https://api.deepseek.com` |
+| `DEEPSEEK_MODEL` | 否 | 模型名称 | `deepseek-chat` |
+| `SECRET_KEY` | 是 | JWT 签名密钥（建议 32 位以上随机字符串） | — |
+| `DATABASE_URL` | 是 | SQLAlchemy 连接串 | `mysql+pymysql://root@localhost:3306/socraticmind` |
+| `CORS_ORIGINS` | 否 | 允许的前端来源（逗号分隔） | `http://localhost:5173` |
+| `ACCESS_TOKEN_EXPIRE_MINUTES` | 否 | Token 有效期（分钟） | `10080`（7 天） |
+| `SMTP_HOST` | 否 | SMTP 服务器地址 | — |
+| `SMTP_PORT` | 否 | SMTP 端口 | `587` |
+| `SMTP_USER` | 否 | SMTP 用户名 | — |
+| `SMTP_PASSWORD` | 否 | SMTP 密码或授权码 | — |
+| `SMTP_FROM` | 否 | 发件人地址 | — |
+| `SMTP_USE_TLS` | 否 | 是否启用 TLS | `true` |
+| `APP_NAME` | 否 | 邮件中显示的应用名称 | `SocraticMind` |
 
 > 不配置 SMTP 变量时，邮箱验证功能不可用，其余功能正常运行。
 
@@ -230,7 +230,7 @@ VITE_API_BASE=http://127.0.0.1:8000
 
 ---
 
-## 🧪 功能演示
+## 功能演示
 
 ### AI 对话流程
 
@@ -270,7 +270,7 @@ locked（锁定）
 
 ---
 
-## 📁 项目结构
+## 项目结构
 
 ```text
 SocraticMind/
@@ -327,7 +327,7 @@ SocraticMind/
 
 ---
 
-## 🔌 API 模块
+## API 模块
 
 | 前缀 | 功能 |
 | --- | --- |
@@ -341,62 +341,15 @@ SocraticMind/
 
 ---
 
-## 👨‍💻 开发命令
 
-```bash
-# 前端
-cd frontend
-pnpm dev        # 启动开发服务器
-pnpm build      # 生产构建（含 TypeScript 检查）
-pnpm preview    # 本地预览构建产物
 
-# 后端
-cd backend
-uvicorn main:app --reload --host 127.0.0.1 --port 8000   # 开发模式
-uvicorn main:app --host 0.0.0.0 --port 8000 --workers 4  # 生产模式
-```
-
----
-
-## 📦 构建与部署
-
-### 前端生产构建
-
-```bash
-cd frontend
-pnpm build
-# 构建产物位于 frontend/dist/，可部署到任意静态托管服务
-```
-
-### 生产环境注意事项
-
-- 构建前将 `VITE_API_BASE` 改为线上后端 API 地址
-- 将 `CORS_ORIGINS` 改为线上前端域名
-- `SECRET_KEY` 必须使用足够长的随机字符串，**不可使用示例值**
-- 数据库需手动创建，表结构由后端首次启动时自动生成
-- 头像目录 `backend/uploads/avatars/` 需持久化（挂载卷或对象存储）
-- 生产环境建议使用 **Nginx** 反向代理 + **Supervisor** / **systemd** 管理后端进程
-
----
-
-## 🔧 开发注意事项
-
-- 后端须从 `backend/` 目录启动，否则 `.env` 可能无法正确加载
-- 后端启动时自动创建缺失数据表，但不会自动创建数据库本身，需手动创建
-- 修改前端 `.env` 后需重启 Vite 开发服务器才能生效
-- 使用 `mysql+pymysql://` 连接串时，需确保已安装 `PyMySQL`
-- 接口报 `multipart/form-data` 相关错误时，检查是否安装了 `python-multipart`
-- 改动后建议运行 `pnpm build` 确认无 TypeScript 错误，并通过 `/docs` 做接口联调
-
----
-
-## 📄 许可证
+## 许可证
 
 本项目采用 [MIT License](LICENSE) 开源许可。
 
 ---
 
-## 🙏 致谢
+## 致谢
 
 - 感谢 [Vue.js](https://vuejs.org/) 社区提供优秀的前端框架
 - 感谢 [FastAPI](https://fastapi.tiangolo.com/) 带来高效的 Python Web 开发体验
@@ -406,6 +359,6 @@ pnpm build
 
 ---
 
-如果这个项目对你有帮助，欢迎 ⭐ Star 支持！
+如果这个项目对你有帮助，欢迎 Star 支持！
 
 2026 © [gmaicoson-crypto](https://github.com/gmaicoson-crypto)

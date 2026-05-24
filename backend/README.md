@@ -1,4 +1,4 @@
-# SocraticMind Backend
+# Backend
 
 SocraticMind 后端是基于 FastAPI、SQLAlchemy 和 DeepSeek/OpenAI 兼容接口构建的 API 服务。它负责用户认证、邮箱验证码、知识主题和节点管理、AI 对话、AI 生成知识图谱、学习进度统计以及头像静态文件服务。
 
@@ -119,7 +119,7 @@ http://127.0.0.1:8000/health
 Base.metadata.create_all(bind=engine)
 ```
 
-也就是说，模型对应的数据表会在服务启动时自动创建。你仍然需要提前创建数据库本身，例如 MySQL 中的 `socraticmind` 数据库。
+模型对应的数据表会在服务启动时自动创建。但仍然需要提前创建数据库本身，例如 MySQL 中的 `socraticmind` 数据库。
 
 当前主要数据模型包括：
 

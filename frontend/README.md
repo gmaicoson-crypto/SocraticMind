@@ -1,4 +1,4 @@
-# SocraticMind Frontend
+# Frontend
 
 SocraticMind 前端是基于 Vue 3、TypeScript、Vite 和 Pinia 构建的学习应用界面。它负责用户登录注册、知识图谱展示、苏格拉底式对话、普通聊天、学习进度统计、个人资料和账户设置等交互。
 
@@ -143,18 +143,5 @@ Authorization: Bearer <token>
 
 聊天接口使用 `fetch` 调用 `/api/chat/stream`，通过 `text/event-stream` 接收后端流式返回的数据。
 
-## 构建产物
-
-生产构建输出目录为：
-
-```text
-frontend/dist/
-```
-
 部署时需要让静态站点服务指向该目录，并确保 `VITE_API_BASE` 指向真实后端地址。
 
-## 开发提示
-
-- 修改 `.env` 后需要重启开发服务器。
-- 前端依赖后端认证、主题、节点、聊天和进度接口，联调时请先启动后端服务。
-- 当前 `package.json` 未配置单独的测试脚本；提交前建议至少运行 `pnpm build` 检查类型和构建。
