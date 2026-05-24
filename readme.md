@@ -38,18 +38,17 @@ SocraticMind 是一个基于 **Vue 3 + TypeScript + FastAPI + MySQL** 构建的 
 
 - **苏格拉底模式**：AI 以启发式提问代替直接告知
 - **普通聊天模式**：自由问答，支持任意上下文
-- 三种 AI 教学风格：温和 / 标准 / 严格，可在个人资料中切换
+- 三种 AI 教学风格：温和 / 标准 / 严格，可在对话中切换
 - SSE 流式响应，实时逐字输出 AI 回复
 - AI 快捷回复建议，辅助用户进入下一步
 - 对话历史持久化，随时回顾学习过程
 
 ### 📊 学习统计与成就
 
-- 每日学习打卡，记录学习连续天数（Streak）
-- 年度热力图（类 GitHub Contributions 风格）
+- 每日学习打卡，记录学习连续天数
+- 年度热力图，记录学习进度
 - 周统计与多维度成就徽章系统
-- 节点掌握庆祝动效（canvas-confetti）
-
+- 节点掌握庆祝动效
 ### 👤 用户系统
 
 - 注册 / 登录，邮箱验证码找回密码
@@ -60,8 +59,8 @@ SocraticMind 是一个基于 **Vue 3 + TypeScript + FastAPI + MySQL** 构建的 
 
 ### 📝 Markdown 笔记
 
-- 富文本 Markdown 编辑器（md-editor-v3）
-- 代码块语法高亮（highlight.js）
+- 富文本 Markdown 编辑器
+- 代码块语法高亮
 - 对话消息内联 Markdown 渲染
 - 深色 / 浅色主题切换
 
