@@ -49,11 +49,17 @@ export const useLearningStore = defineStore('learning', () => {
     ai_style: string
   } | null>(null)
 
-  const streakData = ref<StreakData>({
-    streak: 0,
-    total_days: 0,
-    recent: [],
-  })
+  const STREAK_KEY = 'sm_streak'
+
+  function loadStreakFromStorage(): StreakData {
+    try {
+      const raw = localStorage.getItem(STREAK_KEY)
+      if (raw) return JSON.parse(raw) as StreakData
+    } catch {}
+    return { streak: 0, total_days: 0, recent: [] }
+  }
+
+  const streakData = ref<StreakData>(loadStreakFromStorage())
 
   const masteredCount = computed(() => nodes.value.filter(n => n.state === 'mastered').length)
   const totalCount = computed(() => nodes.value.length)
@@ -131,7 +137,9 @@ export const useLearningStore = defineStore('learning', () => {
 
   async function fetchStreak() {
     try {
-      streakData.value = await getStreak()
+      const data = await getStreak()
+      streakData.value = data
+      localStorage.setItem(STREAK_KEY, JSON.stringify(data))
     } catch (err) {
       console.error('获取连续学习失败', err)
     }
@@ -140,10 +148,10 @@ export const useLearningStore = defineStore('learning', () => {
   async function recordLearning() {
     try {
       await recordToday()
-      await fetchStreak()
     } catch (err) {
       console.error('记录学习失败', err)
     }
+    await fetchStreak()
   }
 
   async function fetchRecommendations() {
