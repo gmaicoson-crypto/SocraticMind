@@ -380,7 +380,7 @@ async function handleSubmit() {
     setAuth(result.access_token, result.user, form.value.remember)
     store.setUserInfo(result.user)
     await store.fetchTopics()
-    await store.fetchStreak()
+    await store.recordLearning()
     router.push('/')
   } catch (err: any) {
     errorMsg.value = err.response?.data?.detail || '操作失败，请重试'

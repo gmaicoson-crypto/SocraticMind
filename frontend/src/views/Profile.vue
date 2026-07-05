@@ -137,7 +137,6 @@ const stats = shallowRef<ProfileStats>({
 })
 
 onMounted(async () => {
-
   try {
     await recordToday()
   } catch (err) {
