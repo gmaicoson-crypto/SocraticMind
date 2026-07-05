@@ -1,0 +1,451 @@
+:root {
+  --radius: 14px;
+  --radius-sm: 10px;
+  --radius-xs: 6px;
+  --font-sans: 'Inter', 'Noto Sans SC', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+  --transition-fast: 0.15s;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-thumb {
+  border: 2px solid var(--bg);
+  border-radius: 8px;
+  background: var(--line-2);
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.ui-button {
+  font: inherit;
+}
+
+.ui-button:disabled,
+.ui-input:disabled {
+  cursor: not-allowed;
+}
+
+.ui-card {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.ui-input {
+  font: inherit;
+}
+
+.ui-icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ui-progress-bar {
+  overflow: hidden;
+}
+
+.ui-progress-bar__fill {
+  height: 100%;
+  transition: width 0.4s;
+}
+
+.ui-empty-state {
+  color: var(--ink-3);
+  text-align: center;
+}
+
+.ui-avatar-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.ui-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.ui-field > label {
+  color: var(--ink-2);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.field-input {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--bg-2);
+}
+
+.field-input.focused {
+  border-color: var(--blue);
+  background: var(--surface);
+  box-shadow: 0 0 0 3px var(--focus-ring);
+}
+
+.field-input svg {
+  flex-shrink: 0;
+  opacity: 0.4;
+}
+
+.field-input input {
+  flex: 1;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 13px;
+}
+
+.ui-error-message {
+  padding: 8px 12px;
+  border: 1px solid var(--danger-line);
+  border-radius: 8px;
+  background: var(--danger-soft);
+  color: var(--danger-ink);
+  font-size: 12px;
+}
+
+.ui-modal-close {
+  padding: 2px 6px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--ink-3);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.ui-modal-close:hover {
+  background: var(--bg-2);
+  color: var(--ink);
+}
+
+
+.md-inline .inline-code,
+.md-preview .md-inline-code,
+.md-preview code {
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--blue-tint);
+  color: var(--blue-2);
+  font-family: var(--font-mono);
+  font-size: 0.88em;
+}
+
+.md-inline .hljs-keyword,
+.md-inline .hljs-selector-tag,
+.md-preview .hljs-keyword,
+.md-preview .hljs-selector-tag {
+  color: var(--code-keyword);
+}
+
+.md-inline .hljs-string,
+.md-inline .hljs-attr,
+.md-preview .hljs-string,
+.md-preview .hljs-attr {
+  color: var(--code-string);
+}
+
+.md-inline .hljs-number,
+.md-inline .hljs-literal,
+.md-preview .hljs-number,
+.md-preview .hljs-literal {
+  color: var(--code-number);
+}
+
+.md-inline .hljs-comment,
+.md-preview .hljs-comment {
+  color: var(--code-comment);
+  font-style: italic;
+}
+
+.md-inline .hljs-function,
+.md-inline .hljs-title,
+.md-preview .hljs-function,
+.md-preview .hljs-title {
+  color: var(--code-function);
+}
+
+.md-inline .hljs-variable,
+.md-inline .hljs-name,
+.md-preview .hljs-variable,
+.md-preview .hljs-name {
+  color: var(--code-text);
+}
+
+.md-inline .hljs-type,
+.md-inline .hljs-class,
+.md-preview .hljs-type,
+.md-preview .hljs-class {
+  color: var(--code-type);
+}
+
+.md-inline .hljs-built_in,
+.md-inline .hljs-operator,
+.md-inline .hljs-punctuation,
+.md-preview .hljs-built_in,
+.md-preview .hljs-operator,
+.md-preview .hljs-punctuation {
+  color: var(--code-built-in);
+}
+
+.md-inline .hljs-property,
+.md-preview .hljs-property {
+  color: var(--code-property);
+}
+
+
+
+.dlg-messages .msg-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.dlg-messages .msg-row.ai .msg-content,
+.dlg-messages .msg-row.user .msg-content {
+  max-width: 75%;
+}
+
+.dlg-messages .msg-row.user {
+  flex-direction: row-reverse;
+}
+
+.dlg-messages .msg-row.user .msg-content {
+  align-items: flex-end;
+}
+
+.dlg-messages .msg-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.dlg-messages .ai-avatar.sm,
+.dlg-messages .user-avatar {
+  display: flex;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+}
+
+.dlg-messages .ai-avatar.sm {
+  background: linear-gradient(135deg, var(--blue), var(--blue-2));
+}
+
+.dlg-messages .user-avatar {
+  overflow: hidden;
+  background: var(--bg-3);
+  color: var(--ink-2);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.dlg-messages .user-avatar-img {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  object-fit: cover;
+}
+
+.dlg-messages .msg-quote {
+  display: flex;
+  max-width: 100%;
+  align-items: stretch;
+  gap: 8px;
+  padding: 4px 0;
+  color: var(--ink-3);
+  font-size: 11.5px;
+  font-style: italic;
+}
+
+.dlg-messages .quote-bar {
+  width: 3px;
+  flex-shrink: 0;
+  border-radius: 2px;
+  background: var(--blue-line);
+}
+
+.dlg-messages .quote-text {
+  display: -webkit-box;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.dlg-messages .bubble {
+  padding: 10px 14px;
+  overflow-wrap: anywhere;
+  border-radius: 12px;
+  font-size: 13.5px;
+  line-height: 1.65;
+}
+
+.dlg-messages .bubble.ai {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.dlg-messages .bubble.user {
+  background: var(--blue-2);
+  color: var(--on-accent);
+}
+
+.dlg-messages .msg-actions {
+  display: flex;
+  min-height: 18px;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--ink-3);
+  font-size: 10.5px;
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+}
+
+.dlg-messages .msg-actions.visible {
+  opacity: 1;
+}
+
+.dlg-messages .msg-row.user .msg-actions {
+  flex-direction: row-reverse;
+}
+
+.dlg-messages .msg-time {
+  font-family: var(--font-mono);
+}
+
+.dlg-messages .action-btns {
+  display: flex;
+  gap: 4px;
+}
+
+.dlg-messages .action-btn {
+  display: flex;
+  align-items: center;
+  padding: 3px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--ink-3);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.dlg-messages .action-btn:hover {
+  background: var(--bg-3);
+  color: var(--ink);
+}
+
+.dlg-messages .action-btn.delete:hover {
+  background: var(--danger-hover-soft);
+  color: var(--danger-hover-ink);
+}
+
+.dlg-messages .choices-row {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 4px;
+}
+
+.dlg-messages .choice-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--blue-line);
+  border-radius: 8px;
+  background: var(--surface);
+  font-family: var(--font-sans);
+  text-align: left;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.dlg-messages .choice-btn:hover:not(:disabled) {
+  border-color: var(--blue-2);
+  background: var(--blue-tint);
+  transform: translateX(2px);
+}
+
+.dlg-messages .choice-label {
+  display: flex;
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: 5px;
+  background: var(--blue-soft);
+  color: var(--blue-2);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.dlg-messages .choice-text {
+  color: var(--ink-2);
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+
+.dlg-messages .choice-btn.selected {
+  border-color: var(--blue-2);
+  background: var(--blue-tint);
+}
+
+.dlg-messages .choice-btn.selected .choice-label {
+  background: var(--blue-2);
+  color: var(--on-accent);
+}
+
+.dlg-messages .choices-row.historical .choice-btn {
+  cursor: default;
+  opacity: 0.65;
+}
+
+.dlg-messages .choices-row.historical .choice-btn:hover {
+  border-color: var(--blue-line);
+  background: var(--surface);
+  transform: none;
+}
+
+.dlg-messages .choices-row.historical .choice-btn.selected {
+  opacity: 1;
+}
