@@ -1,7 +1,6 @@
 <template>
-  <div class="card heatmap-card">
-    <div class="hm-header">
-      <div class="card-title" style="margin-bottom:0">学习热力图</div>
+  <ProfileSectionCard class="heatmap-card" title="学习热力图">
+    <template #action>
       <div class="hm-controls">
         <button class="hm-nav-btn" :disabled="!canGoPrev" @click="onPrev">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
@@ -20,7 +19,7 @@
           </svg>
         </button>
       </div>
-    </div>
+    </template>
     <div class="hm-month-wrap">
       <div class="hm-grid-wrap">
         <div class="hm-week-row">
@@ -47,7 +46,7 @@
       </div>
       <span class="hm-month-stat">本月 {{ monthChatCount }} 轮对话</span>
     </div>
-  </div>
+  </ProfileSectionCard>
 </template>
 
 <script setup lang="ts">
@@ -58,6 +57,7 @@ import {
   monthStartPad, buildMonthDays,
   prevMonth, nextMonth, canGoPrev as canGoPrevFn, canGoNext as canGoNextFn,
 } from '../../utils/heatmap'
+import ProfileSectionCard from '../../components/profile/ProfileSectionCard.vue'
 
 const props = defineProps<{
   heatmap: { date: string; count: number }[]
@@ -97,32 +97,10 @@ const monthChatCount = computed(() => monthDays.value.reduce((s, d) => s + d.cou
 </script>
 
 <style scoped>
-.card {
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  padding: 18px 20px;
-  display: flex;
-  flex-direction: column;
-}
-.card-title {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--ink-3);
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
-  font-family: var(--font-mono);
-  margin-bottom: 14px;
-}
 .heatmap-card {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  justify-content: space-between;
-}
-.hm-header {
-  display: flex;
-  align-items: center;
   justify-content: space-between;
 }
 .hm-controls {

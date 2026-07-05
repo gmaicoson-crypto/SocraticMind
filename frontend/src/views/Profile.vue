@@ -60,7 +60,7 @@
         </div>
       </div>
 
-      <div class="card">
+      <div class="card ui-card">
         <div class="card-title">成就徽章</div>
         <div class="badge-grid">
           <div
@@ -76,7 +76,7 @@
         </div>
       </div>
 
-      <div class="card">
+      <div class="card ui-card">
         <div class="card-title">最近记录</div>
         <div class="timeline">
           <div v-if="stats.timeline.length === 0" style="color: var(--ink-3); font-size: 13px; padding: 12px 0;">
@@ -105,7 +105,7 @@ import { useRouter } from 'vue-router'
 import { useLearningStore } from '../stores/learning'
 import TopBar from '../components/TopBar.vue'
 
-const EditProfileModal = defineAsyncComponent(() => import('../components/EditProfileModal.vue'))
+const EditProfileModal = defineAsyncComponent(() => import('../components/profile/EditProfileModal.vue'))
 import { getProfileStats, recordToday } from '../api/progress'
 import { loadTodayProgress } from '../utils/dailyGoal'
 import type { ProfileStats } from '../api/progress'
@@ -216,9 +216,6 @@ function topicColor(index: number) {
 }
 
 .card {
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 12px;
   padding: 18px 20px;
   display: flex;
   flex-direction: column;
