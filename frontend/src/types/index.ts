@@ -1,4 +1,4 @@
-// 前端共享类型定义，统一描述知识图谱、主题和消息结构。
+// 类型定义，知识图谱、主题、消息结构和对话Session
 export type NodeState = 'mastered' | 'available' | 'locked'
 
 export interface KNode {
@@ -33,4 +33,15 @@ export interface Message {
   paired_db_id?: number
   choices?: { label: string; text: string }[]
   selected_choice?: string
+}
+
+export type ChatMode = 'socratic' | 'normal'
+
+export interface DialogueSession {
+  id: string
+  name: string
+  messages: Message[]
+  updatedAt: string
+  topicId?: number
+  topicTitle?: string
 }
