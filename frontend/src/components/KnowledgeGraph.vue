@@ -9,11 +9,11 @@
           <span class="graph-count">· {{ store.totalCount }} 节点</span>
         </div>
       </div>
-      <div class="legend-wrap">
-        <LegendItem label="已掌握" :count="store.masteredCount" variant="mastered" />
-        <LegendItem label="可用" :count="store.availableCount" variant="available" />
-        <LegendItem label="锁定" :count="store.totalCount - store.masteredCount - store.availableCount" variant="locked" />
-      </div>
+      <GraphLegend
+        :mastered="store.masteredCount"
+        :available="store.availableCount"
+        :locked="store.totalCount - store.masteredCount - store.availableCount"
+      />
     </div>
 
     <svg
@@ -104,43 +104,26 @@
 
 <script setup lang="ts">
 // KnowledgeGraph 组件，封装局部界面和交互逻辑。
-import { ref, computed, onMounted, onBeforeUnmount, watch, h, nextTick } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { useLearningStore } from '../stores/learning'
 import type { KNode } from '../types'
-import GraphNode from './GraphNode.vue'
-import GraphEdge from './GraphEdge.vue'
-
-const LegendItem = (props: { label: string; count: number; variant: string }) => {
-  const dotStyle: Record<string, { bg: string; border: string }> = {
-    mastered: { bg: 'var(--blue)', border: 'var(--blue-2)' },
-    available: { bg: 'var(--surface)', border: 'var(--blue)' },
-    locked: { bg: 'var(--bg-3)', border: 'var(--locked)' },
-  }
-  const d = dotStyle[props.variant] || dotStyle.locked
-  return h('div', {
-    style: {
-      display: 'inline-flex', alignItems: 'center', gap: '6px',
-      padding: '4px 10px',
-      background: 'var(--surface)',
-      border: '1px solid var(--line)',
-      borderRadius: '999px',
-      fontSize: '11.5px', fontWeight: '500', color: 'var(--ink-2)',
-    }
-  }, [
-    h('span', { style: { width: '9px', height: '9px', borderRadius: '50%', background: d.bg, border: `1.5px solid ${d.border}`, display: 'inline-block' } }),
-    props.label,
-    h('span', { style: { color: 'var(--ink-3)', fontFamily: 'var(--font-mono)', fontSize: '10.5px' } }, String(props.count)),
-  ])
-}
+import { useGraphViewport } from '../composables/useGraphViewport'
+import GraphNode from './graph/GraphNode.vue'
+import GraphEdge from './graph/GraphEdge.vue'
+import GraphLegend from './graph/GraphLegend.vue'
 
 const store = useLearningStore()
 const containerRef = ref<HTMLElement | null>(null)
 const svgRef = ref<SVGSVGElement | null>(null)
 const confettiCanvasRef = ref<HTMLCanvasElement | null>(null)
-const showScaleHint = ref(false)
 
 let VW = 900
 let VH = 720
+
+const { scale, panX, panY, showScaleHint, zoomIn, zoomOut, resetView } = useGraphViewport(
+  svgRef,
+  { width: () => VW, height: () => VH },
+)
 
 watch(() => store.nodes, (nodes) => {
   if (nodes.length === 0) {
@@ -156,13 +139,6 @@ watch(() => store.nodes, (nodes) => {
   VH = Math.max(720, maxY)
   nextTick(() => resetView())
 })
-
-const scale = ref(1)
-const panX = ref(0)
-const panY = ref(0)
-
-const MIN_SCALE = 0.85
-const MAX_SCALE = 2.5
 
 const viewBoxParts = computed(() =>
   viewBox.value.split(' ').map(Number)
@@ -198,7 +174,6 @@ const currentTopicTitle = computed(() => {
 })
 
 let confettiInstance: any = null
-let hintTimer: ReturnType<typeof setTimeout> | null = null
 
 const nodeMap = computed(() =>
   Object.fromEntries(store.nodes.map(n => [n.id, n]))
@@ -206,41 +181,6 @@ const nodeMap = computed(() =>
 const masteredNodes = computed(() =>
   store.nodes.filter(n => n.state === 'mastered')
 )
-
-function showHint() {
-  showScaleHint.value = true
-  if (hintTimer) clearTimeout(hintTimer)
-  hintTimer = setTimeout(() => { showScaleHint.value = false }, 1200)
-}
-
-function zoomIn() {
-  scale.value = Math.min(scale.value + 0.15, MAX_SCALE)
-  showHint()
-}
-
-function zoomOut() {
-  scale.value = Math.max(scale.value - 0.15, MIN_SCALE)
-  showHint()
-}
-
-function resetView() {
-  scale.value = 1
-  panX.value = 0
-  panY.value = 0
-  showHint()
-}
-
-const isDragging = ref(false)
-const dragStart = ref({ x: 0, y: 0 })
-const panStart = ref({ x: 0, y: 0 })
-
-function clampPan(x: number, y: number) {
-  const limit = 300
-  return {
-    x: Math.min(Math.max(x, -limit), limit),
-    y: Math.min(Math.max(y, -limit), limit),
-  }
-}
 
 function getNodeScreenPos(node: KNode) {
   if (!containerRef.value || !svgRef.value) return { x: 0.5, y: 0.5 }
@@ -324,76 +264,14 @@ onMounted(() => {
     })
   }, 600)
 
-  const svgEl = svgRef.value
-  if (!svgEl) return
-
-  svgEl.addEventListener('wheel', onWheel, { passive: false })
-  svgEl.addEventListener('mousedown', onMouseDown)
-  window.addEventListener('mousemove', onMouseMove)
-  window.addEventListener('mouseup', onMouseUp)
-
-  svgEl.style.cursor = 'grab'
 })
-
-function onWheel(e: WheelEvent) {
-  e.preventDefault()
-  const delta = e.deltaY > 0 ? -0.1 : 0.1
-  scale.value = Math.min(Math.max(scale.value + delta, MIN_SCALE), MAX_SCALE)
-  showHint()
-}
-
-function onMouseDown(e: MouseEvent) {
-  if (e.button !== 0 || !svgRef.value) return
-  const target = e.target as SVGElement
-  if (target.closest('g.knode') || target.tagName === 'text') return
-  isDragging.value = true
-  dragStart.value = { x: e.clientX, y: e.clientY }
-  panStart.value = { x: panX.value, y: panY.value }
-  svgRef.value.style.cursor = 'grabbing'
-  e.preventDefault()
-}
-
-let panFrame: number | null = null
-let lastMouseEvent: MouseEvent | null = null
-function onMouseMove(e: MouseEvent) {
-  if (!isDragging.value) return
-  lastMouseEvent = e
-  if (panFrame !== null) return
-  panFrame = requestAnimationFrame(() => {
-    panFrame = null
-    const ev = lastMouseEvent
-    if (!ev || !svgRef.value) return
-    const svgRect = svgRef.value.getBoundingClientRect()
-    const dx = (ev.clientX - dragStart.value.x) / svgRect.width * (VW / scale.value)
-    const dy = (ev.clientY - dragStart.value.y) / svgRect.height * (VH / scale.value)
-    const clamped = clampPan(panStart.value.x - dx, panStart.value.y - dy)
-    panX.value = clamped.x
-    panY.value = clamped.y
-  })
-}
-
-function onMouseUp() {
-  if (!isDragging.value) return
-  isDragging.value = false
-  if (svgRef.value) svgRef.value.style.cursor = 'grab'
-}
 
 let initialConfettiTimer: ReturnType<typeof setTimeout> | null = null
 const pendingConfettiTimers: ReturnType<typeof setTimeout>[] = []
 
 onBeforeUnmount(() => {
-  if (hintTimer) clearTimeout(hintTimer)
   if (initialConfettiTimer) clearTimeout(initialConfettiTimer)
   pendingConfettiTimers.forEach(clearTimeout)
-  if (panFrame !== null) cancelAnimationFrame(panFrame)
-
-  const svgEl = svgRef.value
-  if (svgEl) {
-    svgEl.removeEventListener('wheel', onWheel)
-    svgEl.removeEventListener('mousedown', onMouseDown)
-  }
-  window.removeEventListener('mousemove', onMouseMove)
-  window.removeEventListener('mouseup', onMouseUp)
 })
 
 watch(

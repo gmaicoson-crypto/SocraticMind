@@ -1,5 +1,5 @@
 <template>
-  <Teleport to="body">
+  <BaseModal :model-value="true" @close="emit('close')">
     <div class="overlay" @click.self="emit('close')">
       <div class="modal">
 
@@ -21,7 +21,7 @@
                 :style="hasImage ? {} : { background: form.avatarGrad }"
                 @click="triggerUpload"
               >
-                <img v-if="hasImage" :src="avatarPreview" alt="avatar" class="avatar-img" decoding="async" />
+                <img v-if="hasImage" :src="avatarPreview" alt="avatar" class="avatar-img ui-avatar-image" decoding="async" />
                 <template v-else>{{ form.name.slice(0,1) || '李' }}</template>
                 <div class="avatar-edit">
                   <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round">
@@ -64,7 +64,7 @@
             </div>
 
             <div class="fields">
-              <div class="field">
+            <div class="field ui-field">
                 <label>用户名</label>
                 <div class="field-input" :class="{ focused: focusField === 'name' }">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13">
@@ -81,7 +81,7 @@
                 <div class="char-count">{{ form.name.length }} / 20</div>
               </div>
 
-              <div class="field">
+            <div class="field ui-field">
                 <label>个性签名</label>
                 <div class="field-input" :class="{ focused: focusField === 'bio' }">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13">
@@ -97,7 +97,7 @@
                 </div>
               </div>
 
-              <div class="field">
+            <div class="field ui-field">
                 <label>邮箱地址</label>
                 <div class="field-input readonly">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13">
@@ -126,19 +126,19 @@
               </div>
 
               <div v-if="showPwdPanel" class="pwd-panel">
-                <div class="field">
+                <div class="field ui-field">
                   <label>原密码</label>
                   <div class="field-input">
                     <input v-model="pwdForm.old" type="password" autocomplete="current-password" />
                   </div>
                 </div>
-                <div class="field">
+                <div class="field ui-field">
                   <label>新密码</label>
                   <div class="field-input">
                     <input v-model="pwdForm.next" type="password" autocomplete="new-password" minlength="6" />
                   </div>
                 </div>
-                <div class="field">
+                <div class="field ui-field">
                   <label>确认新密码</label>
                   <div class="field-input">
                     <input v-model="pwdForm.confirm" type="password" autocomplete="new-password" minlength="6" />
@@ -202,18 +202,19 @@
 
       </div>
     </div>
-  </Teleport>
+  </BaseModal>
 </template>
 
 <script setup lang="ts">
 // EditProfileModal 组件，封装局部界面和交互逻辑。
 import { ref, reactive, computed, onBeforeUnmount, defineAsyncComponent } from 'vue'
 import { useRouter } from 'vue-router'
-import { useLearningStore } from '../stores/learning'
-import { updateMe, uploadAvatar, resetAvatar, changePassword, deleteAccount } from '../api/auth'
-import { avatarSrc } from '../utils/avatar'
-import { avatarGrads } from '../utils/avatarGrads'
-import { clearAuth, updateUser } from '../utils/token'
+import { useLearningStore } from '../../stores/learning'
+import { updateMe, uploadAvatar, resetAvatar, changePassword, deleteAccount } from '../../api/auth'
+import { avatarSrc } from '../../utils/avatar'
+import { avatarGrads } from '../../utils/avatarGrads'
+import { clearAuth, updateUser } from '../../utils/token'
+import BaseModal from '../ui/BaseModal.vue'
 
 const DeleteAccountModal = defineAsyncComponent(() => import('./DeleteAccountModal.vue'))
 
@@ -536,9 +537,6 @@ async function handleDeleteAccount(payload: { password: string; confirm: string 
   filter: brightness(0.9);
 }
 .avatar-img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
   border-radius: 16px;
 }
 
@@ -648,50 +646,13 @@ async function handleDeleteAccount(payload: { password: string; confirm: string 
   gap: 12px;
 }
 
-.field {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-
-.field label {
-  font-size: 11.5px;
-  font-weight: 600;
-  color: var(--ink-2);
-}
-
 .field-input {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  background: var(--bg-2);
-  border: 1px solid var(--line);
-  border-radius: 9px;
-  padding: 0 12px;
   height: 40px;
   transition: all .15s;
-}
-.field-input svg {
-  opacity: 0.4;
-  flex-shrink: 0;
-}
-.field-input.focused {
-  border-color: var(--blue);
-  background: var(--surface);
-  box-shadow: 0 0 0 3px oklch(0.72 0.085 235 / 0.12);
 }
 .field-input.readonly {
   background: var(--bg-3);
   cursor: not-allowed;
-}
-.field-input input {
-  flex: 1;
-  border: none;
-  outline: none;
-  background: transparent;
-  font-size: 13px;
-  color: var(--ink);
-  font-family: var(--font-sans);
 }
 .field-input input:disabled {
   color: var(--ink-3);

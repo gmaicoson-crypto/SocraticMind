@@ -62,8 +62,7 @@
 <script setup lang="ts">
 // GraphNode 组件，封装局部界面和交互逻辑。
 import { computed } from 'vue'
-import type { KNode } from '../types'
-import { useLearningStore } from '../stores/learning'
+import type { KNode } from '../../types'
 
 const props = defineProps<{
   node: KNode
@@ -73,8 +72,6 @@ const props = defineProps<{
 const emit = defineEmits<{
   click: [node: KNode]
 }>()
-
-const store = useLearningStore()
 
 const W = 120
 const H = 52
@@ -87,27 +84,26 @@ function truncate(text: string, max: number): string {
 
 const styles = computed(() => {
   const s = props.node.state
-  const dark = store.isDark
   if (s === 'mastered') return {
-    bg: dark ? '#1A2D3F' : 'var(--blue)',
-    stroke: dark ? 'rgba(74,111,165,0.35)' : 'var(--blue-2)',
-    label: dark ? '#8AA9C6' : 'white',
-    sub: dark ? 'rgba(138,169,198,0.6)' : 'oklch(0.95 0.02 235)',
-    icon: dark ? '#4A6FA5' : 'white',
+    bg: 'var(--graph-node-mastered-bg)',
+    stroke: 'var(--graph-node-mastered-stroke)',
+    label: 'var(--graph-node-mastered-label)',
+    sub: 'var(--graph-node-mastered-sub)',
+    icon: 'var(--graph-node-mastered-icon)',
   }
   if (s === 'available') return {
-    bg: dark ? '#161B22' : 'var(--surface)',
-    stroke: dark ? 'rgba(255,255,255,0.15)' : 'var(--blue)',
-    label: dark ? '#B0B8C4' : 'var(--ink)',
-    sub: dark ? '#4A6FA5' : 'var(--blue-2)',
-    icon: dark ? '#4A6FA5' : 'var(--blue-2)',
+    bg: 'var(--graph-node-available-bg)',
+    stroke: 'var(--graph-node-available-stroke)',
+    label: 'var(--graph-node-available-label)',
+    sub: 'var(--graph-node-available-sub)',
+    icon: 'var(--graph-node-available-icon)',
   }
   return {
-    bg: dark ? '#0A0E14' : 'var(--bg-3)',
-    stroke: dark ? 'rgba(255,255,255,0.08)' : 'var(--locked)',
-    label: dark ? '#484F58' : 'var(--locked-ink)',
-    sub: dark ? '#3D444D' : 'var(--locked-ink)',
-    icon: dark ? '#484F58' : 'var(--locked-ink)',
+    bg: 'var(--graph-node-locked-bg)',
+    stroke: 'var(--graph-node-locked-stroke)',
+    label: 'var(--graph-node-locked-label)',
+    sub: 'var(--graph-node-locked-sub)',
+    icon: 'var(--graph-node-locked-icon)',
   }
 })
 </script>

@@ -342,16 +342,6 @@ function handleDownload() {
   border-bottom-color: var(--blue-2);
 }
 
-.md-preview :deep(.md-inline-code),
-.md-preview :deep(code) {
-  font-family: var(--font-mono);
-  font-size: 0.88em;
-  background: var(--blue-tint);
-  color: var(--blue-2);
-  padding: 1px 6px;
-  border-radius: 4px;
-}
-
 .md-preview :deep(.md-code-block) {
   margin: 10px 0;
   border-radius: 8px;
@@ -389,45 +379,6 @@ function handleDownload() {
   background: transparent;
   padding: 0;
   color: #cdd6f4;
-}
-
-.md-preview :deep(.hljs-keyword),
-.md-preview :deep(.hljs-selector-tag) {
-  color: #cba6f7;
-}
-.md-preview :deep(.hljs-string),
-.md-preview :deep(.hljs-attr) {
-  color: #a6e3a1;
-}
-.md-preview :deep(.hljs-number),
-.md-preview :deep(.hljs-literal) {
-  color: #fab387;
-}
-.md-preview :deep(.hljs-comment) {
-  color: #6c7086;
-  font-style: italic;
-}
-.md-preview :deep(.hljs-function),
-.md-preview :deep(.hljs-title) {
-  color: #89b4fa;
-}
-.md-preview :deep(.hljs-variable),
-.md-preview :deep(.hljs-name) {
-  color: #cdd6f4;
-}
-.md-preview :deep(.hljs-type),
-.md-preview :deep(.hljs-class) {
-  color: #f9e2af;
-}
-.md-preview :deep(.hljs-built_in) {
-  color: #89dceb;
-}
-.md-preview :deep(.hljs-operator),
-.md-preview :deep(.hljs-punctuation) {
-  color: #89dceb;
-}
-.md-preview :deep(.hljs-property) {
-  color: #f38ba8;
 }
 
 .md-preview :deep(ul),

@@ -9,7 +9,7 @@
               <div class="panel-title">我的主题</div>
               <div class="panel-sub">管理你的学习主题</div>
             </div>
-            <button class="close-btn" @click="emit('close')">✕</button>
+            <IconButton class="close-btn" label="关闭主题管理" @click="emit('close')">✕</IconButton>
           </div>
 
           <div class="topic-list">
@@ -26,37 +26,37 @@
                   <div class="topic-stats">
                     {{ topic.mastered }} / {{ topic.nodes }} 节点已掌握
                   </div>
-                  <div class="topic-track">
-                    <div
-                      class="topic-fill"
-                      :style="{ width: (topic.nodes ? topic.mastered / topic.nodes * 100 : 0) + '%' }"
-                    />
-                  </div>
+                  <ProgressBar
+                    class="topic-track"
+                    :value="topic.nodes ? topic.mastered / topic.nodes * 100 : 0"
+                    :label="`${topic.title}掌握进度`"
+                  />
                 </div>
               </div>
-              <button
+              <IconButton
                 class="delete-btn"
-                :disabled="deleting === topic.id"
+                label="删除主题"
+                :loading="deleting === topic.id"
                 @click="handleDelete(topic.id, topic.title)"
               >
-                <svg v-if="deleting !== topic.id" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                <template #loading><span class="spinner" /></template>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
                   <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/>
                 </svg>
-                <span v-else class="spinner" />
-              </button>
+              </IconButton>
             </div>
 
-            <div v-if="store.topics.length === 0" class="empty-state">
+            <EmptyState v-if="store.topics.length === 0" class="empty-state">
               <div class="empty-text">还没有主题，在对话框告诉 AI 你想学什么吧！</div>
-            </div>
+            </EmptyState>
           </div>
 
           <Transition name="fade">
             <div v-if="confirmId" class="confirm-bar">
               <span>确定删除「{{ confirmTitle }}」吗？</span>
               <div class="confirm-btns">
-                <button class="confirm-cancel" @click="confirmId = null">取消</button>
-                <button class="confirm-ok" @click="doDelete">删除</button>
+                <BaseButton class="confirm-cancel" @click="confirmId = null">取消</BaseButton>
+                <BaseButton class="confirm-ok" @click="doDelete">删除</BaseButton>
               </div>
             </div>
           </Transition>
@@ -70,8 +70,12 @@
 <script setup lang="ts">
 // TopicManager 组件，封装局部界面和交互逻辑。
 import { ref } from 'vue'
-import { useLearningStore } from '../stores/learning'
-import { deleteTopic } from '../api/topic'
+import { useLearningStore } from '../../stores/learning'
+import { deleteTopic } from '../../api/topic'
+import BaseButton from '../ui/BaseButton.vue'
+import EmptyState from '../ui/EmptyState.vue'
+import IconButton from '../ui/IconButton.vue'
+import ProgressBar from '../ui/ProgressBar.vue'
 
 const props = defineProps<{ show: boolean }>()
 const emit = defineEmits<{ close: [] }>()
@@ -256,11 +260,10 @@ async function doDelete() {
   overflow: hidden;
 }
 
-.topic-fill {
+.topic-track :deep(.ui-progress-bar__fill) {
   height: 100%;
   background: var(--blue-2);
   border-radius: 99px;
-  transition: width .4s;
 }
 
 .delete-btn {

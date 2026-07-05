@@ -12,7 +12,7 @@
 <script setup lang="ts">
 // GraphEdge 组件，封装局部界面和交互逻辑。
 import { computed } from 'vue'
-import type { KNode } from '../types'
+import type { KNode } from '../../types'
 
 const props = defineProps<{
   from: KNode

@@ -1,7 +1,6 @@
 <template>
-  <Teleport to="body">
-    <Transition name="fade">
-      <div v-if="show" class="da-overlay" @click.self="onClose">
+  <BaseModal :model-value="show" :close-disabled="submitting" @close="onClose">
+      <div class="da-overlay" @click.self="onClose">
         <div class="da-modal">
           <div class="da-header">
             <div class="da-title">
@@ -12,7 +11,7 @@
               </svg>
               注销账号
             </div>
-            <button class="da-close" @click="onClose">✕</button>
+            <button class="da-close ui-modal-close" @click="onClose">✕</button>
           </div>
 
           <div class="da-body">
@@ -27,7 +26,7 @@
               数据一经删除无法恢复，请谨慎操作。
             </div>
 
-            <div class="da-field">
+            <div class="da-field ui-field">
               <label>登录密码</label>
               <input
                 v-model="password"
@@ -38,7 +37,7 @@
               />
             </div>
 
-            <div class="da-field">
+            <div class="da-field ui-field">
               <label>请输入大写 <code>DELETE</code> 完成确认</label>
               <input
                 v-model="confirm"
@@ -50,7 +49,7 @@
               />
             </div>
 
-            <div v-if="errorMsg" class="da-error">{{ errorMsg }}</div>
+            <div v-if="errorMsg" class="da-error ui-error-message">{{ errorMsg }}</div>
 
             <div class="da-actions">
               <button class="da-cancel" :disabled="submitting" @click="onClose">取消</button>
@@ -66,13 +65,13 @@
           </div>
         </div>
       </div>
-    </Transition>
-  </Teleport>
+  </BaseModal>
 </template>
 
 <script setup lang="ts">
 // DeleteAccountModal 组件，封装局部界面和交互逻辑。
 import { ref, computed, watch } from 'vue'
+import BaseModal from '../ui/BaseModal.vue'
 
 const props = defineProps<{ show: boolean; submitting?: boolean; errorMsg?: string }>()
 const emit = defineEmits<{
@@ -144,20 +143,6 @@ watch(() => props.show, (v) => {
 .da-title svg {
   color: #E24B4A;
 }
-.da-close {
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  font-size: 14px;
-  color: var(--ink-3);
-  padding: 2px 6px;
-  border-radius: 4px;
-}
-.da-close:hover {
-  background: var(--bg-2);
-  color: var(--ink);
-}
-
 .da-body {
   padding: 18px 22px 20px;
   display: flex;
@@ -185,16 +170,6 @@ watch(() => props.show, (v) => {
   margin: 2px 0;
 }
 
-.da-field {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-.da-field label {
-  font-size: 11.5px;
-  font-weight: 600;
-  color: var(--ink-2);
-}
 .da-field code {
   font-family: var(--font-mono);
   font-size: 11px;
@@ -219,15 +194,6 @@ watch(() => props.show, (v) => {
   border-color: #E24B4A;
   background: var(--surface);
   box-shadow: 0 0 0 3px rgba(226, 75, 74, 0.15);
-}
-
-.da-error {
-  padding: 8px 12px;
-  background: #FCEBEB;
-  border: 1px solid #F7C1C1;
-  border-radius: 8px;
-  font-size: 12px;
-  color: #A32D2D;
 }
 
 .da-actions {

@@ -112,172 +112,46 @@
 
     <div style="flex: 1" />
 
-    <div class="progress-wrap">
-      <div class="progress-label">
-        <span>进度</span>
-        <span class="progress-count">{{ store.masteredCount }} / {{ store.totalCount }} 节点</span>
-      </div>
-      <div class="progress-track">
-        <div class="progress-fill" :style="{ width: pct + '%' }" />
-      </div>
-    </div>
+    <TopBarProgress :mastered="store.masteredCount" :total="store.totalCount" />
 
     <div class="divider" />
 
-    <div class="profile-wrap" style="cursor:pointer" @click="router.push('/profile')">
-      <div class="profile-info">
-        <div class="profile-name">{{ store.userInfo?.username ?? '学习者' }}</div>
-        <div class="profile-level">LV {{ userLevel }}</div>
-      </div>
-      <div
-        class="avatar"
-        :style="store.userInfo?.avatar_url ? {} : { background: store.userInfo?.avatar_grad }"
-      >
-        <img v-if="store.userInfo?.avatar_url" :src="avatarSrc(store.userInfo.avatar_url)" alt="avatar" class="avatar-img" decoding="async" />
-        <template v-else>{{ store.userInfo?.username?.slice(0,1) ?? '学' }}</template>
-      </div>
-    </div>
+    <TopBarProfile
+      :username="store.userInfo?.username"
+      :avatar-url="store.userInfo?.avatar_url"
+      :avatar-grad="store.userInfo?.avatar_grad"
+      :level="userLevel"
+      @open="router.push('/profile')"
+    />
   </header>
 </template>
 
 <script setup lang="ts">
 // TopBar 组件，封装局部界面和交互逻辑。
-import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useLearningStore } from '../stores/learning'
-import type { Topic } from '../types'
 import { getProfileStats } from '../api/progress'
 import { computeLevel } from '../utils/level'
-import { avatarSrc } from '../utils/avatar'
 import { highlight } from '../utils/highlight'
-import { searchNodes, type SearchedNode } from '../api/topic'
+import { useGlobalSearch } from '../composables/useGlobalSearch'
+import TopBarProgress from './navigation/TopBarProgress.vue'
+import TopBarProfile from './navigation/TopBarProfile.vue'
 
 const store = useLearningStore()
 const router = useRouter()
 const chatCount = ref(0)
 const userLevel = computed(() => computeLevel(chatCount.value))
-const query = ref('')
-const focused = ref(false)
-const showDropdown = ref(false)
-const activeIndex = ref(-1)
-const inputRef = ref<HTMLInputElement | null>(null)
-
-const pct = computed(() => Math.round((store.masteredCount / store.totalCount) * 100))
-
-const nodeResults = ref<SearchedNode[]>([])
-let searchTimer: ReturnType<typeof setTimeout> | null = null
-
-let searchSeq = 0
-
-watch(query, (q) => {
-  if (searchTimer) clearTimeout(searchTimer)
-  activeIndex.value = -1
-  const keyword = q.trim()
-  if (!keyword) {
-    nodeResults.value = []
-    return
-  }
-  const seq = ++searchSeq
-  searchTimer = setTimeout(async () => {
-    try {
-      const data = await searchNodes(keyword, 6)
-      if (seq === searchSeq) nodeResults.value = data
-    } catch {
-      if (seq === searchSeq) nodeResults.value = []
-    }
-  }, 200)
-})
-
-const topicResults = computed(() => {
-  if (!query.value.trim()) return []
-  const q = query.value.toLowerCase()
-  return store.topics.filter(t =>
-    t.title.toLowerCase().includes(q)
-  ).slice(0, 3)
-})
-
-const results = computed<(SearchedNode | Topic)[]>(() => [...nodeResults.value, ...topicResults.value])
-
-function stateLabel(state: string) {
-  return { mastered: '已掌握', available: '可学习', locked: '已锁定' }[state] || state
-}
-
-function moveDown() {
-  activeIndex.value = Math.min(activeIndex.value + 1, results.value.length - 1)
-}
-
-function moveUp() {
-  activeIndex.value = Math.max(activeIndex.value - 1, -1)
-}
-
-function selectCurrent() {
-  if (activeIndex.value < 0) return
-  const i = activeIndex.value
-  if (i < nodeResults.value.length) {
-    selectNode(nodeResults.value[i])
-  } else {
-    selectTopic(topicResults.value[i - nodeResults.value.length])
-  }
-}
-
-async function selectNode(item: SearchedNode) {
-  closeSearch()
-  router.push('/')
-  if (store.activeTopicId !== String(item.topic_id)) {
-    await store.setActiveTopic(String(item.topic_id))
-  }
-  const localNode = store.nodes.find(n => n.id === item.node_key)
-  if (localNode) store.setActiveNode(localNode)
-}
-
-async function selectTopic(topic: Topic) {
-  closeSearch()
-  router.push('/')
-  await store.setActiveTopic(topic.id)
-}
-
-function closeSearch() {
-  query.value = ''
-  focused.value = false
-  showDropdown.value = false
-  activeIndex.value = -1
-  inputRef.value?.blur()
-}
-
-function clearSearch() {
-  query.value = ''
-  activeIndex.value = -1
-  inputRef.value?.focus()
-}
-
-function onBlur() {
-  setTimeout(() => {
-    focused.value = false
-    showDropdown.value = false
-    activeIndex.value = -1
-  }, 150)
-}
-
-function handleKeydown(e: KeyboardEvent) {
-  if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-    e.preventDefault()
-    inputRef.value?.focus()
-    showDropdown.value = true
-  }
-}
+const { query, focused, showDropdown, activeIndex, inputRef, nodeResults, topicResults, results, closeSearch, clearSearch, onBlur, moveDown, moveUp, selectCurrent, selectNode, selectTopic, stateLabel } = useGlobalSearch()
+void inputRef
 
 onMounted(async () => {
-  window.addEventListener('keydown', handleKeydown)
   try {
     const stats = await getProfileStats()
     chatCount.value = stats.chat_count
   } catch (err) {
     console.warn('加载用户等级失败', err)
   }
-})
-onBeforeUnmount(() => {
-  window.removeEventListener('keydown', handleKeydown)
-  if (searchTimer) clearTimeout(searchTimer)
 })
 </script>
 
