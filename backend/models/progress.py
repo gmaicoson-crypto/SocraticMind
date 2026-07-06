@@ -10,6 +10,10 @@ class ChatMessage(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    # 会话按主题 topic_id 归属
+    topic_id = Column(Integer, nullable=True, index=True)
+    # session_id 用于重建和精确删除单个会话。
+    session_id = Column(String(100), nullable=False, index=True)
     node_key = Column(String(100), nullable=False)
     role = Column(String(10), nullable=False)   # "user" 或 "ai"
     content = Column(Text, nullable=False)
