@@ -44,4 +44,7 @@ export interface DialogueSession {
   updatedAt: string
   topicId?: number
   topicTitle?: string
+  awaitingTopicChoice?: boolean
+  suggestedTopicId?: number
+  suggestedTopicTitle?: string
 }
