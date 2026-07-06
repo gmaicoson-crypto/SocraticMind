@@ -31,8 +31,8 @@
 // NotesPanel 组件，封装局部界面和交互逻辑。
 import { ref, h, defineAsyncComponent } from 'vue'
 
-const MarkdownEditor = defineAsyncComponent(() => import('./MarkdownEditor.vue'))
-const CanvasSketch = defineAsyncComponent(() => import('./CanvasSketch.vue'))
+const MarkdownEditor = defineAsyncComponent(() => import('./notes/MarkdownEditor.vue'))
+const CanvasSketch = defineAsyncComponent(() => import('./notes/CanvasSketch.vue'))
 
 const activeTab = ref<'md' | 'canvas'>('md')
 

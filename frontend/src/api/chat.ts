@@ -13,6 +13,7 @@ export type ChatKind = 'qa' | 'topic_overview' | 'node_overview'
 export function chatStream(
   nodeKey: string,
   topicId: number,
+  sessionId: string,
   userInput: string,
   history: ChatMessage[],
   mode: 'socratic' | 'normal',
@@ -47,6 +48,7 @@ export function chatStream(
     body: JSON.stringify({
       node_key: nodeKey,
       topic_id: topicId,
+      session_id: sessionId,
       user_input: userInput,
       history: history.map(m => ({ role: m.role, content: m.content })),
       mode,
@@ -120,12 +122,25 @@ export async function getChatHistory(nodeKey: string) {
 
 export async function getAllMessages(limit = 200, offset = 0) {
   const res = await api.get(`/api/chat/messages?limit=${limit}&offset=${offset}`)
-  return res.data as { id: number; role: string; content: string; node_key: string; mode: string; topic_id: number | null; created_at: string }[]
+  return res.data as { id: number; role: string; content: string; node_key: string; mode: string; topic_id: number | null; session_id: string; created_at: string }[]
+}
+
+type ChatDeleteEndpoint = '/api/chat/messages' | '/api/chat/session'
+
+async function deleteChatResource(endpoint: ChatDeleteEndpoint, data: object) {
+  const res = await api.delete<{ deleted?: number | string }>(endpoint, { data })
+  return Number(res.data.deleted ?? 0)
 }
 
 export async function deleteMessages(ids: number[]) {
-  if (ids.length === 0) return
-  await api.delete('/api/chat/messages', { data: { ids } })
+  if (ids.length === 0) return 0
+  return deleteChatResource('/api/chat/messages', { ids })
+}
+
+export async function deleteChatSession(sessionId: string) {
+  return deleteChatResource('/api/chat/session', {
+    session_id: sessionId,
+  })
 }
 
 export async function getSuggestions(mode: 'socratic' | 'normal') {

@@ -1,11 +1,10 @@
 <template>
-  <Teleport to="body">
-    <Transition name="fade">
-      <div v-if="show" class="legal-overlay" @click.self="$emit('close')">
+  <BaseModal :model-value="show" @close="$emit('close')">
+      <div class="legal-overlay" @click.self="$emit('close')">
         <div class="legal-modal">
           <div class="legal-header">
             <div class="legal-title">{{ kind === 'terms' ? '服务条款' : '隐私政策' }}</div>
-            <button class="legal-close" @click="$emit('close')">✕</button>
+            <button class="legal-close ui-modal-close" @click="$emit('close')">✕</button>
           </div>
           <div class="legal-body">
             <div v-if="kind === 'terms'">
@@ -91,12 +90,13 @@
           </div>
         </div>
       </div>
-    </Transition>
-  </Teleport>
+  </BaseModal>
 </template>
 
 <script setup lang="ts">
 // LegalModal 组件，封装局部界面和交互逻辑。
+import BaseModal from '../ui/BaseModal.vue'
+
 defineProps<{ show: boolean; kind: 'terms' | 'privacy' }>()
 defineEmits<{ (e: 'close'): void }>()
 </script>
@@ -137,20 +137,6 @@ defineEmits<{ (e: 'close'): void }>()
   font-weight: 600;
   color: var(--ink);
 }
-.legal-close {
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  font-size: 14px;
-  color: var(--ink-3);
-  padding: 2px 6px;
-  border-radius: 4px;
-}
-.legal-close:hover {
-  background: var(--bg-2);
-  color: var(--ink);
-}
-
 .legal-body {
   flex: 1;
   min-height: 0;

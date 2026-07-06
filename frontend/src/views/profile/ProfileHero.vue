@@ -1,7 +1,7 @@
 <template>
   <div class="hero-card">
     <div class="big-avatar" :style="userInfo?.avatar_url ? {} : { background: userInfo?.avatar_grad }">
-      <img v-if="userInfo?.avatar_url" :src="avatarSrc(userInfo.avatar_url)" alt="avatar" class="big-avatar-img" decoding="async" />
+      <img v-if="userInfo?.avatar_url" :src="avatarSrc(userInfo.avatar_url)" alt="avatar" class="big-avatar-img ui-avatar-image" decoding="async" />
       <template v-else>{{ userName.slice(0, 1) }}</template>
     </div>
     <div class="hero-info">
@@ -89,11 +89,6 @@ defineEmits<{
   flex-shrink: 0;
   position: relative;
   overflow: hidden;
-}
-.big-avatar-img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
 }
 .hero-info {
   flex: 1;

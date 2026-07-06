@@ -1,6 +1,5 @@
 <template>
-  <div class="card weekly-card">
-    <div class="card-title">本周学习概览</div>
+  <ProfileSectionCard class="weekly-card" title="本周学习概览">
     <div class="weekly-stats">
       <div class="weekly-item">
         <div class="weekly-icon">💬</div>
@@ -49,12 +48,13 @@
         <div class="weekly-day-label" :class="{ today: day.isToday }">{{ day.label }}</div>
       </div>
     </div>
-  </div>
+  </ProfileSectionCard>
 </template>
 
 <script setup lang="ts">
 // WeeklyCard 页面组件，承载对应页面的主要交互。
 import { computed } from 'vue'
+import ProfileSectionCard from '../../components/profile/ProfileSectionCard.vue'
 
 interface WeeklyStats {
   chat_count: number
@@ -93,23 +93,6 @@ const maxWeekCount = computed(() => Math.max(...weekDays.value.map(d => d.count)
 </script>
 
 <style scoped>
-.card {
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  padding: 18px 20px;
-  display: flex;
-  flex-direction: column;
-}
-.card-title {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--ink-3);
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
-  font-family: var(--font-mono);
-  margin-bottom: 14px;
-}
 .weekly-card {
   display: flex;
   flex-direction: column;

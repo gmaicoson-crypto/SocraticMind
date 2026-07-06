@@ -1,7 +1,6 @@
 <template>
-  <Teleport to="body">
-    <Transition name="fade">
-      <div v-if="show" class="md-help-overlay" @click.self="$emit('close')">
+  <BaseModal :model-value="show" @close="$emit('close')">
+      <div class="md-help-overlay" @click.self="$emit('close')">
         <div class="md-help-modal">
           <div class="md-help-header">
             <div class="md-help-title">
@@ -12,7 +11,7 @@
               </svg>
               Markdown 语法速查
             </div>
-            <button class="md-help-close" @click="$emit('close')">✕</button>
+            <button class="md-help-close ui-modal-close" @click="$emit('close')">✕</button>
           </div>
 
           <div class="md-help-body">
@@ -40,14 +39,14 @@
           </div>
         </div>
       </div>
-    </Transition>
-  </Teleport>
+  </BaseModal>
 </template>
 
 <script setup lang="ts">
 // MarkdownHelpModal 组件，封装局部界面和交互逻辑。
 import { ref, computed } from 'vue'
 import { marked } from 'marked'
+import BaseModal from '../ui/BaseModal.vue'
 
 defineProps<{ show: boolean }>()
 defineEmits<{ (e: 'close'): void }>()
@@ -200,20 +199,6 @@ const activeGroup = ref(rawGroups[0].id)
 .md-help-title svg {
   color: var(--blue-2);
 }
-.md-help-close {
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  font-size: 14px;
-  color: var(--ink-3);
-  padding: 2px 6px;
-  border-radius: 4px;
-}
-.md-help-close:hover {
-  background: var(--bg-2);
-  color: var(--ink);
-}
-
 .md-help-body {
   flex: 1;
   min-height: 0;

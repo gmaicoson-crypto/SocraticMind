@@ -64,7 +64,7 @@
 
         <div class="form-body">
 
-          <div v-if="mode === 'register'" class="field">
+          <div v-if="mode === 'register'" class="field ui-field">
             <label>用户名</label>
             <div class="field-input" :class="{ focused: focusField === 'name' }">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -80,7 +80,7 @@
             </div>
           </div>
 
-          <div class="field">
+          <div class="field ui-field">
             <label>邮箱地址</label>
             <div class="field-input" :class="{ focused: focusField === 'email' }">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -97,7 +97,7 @@
             </div>
           </div>
 
-          <div v-if="mode === 'register'" class="field">
+          <div v-if="mode === 'register'" class="field ui-field">
             <label>邮箱验证码</label>
             <div class="code-row">
               <div class="field-input" :class="{ focused: focusField === 'code' }">
@@ -127,7 +127,7 @@
             <div v-if="codeMsg" class="field-success">{{ codeMsg }}</div>
           </div>
 
-          <div class="field">
+          <div class="field ui-field">
             <label>密码</label>
             <div class="field-input" :class="{ focused: focusField === 'password' }">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -158,7 +158,7 @@
             </div>
           </div>
 
-          <div v-if="mode === 'register'" class="field">
+          <div v-if="mode === 'register'" class="field ui-field">
             <label>确认密码</label>
             <div class="field-input" :class="{ focused: focusField === 'confirm' }">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -194,7 +194,7 @@
             </span>
           </div>
 
-          <div v-if="errorMsg" class="error-msg">{{ errorMsg }}</div>
+          <div v-if="errorMsg" class="error-msg ui-error-message">{{ errorMsg }}</div>
 
           <button class="submit-btn" :disabled="submitting" @click="handleSubmit">
             <span v-if="submitting" class="spinner" />
@@ -240,8 +240,8 @@ import { login, register, sendVerificationCode } from '../api/auth'
 import { useLearningStore } from '../stores/learning'
 import { setAuth } from '../utils/token'
 
-const ForgotPasswordModal = defineAsyncComponent(() => import('../components/ForgotPasswordModal.vue'))
-const LegalModal = defineAsyncComponent(() => import('../components/LegalModal.vue'))
+const ForgotPasswordModal = defineAsyncComponent(() => import('../components/auth/ForgotPasswordModal.vue'))
+const LegalModal = defineAsyncComponent(() => import('../components/auth/LegalModal.vue'))
 
 const router = useRouter()
 const mode = ref<'login' | 'register'>('login')
@@ -613,49 +613,9 @@ const features = [
   gap: 14px;
 }
 
-.field {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-
-.field label {
-  font-size: 11.5px;
-  font-weight: 600;
-  color: var(--ink-2);
-}
-
 .field-input {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  background: var(--bg-2);
-  border: 1px solid var(--line);
-  border-radius: 9px;
-  padding: 0 12px;
   height: 42px;
   transition: all .15s;
-}
-
-.field-input.focused {
-  border-color: var(--blue);
-  background: var(--surface);
-  box-shadow: 0 0 0 3px oklch(0.72 0.085 235 / 0.12);
-}
-
-.field-input svg {
-  opacity: 0.4;
-  flex-shrink: 0;
-}
-
-.field-input input {
-  flex: 1;
-  border: none;
-  outline: none;
-  background: transparent;
-  font-size: 13px;
-  color: var(--ink);
-  font-family: var(--font-sans);
 }
 
 .field-input input::placeholder {
@@ -751,15 +711,6 @@ const features = [
   font-size: 11px;
   color: #E24B4A;
   font-family: var(--font-mono);
-}
-
-.error-msg {
-  padding: 8px 12px;
-  background: #FCEBEB;
-  border: 1px solid #F7C1C1;
-  border-radius: 8px;
-  font-size: 12px;
-  color: #A32D2D;
 }
 
 .submit-btn {

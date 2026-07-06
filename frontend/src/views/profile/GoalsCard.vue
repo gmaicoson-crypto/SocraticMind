@@ -1,13 +1,12 @@
 <template>
-  <div class="card goal-card">
-    <div class="goal-header">
-      <div class="card-title" style="margin-bottom:0">今日目标</div>
+  <ProfileSectionCard class="goal-card" title="今日目标">
+    <template #action>
       <button class="goal-edit-btn" title="设置目标" @click="openModal">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
           <path d="M12 5v14M5 12h14"/>
         </svg>
       </button>
-    </div>
+    </template>
     <div class="ring-area">
       <svg width="100" height="100" viewBox="0 0 100 100">
         <circle cx="50" cy="50" r="38" fill="none" stroke="var(--bg-3)" stroke-width="10"/>
@@ -43,7 +42,7 @@
           <div class="goal-modal">
             <div class="goal-modal-header">
               <div class="goal-modal-title">设置今日目标</div>
-              <button class="goal-modal-close" @click="showModal = false">✕</button>
+              <button class="goal-modal-close ui-modal-close" @click="showModal = false">✕</button>
             </div>
             <div class="goal-modal-body">
               <div v-for="item in editItems" :key="item.key" class="goal-edit-row">
@@ -80,7 +79,7 @@
         </div>
       </Transition>
     </Teleport>
-  </div>
+  </ProfileSectionCard>
 </template>
 
 <script setup lang="ts">
@@ -91,6 +90,7 @@ import {
   type DailyGoalConfig,
 } from '../../utils/dailyGoal'
 import type { Topic } from '../../types'
+import ProfileSectionCard from '../../components/profile/ProfileSectionCard.vue'
 
 const props = defineProps<{
   userId: number | undefined
@@ -185,33 +185,10 @@ function resetToDefault() {
 </script>
 
 <style scoped>
-.card {
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  padding: 18px 20px;
-  display: flex;
-  flex-direction: column;
-}
-.card-title {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--ink-3);
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
-  font-family: var(--font-mono);
-  margin-bottom: 14px;
-}
 .goal-card {
   display: flex;
   flex-direction: column;
   gap: 0;
-}
-.goal-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 14px;
 }
 .goal-edit-btn {
   width: 24px;
@@ -310,20 +287,6 @@ function resetToDefault() {
   font-weight: 700;
   color: var(--ink);
 }
-.goal-modal-close {
-  background: transparent;
-  border: none;
-  color: var(--ink-3);
-  cursor: pointer;
-  font-size: 14px;
-  padding: 2px 6px;
-  border-radius: 4px;
-}
-.goal-modal-close:hover {
-  background: var(--bg-2);
-  color: var(--ink);
-}
-
 .goal-modal-body {
   padding: 14px 20px;
   display: flex;

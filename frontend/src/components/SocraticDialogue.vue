@@ -99,29 +99,37 @@
 // SocraticDialogue 组件，封装局部界面和交互逻辑。
 import { ref, watch, nextTick, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useLearningStore } from '../stores/learning'
-import type { Message } from '../types'
-import { chatStream, getSuggestions, deleteMessages, getAllMessages } from '../api/chat'
+import type { DialogueSession as Session, Message } from '../types'
+import { chatStream, getSuggestions, deleteMessages, deleteChatSession } from '../api/chat'
 import { generateTopic, updateTopicTitle } from '../api/topic'
-import { now, nowDate, genId, extractTopic, isNewTopicIntent, isConfirmation } from '../utils/chat'
+import { now, nowDate, extractTopic, isNewTopicIntent, isConfirmation } from '../utils/chat'
+import { useChatSessions } from '../composables/useChatSessions'
+import { useChatStream } from '../composables/useChatStream'
+import { useTopicDialogue } from '../composables/useTopicDialogue'
+import { useDialogueHistory } from '../composables/useDialogueHistory'
+import { useSessionTopicChoice } from '../composables/useSessionTopicChoice'
 
 import DialogueHistoryPanel from './dialogue/DialogueHistoryPanel.vue'
 import TopicNameBar from './dialogue/TopicNameBar.vue'
 import MessageList from './dialogue/MessageList.vue'
 import DialogueInputBar from './dialogue/DialogueInputBar.vue'
 
-interface Session {
-  id: string
-  name: string
-  messages: Message[]
-  updatedAt: string
-  topicId?: number
-  topicTitle?: string
-}
-
 const store = useLearningStore()
+const streamControl = useChatStream()
+const { parseChoices, stripSignals, inferSelectedChoices } = useTopicDialogue()
+const {
+  socraticSessions,
+  normalSessions,
+  socraticCurrentId,
+  normalCurrentId,
+  createDefaultSession,
+  saveSessions,
+  disposeSessionPersistence,
+} = useChatSessions()
 
 const messageListRef = ref<InstanceType<typeof MessageList> | null>(null)
 const inputBarRef = ref<InstanceType<typeof DialogueInputBar> | null>(null)
+let abortController: AbortController | null = null
 
 const input = ref('')
 const isThinking = ref(false)
@@ -133,8 +141,6 @@ const showHistory = ref(false)
 const editingSessionId = ref<string | null>(null)
 const editingName = ref('')
 
-let abortController: AbortController | null = null
-let saveTimer: ReturnType<typeof setTimeout> | null = null
 let pendingMsgIds: { user: number; ai: number } | null = null
 
 let isHydrated = false
@@ -149,21 +155,12 @@ const chatMode = ref<'socratic' | 'normal'>('socratic')
 const aiStyleOptions = ['温和', '标准', '严格'] as const
 const aiStyle = ref<string>(store.userInfo?.ai_style ?? '标准')
 
-const SK_SOCRATIC = 'sm_socratic_sessions'
-const SK_NORMAL = 'sm_normal_sessions'
-const SK_SOCRATIC_CUR = 'sm_socratic_cur'
-const SK_NORMAL_CUR = 'sm_normal_cur'
 const SK_CHIPS_SOCRATIC = 'sm_chips_socratic'
 const SK_CHIPS_NORMAL = 'sm_chips_normal'
+const deletingSessionIds = new Set<string>()
 
 const chips = ref<string[]>(loadCachedChips('socratic'))
 const chipsLoading = ref(false)
-
-const socraticSessions = ref<Session[]>(loadSessions(SK_SOCRATIC, 'socratic'))
-const normalSessions = ref<Session[]>(loadSessions(SK_NORMAL, 'normal'))
-
-const socraticCurrentId = ref<string>(loadCurrentId(SK_SOCRATIC_CUR, socraticSessions.value))
-const normalCurrentId = ref<string>(loadCurrentId(SK_NORMAL_CUR, normalSessions.value))
 
 const currentSessionId = computed(() =>
   chatMode.value === 'socratic' ? socraticCurrentId.value : normalCurrentId.value
@@ -210,44 +207,6 @@ const defaultChips = {
   normal: ['今天天气怎么样', '推荐一部电影', '给我讲个笑话', '聊聊最近的新闻'],
 }
 
-function defaultSession(mode: 'socratic' | 'normal'): Session {
-  return {
-    id: genId(),
-    name: mode === 'socratic' ? '新学习对话' : '新普通对话',
-    messages: [{
-      role: 'ai',
-      text: mode === 'socratic'
-        ? '你好！我是 Socrates，你的 AI 学习导师 ✦\n\n告诉我你想学什么，我来为你生成专属知识图谱，然后引导你一步步掌握它。'
-        : '你好！我是你的 AI 助手 💬\n\n有任何问题都可以直接问我，我会直接给出答案。',
-      time: now(),
-    }],
-    updatedAt: nowDate(),
-  }
-}
-
-function loadSessions(key: string, mode: 'socratic' | 'normal'): Session[] {
-  try {
-    const raw = localStorage.getItem(key)
-    if (raw) {
-      const sessions = JSON.parse(raw)
-      if (sessions.length > 0) return sessions
-    }
-  } catch (err) {
-    console.warn(`本地会话 ${key} 解析失败，回退到默认会话`, err)
-  }
-  return [defaultSession(mode)]
-}
-
-function loadCurrentId(key: string, sessions: Session[]): string {
-  try {
-    const id = localStorage.getItem(key)
-    if (id && sessions.find(s => s.id === id)) return id
-  } catch (err) {
-    console.warn(`本地当前会话 id 读取失败，回退到首个会话`, err)
-  }
-  return sessions[0].id
-}
-
 function loadCachedChips(mode: 'socratic' | 'normal'): string[] {
   const key = mode === 'socratic' ? SK_CHIPS_SOCRATIC : SK_CHIPS_NORMAL
   try {
@@ -282,37 +241,6 @@ async function loadSuggestions(force = false) {
   }
 }
 
-function saveSessions() {
-  if (saveTimer) clearTimeout(saveTimer)
-  saveTimer = setTimeout(() => {
-    localStorage.setItem(SK_SOCRATIC, JSON.stringify(socraticSessions.value))
-    localStorage.setItem(SK_NORMAL, JSON.stringify(normalSessions.value))
-    localStorage.setItem(SK_SOCRATIC_CUR, socraticCurrentId.value)
-    localStorage.setItem(SK_NORMAL_CUR, normalCurrentId.value)
-  }, 300)
-}
-
-function findOrCreateTopicSession(topicId: number): Session {
-  const existing = socraticSessions.value.find(s => s.topicId === topicId)
-  if (existing) return existing
-  const topic = store.topics.find(t => Number(t.id) === topicId)
-  const title = topic?.title ?? '新学习对话'
-  const session: Session = {
-    id: genId(),
-    name: title.slice(0, 12),
-    messages: [{
-      role: 'ai',
-      text: `这是关于「**${title}**」的专属学习对话 ✦\n\n点击右侧知识图谱中的节点开始学习，或继续提问深入这个主题。`,
-      time: now(),
-    }],
-    updatedAt: nowDate(),
-    topicId,
-    topicTitle: topic?.title,
-  }
-  socraticSessions.value = [session, ...socraticSessions.value]
-  return session
-}
-
 function pushMessage(msg: Message) {
   if (!currentSession.value) return
   currentSession.value.messages.push(msg)
@@ -322,6 +250,24 @@ function pushMessage(msg: Message) {
   }
   saveSessions()
 }
+
+const { findOrCreateTopicSession, rebuildFromBackend } = useDialogueHistory({
+  socraticSessions,
+  normalSessions,
+  topics: () => store.topics,
+  createDefaultSession,
+  saveSessions,
+  parseChoices,
+  inferSelectedChoices,
+})
+
+const { prepareTopicChoice, handlePendingTopicChoice } = useSessionTopicChoice({
+  currentSession,
+  topics: () => store.topics,
+  pushMessage,
+  saveSessions,
+  setActiveTopic: store.setActiveTopic,
+})
 
 function scrollToBottom() {
   messageListRef.value?.scrollToBottom()
@@ -336,147 +282,22 @@ function switchSession(id: string) {
 }
 
 function newSession() {
-  const session = defaultSession(chatMode.value)
+  const previous = currentSocraticSession.value?.topicId != null
+    ? currentSocraticSession.value
+    : socraticSessions.value.find(session => session.topicId != null)
+  const session = createDefaultSession(chatMode.value)
   if (chatMode.value === 'socratic') {
+    prepareTopicChoice(session, previous)
     socraticSessions.value.unshift(session)
     socraticCurrentId.value = session.id
   } else {
     normalSessions.value.unshift(session)
     normalCurrentId.value = session.id
   }
+  pendingTopicName.value = ''
   showHistory.value = false
   saveSessions()
   scrollToBottom()
-}
-
-async function rebuildFromBackend() {
-  try {
-    const msgs = await getAllMessages(500, 0)
-    if (!msgs.length) return
-
-    const socraticMsgs = msgs.filter(m => m.mode === 'socratic')
-    const normalMsgs = msgs.filter(m => m.mode !== 'socratic')
-
-    const ephemeralByTopic = new Map<number, Message[]>()
-    for (const s of socraticSessions.value) {
-      if (s.topicId != null) {
-        const eph = s.messages.filter(m => m.db_id == null)
-        if (eph.length) ephemeralByTopic.set(s.topicId, eph)
-      }
-    }
-
-    const topicMsgMap = new Map<number, Message[]>()
-    const nodeKeyMsgMap = new Map<string, Message[]>()
-
-    function convertBackendMsg(m: typeof socraticMsgs[number]): Message | null {
-      if (m.role === 'ai') {
-        const { cleanText, choices } = parseChoices(m.content)
-        return { role: 'ai', text: cleanText, time: m.created_at || now(), db_id: m.id, choices: choices ?? undefined }
-      }
-      if (!m.content || !m.content.trim()) return null
-      return { role: 'user', text: m.content, time: m.created_at || now(), db_id: m.id }
-    }
-
-    for (const m of socraticMsgs) {
-      const msg = convertBackendMsg(m)
-      if (!msg) continue
-      if (m.topic_id) {
-        const arr = topicMsgMap.get(m.topic_id) || []
-        arr.push(msg)
-        topicMsgMap.set(m.topic_id, arr)
-      } else {
-
-        const nk = m.node_key || 'unknown'
-        const arr = nodeKeyMsgMap.get(nk) || []
-        arr.push(msg)
-        nodeKeyMsgMap.set(nk, arr)
-      }
-    }
-
-    const newSocratic: Session[] = []
-
-    function buildSessions(map: Map<number, Message[]>) {
-      for (const [topicId, messages] of map) {
-        const eph = ephemeralByTopic.get(topicId) || []
-        messages.push(...eph)
-        messages.sort((a, b) => (a.time || '').localeCompare(b.time || ''))
-        inferSelectedChoices(messages)
-        const topic = store.topics.find(t => Number(t.id) === topicId)
-        newSocratic.push({
-          id: genId(),
-          name: topic?.title?.slice(0, 12) ?? '学习对话',
-          messages,
-          updatedAt: messages[messages.length - 1]?.time ?? nowDate(),
-          topicId,
-          topicTitle: topic?.title,
-        })
-      }
-    }
-
-    buildSessions(topicMsgMap)
-
-    if (nodeKeyMsgMap.size > 0) {
-      const cid = currentTopicId.value
-      for (const [nk, msgs] of nodeKeyMsgMap) {
-        msgs.sort((a, b) => (a.time || '').localeCompare(b.time || ''))
-        inferSelectedChoices(msgs)
-
-        const node = store.nodes.find(n => n.id === nk)
-        const topic = node ? store.topics.find(t => Number(t.id) === cid) : null
-        newSocratic.push({
-          id: genId(),
-          name: topic?.title?.slice(0, 12) ?? nk.slice(0, 12),
-          messages: msgs,
-          updatedAt: msgs[msgs.length - 1]?.time ?? nowDate(),
-          topicId: topic ? Number(topic.id) : undefined,
-          topicTitle: topic?.title,
-        })
-      }
-    }
-
-    for (const s of socraticSessions.value) {
-      if (s.topicId == null && !newSocratic.find(ns => ns.id === s.id)) {
-        newSocratic.push(s)
-      }
-    }
-
-    if (newSocratic.length === 0) {
-      newSocratic.push(defaultSession('socratic'))
-    }
-    socraticSessions.value = newSocratic
-
-    if (normalMsgs.length) {
-      const normalSession: Session = { id: genId(), name: '历史对话', messages: [], updatedAt: nowDate() }
-      for (const m of normalMsgs) {
-        normalSession.messages.push({
-          role: (m.role === 'ai' ? 'ai' : 'user') as 'ai' | 'user',
-          text: m.content, time: m.created_at || now(), db_id: m.id,
-        })
-      }
-      normalSession.messages.sort((a, b) => (a.time || '').localeCompare(b.time || ''))
-      normalSession.updatedAt = normalMsgs[normalMsgs.length - 1]?.created_at || normalSession.updatedAt
-      normalSessions.value = [normalSession]
-    }
-
-    saveSessions()
-  } catch (err) {
-    console.warn('从数据库加载历史消息失败', err)
-  }
-}
-
-function inferSelectedChoices(messages: Message[]) {
-  for (let i = 0; i < messages.length - 1; i++) {
-    const msg = messages[i]
-    if (msg.role === 'ai' && msg.choices?.length && !msg.selected_choice) {
-      const next = messages[i + 1]
-      if (next?.role === 'user') {
-        const lm = next.text.match(/^([A-F])[.、]/)
-        if (lm && msg.choices.some(c => c.label === lm[1])) {
-          msg.selected_choice = lm[1]
-        }
-      }
-    }
-  }
 }
 
 onMounted(() => {
@@ -499,9 +320,15 @@ watch(chatMode, () => {
   scrollToBottom()
 })
 
-watch([() => store.activeTopicId, chatMode], async () => {
-  if (chatMode.value !== 'socratic') return
-  const numId = Number(store.activeTopicId)
+watch([() => store.activeTopicId, chatMode], async ([activeTopicId, mode], previous) => {
+  const previousTopicId = previous?.[0]
+  if (mode !== 'socratic') {
+    if (previousTopicId !== undefined && activeTopicId !== previousTopicId) {
+      chatMode.value = 'socratic'
+    }
+    return
+  }
+  const numId = Number(activeTopicId)
   if (!numId) return
   const session = findOrCreateTopicSession(numId)
   if (socraticCurrentId.value !== session.id) {
@@ -543,7 +370,7 @@ watch(() => store.topics, (topics) => {
   }
 
   if (next.length === 0) {
-    next.push(defaultSession('socratic'))
+    next.push(createDefaultSession('socratic'))
     mutated = true
   }
   if (mutated) {
@@ -555,19 +382,26 @@ watch(() => store.topics, (topics) => {
   }
 })
 
-function deleteSession(id: string) {
+async function deleteSession(id: string) {
+  if (deletingSessionIds.has(id)) return
   const sessions = chatMode.value === 'socratic' ? socraticSessions.value : normalSessions.value
   const session = sessions.find(s => s.id === id)
-  if (session) {
-    const ids = session.messages.flatMap(m =>
-      [m.db_id, m.paired_db_id].filter((x): x is number => x !== undefined)
-    )
-    if (ids.length > 0) deleteMessages(ids).catch(() => {})
+  if (!session) return
+
+  deletingSessionIds.add(id)
+  try {
+    await deleteChatSession(session.id)
+  } catch (err) {
+    // 后端未确认删除时保留页面数据，避免出现“看起来删了，刷新又回来”。
+    console.error('删除对话失败', err)
+    return
+  } finally {
+    deletingSessionIds.delete(id)
   }
 
   if (chatMode.value === 'socratic') {
     if (socraticSessions.value.length <= 1) {
-      socraticSessions.value[0] = defaultSession('socratic')
+      socraticSessions.value[0] = createDefaultSession('socratic')
       socraticCurrentId.value = socraticSessions.value[0].id
     } else {
       const idx = socraticSessions.value.findIndex(s => s.id === id)
@@ -578,7 +412,7 @@ function deleteSession(id: string) {
     }
   } else {
     if (normalSessions.value.length <= 1) {
-      normalSessions.value[0] = defaultSession('normal')
+      normalSessions.value[0] = createDefaultSession('normal')
       normalCurrentId.value = normalSessions.value[0].id
     } else {
       const idx = normalSessions.value.findIndex(s => s.id === id)
@@ -624,7 +458,7 @@ function deleteMessage(index: number) {
 
 function abortChat() {
   if (abortController) {
-    abortController.abort()
+    streamControl.abortRequest()
     abortController = null
   }
   const partial = streamingText.value.trim()
@@ -695,30 +529,11 @@ async function saveTopicName() {
   editingTopicName.value = false
 }
 
-function stripSignals(s: string): string {
-  return s.replace(/\[MASTERED\]/g, '').replace(/\[CONFIRM_MASTER\]/g, '')
-}
-
 function checkStreamingChoices() {
   if (!streamingChoices.value) {
     const { choices } = parseChoices(streamingText.value)
     if (choices) streamingChoices.value = choices
   }
-}
-
-function parseChoices(text: string): { cleanText: string; choices: { label: string; text: string }[] | null } {
-  const match = text.match(/\[CHOICES\]([\s\S]*?)\[ECHOICES\]/)
-  if (!match) return { cleanText: text, choices: null }
-  const cleanText = text.replace(/\s*\[CHOICES\][\s\S]*?\[ECHOICES\]\s*/g, '').trim()
-  const lines = match[1].trim().split('\n').filter(Boolean)
-  const choices = lines
-    .map(line => {
-      const m = line.match(/^([A-F])[.、]\s*(.+?)(?:\s*[—\-–:：]\s*(.+))?$/)
-      if (!m) return null
-      return { label: m[1], text: m[2] + (m[3] ? ` —— ${m[3]}` : '') }
-    })
-    .filter((c): c is { label: string; text: string } => c !== null)
-  return { cleanText, choices: choices.length >= 2 ? choices : null }
 }
 
 function sendChoiceText(choiceText: string) {
@@ -759,14 +574,13 @@ async function send() {
   input.value = ''
   scrollToBottom()
 
-  abortController = new AbortController()
-
   if (chatMode.value === 'normal') {
+    abortController = streamControl.beginRequest()
     isThinking.value = true
     streamingText.value = ''
     const history = messages.value.slice(-10).map(m => ({ role: m.role as 'ai' | 'user', content: m.text }))
     chatStream(
-      'normal', 0, userInput, history, 'normal', '标准',
+      'normal', 0, currentSession.value!.id, userInput, history, 'normal', '标准',
       (chunk) => {
         streamingText.value = stripSignals(streamingText.value + chunk)
         checkStreamingChoices()
@@ -791,6 +605,11 @@ async function send() {
     return
   }
 
+  if (await handlePendingTopicChoice(v)) {
+    scrollToBottom()
+    return
+  }
+
   if (currentSession.value?.topicId && isNewTopicIntent(v)) {
     pushMessage({ role: 'ai', text: `本对话已绑定「**${currentSession.value.topicTitle}**」主题，每个学习对话只能学习一个主题。\n\n如需学习新主题，请点击右上角「＋」新建对话。`, time: now() })
     scrollToBottom()
@@ -801,6 +620,8 @@ async function send() {
     if (isConfirmation(v)) {
       const topicName = pendingTopicName.value
       pendingTopicName.value = ''
+      // 清空先前无关对话内容
+      messages.value = []
       await handleGenerateTopic(topicName)
       return
     }
@@ -812,6 +633,16 @@ async function send() {
       pushMessage({ role: 'ai', text: `好的！我将为你生成「**${topicName}**」的专属知识图谱，确认生成吗？\n\n回复**"确认"**开始生成，或直接继续聊天取消。`, time: now() })
       scrollToBottom()
       return
+    }
+  }
+
+  if (currentSession.value?.topicId == null && store.activeNode) {
+    const topicId = currentTopicId.value
+    const topic = store.topics.find(t => Number(t.id) === topicId)
+    if (topicId && topic) {
+      currentSession.value.topicId = topicId
+      currentSession.value.topicTitle = topic.title
+      currentSession.value.name = topic.title.slice(0, 12)
     }
   }
 
@@ -835,6 +666,7 @@ async function send() {
     return
   }
 
+  abortController = streamControl.beginRequest()
   isThinking.value = true
   streamingText.value = ''
   scrollToBottom()
@@ -842,7 +674,7 @@ async function send() {
   const userMsgRef = currentSession.value!.messages[currentSession.value!.messages.length - 1]
 
   chatStream(
-    store.activeNode.id, currentTopicId.value, userInput, history, 'socratic', aiStyle.value,
+    store.activeNode.id, currentTopicId.value, currentSession.value!.id, userInput, history, 'socratic', aiStyle.value,
     (chunk) => {
       streamingText.value = stripSignals(streamingText.value + chunk)
       checkStreamingChoices()
@@ -886,7 +718,7 @@ async function retryAt(aiIndex: number) {
   currentSession.value.messages = msgs.slice(0, aiIndex)
   saveSessions()
 
-  abortController = new AbortController()
+  abortController = streamControl.beginRequest()
   isThinking.value = true
   streamingText.value = ''
   scrollToBottom()
@@ -894,7 +726,7 @@ async function retryAt(aiIndex: number) {
   const history = msgs.slice(0, aiIndex).map(m => ({ role: m.role as 'ai' | 'user', content: m.text })).slice(-10)
 
   chatStream(
-    store.activeNode?.id ?? 'normal', currentTopicId.value, userMsg.text, history, chatMode.value, aiStyle.value,
+    store.activeNode?.id ?? 'normal', currentTopicId.value, currentSession.value.id, userMsg.text, history, chatMode.value, aiStyle.value,
     (chunk) => {
       streamingText.value = stripSignals(streamingText.value + chunk)
       checkStreamingChoices()
@@ -948,10 +780,10 @@ function streamOverview(kind: 'topic' | 'node', identifier: string): Promise<voi
   return new Promise((resolve) => {
     isThinking.value = true
     streamingText.value = ''
-    abortController = new AbortController()
+    abortController = streamControl.beginRequest()
     const apiKind = kind === 'topic' ? 'topic_overview' : 'node_overview'
     chatStream(
-      identifier, currentTopicId.value, '',
+      identifier, currentTopicId.value, currentSession.value!.id, '',
       [],
       'socratic', aiStyle.value,
       (chunk) => {
@@ -1004,9 +836,9 @@ watch(() => store.activeNode?.id, async (id) => {
     scrollToBottom()
 
     const prompt = `用户想复习「${node.label}」（${node.sub}），请用苏格拉底式提问引导用户回顾这个知识点的核心内容。`
-    abortController = new AbortController()
+    abortController = streamControl.beginRequest()
     chatStream(
-      node.id, currentTopicId.value, prompt,
+      node.id, currentTopicId.value, currentSession.value!.id, prompt,
       [],
       'socratic', aiStyle.value,
       (chunk) => {
@@ -1046,8 +878,8 @@ watch(() => store.activeNode?.id, async (id) => {
 })
 
 onBeforeUnmount(() => {
-  if (saveTimer) clearTimeout(saveTimer)
-  abortController?.abort()
+  disposeSessionPersistence()
+  streamControl.abortRequest()
 })
 </script>
 

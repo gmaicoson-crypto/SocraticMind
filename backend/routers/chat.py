@@ -27,6 +27,7 @@ class MessageItem(BaseModel):
 class ChatRequest(BaseModel):
     node_key: str
     topic_id: int
+    session_id: str
     user_input: str
     history: List[MessageItem] = []
     mode: str = "socratic"
@@ -41,6 +42,7 @@ class HistoryResponse(BaseModel):
     node_key: str = ""
     mode: str = ""
     topic_id: Optional[int] = None
+    session_id: str
     created_at: str = ""
 
     class Config:
@@ -75,6 +77,8 @@ def chat_stream_endpoint(
     # 先将用户消息写入数据库，获取 ID 后再开始流式响应
     user_msg = ChatMessage(
         user_id=current_user.id,
+        topic_id=req.topic_id or None,
+        session_id=req.session_id,
         node_key=req.node_key,
         role="user",
         content=req.user_input,
@@ -116,6 +120,8 @@ def chat_stream_endpoint(
 
         ai_msg = ChatMessage(
             user_id=current_user.id,
+            topic_id=req.topic_id or None,
+            session_id=req.session_id,
             node_key=req.node_key,
             role="ai",
             content=full_reply,
@@ -165,23 +171,22 @@ def get_all_messages(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """分页获取用户的全部消息，按 ID 倒序（最新消息优先），同时关联查出 topic_id。"""
-    rows = db.query(ChatMessage, Node.topic_id).outerjoin(
-        Node, ChatMessage.node_key == Node.node_key
-    ).filter(
+    """分页获取当前用户的全部消息，按 ID 倒序。"""
+    messages = db.query(ChatMessage).filter(
         ChatMessage.user_id == current_user.id,
     ).order_by(ChatMessage.id.desc()).offset(offset).limit(limit).all()
     return [
         {
-            "id": m.id,
-            "role": m.role,
-            "content": m.content,
-            "node_key": m.node_key,
-            "mode": m.mode,
-            "topic_id": topic_id,
-            "created_at": m.created_at.strftime("%Y-%m-%d %H:%M:%S") if m.created_at else "",
+            "id": message.id,
+            "role": message.role,
+            "content": message.content,
+            "node_key": message.node_key,
+            "mode": message.mode,
+            "topic_id": message.topic_id,
+            "session_id": message.session_id,
+            "created_at": message.created_at.strftime("%Y-%m-%d %H:%M:%S") if message.created_at else "",
         }
-        for m, topic_id in rows
+        for message in messages
     ]
 
 
@@ -201,6 +206,25 @@ def delete_messages_endpoint(
     deleted = db.query(ChatMessage).filter(
         ChatMessage.id.in_(req.ids),
         ChatMessage.user_id == current_user.id,
+    ).delete(synchronize_session=False)
+    db.commit()
+    return {"deleted": deleted}
+
+
+class DeleteSessionRequest(BaseModel):
+    session_id: str
+
+
+@router.delete("/session")
+def delete_session_endpoint(
+    req: DeleteSessionRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """按稳定的 session_id 删除当前用户的完整会话。"""
+    deleted = db.query(ChatMessage).filter(
+        ChatMessage.user_id == current_user.id,
+        ChatMessage.session_id == req.session_id,
     ).delete(synchronize_session=False)
     db.commit()
     return {"deleted": deleted}

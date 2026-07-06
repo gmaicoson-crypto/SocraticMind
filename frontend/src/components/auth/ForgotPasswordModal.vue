@@ -1,7 +1,6 @@
 <template>
-  <Teleport to="body">
-    <Transition name="fade">
-      <div v-if="show" class="fp-overlay" @click.self="onClose">
+  <BaseModal :model-value="show" :close-disabled="submitting" @close="onClose">
+      <div class="fp-overlay" @click.self="onClose">
         <div class="fp-modal">
           <div class="fp-header">
             <div class="fp-title">
@@ -10,13 +9,13 @@
               </svg>
               重置密码
             </div>
-            <button class="fp-close" @click="onClose">✕</button>
+            <button class="fp-close ui-modal-close" @click="onClose">✕</button>
           </div>
 
           <div class="fp-body">
             <div class="fp-step-hint">输入注册邮箱 → 接收验证码 → 设置新密码</div>
 
-            <div class="fp-field">
+            <div class="fp-field ui-field">
               <label>邮箱地址</label>
               <input
                 v-model="email"
@@ -26,7 +25,7 @@
               />
             </div>
 
-            <div class="fp-field">
+            <div class="fp-field ui-field">
               <label>验证码</label>
               <div class="fp-code-row">
                 <input
@@ -49,7 +48,7 @@
               </div>
             </div>
 
-            <div class="fp-field">
+            <div class="fp-field ui-field">
               <label>新密码</label>
               <input
                 v-model="newPassword"
@@ -59,7 +58,7 @@
               />
             </div>
 
-            <div class="fp-field">
+            <div class="fp-field ui-field">
               <label>确认新密码</label>
               <input
                 v-model="confirm"
@@ -69,7 +68,7 @@
               />
             </div>
 
-            <div v-if="errorMsg" class="fp-error">{{ errorMsg }}</div>
+            <div v-if="errorMsg" class="fp-error ui-error-message">{{ errorMsg }}</div>
             <div v-if="successMsg" class="fp-success">{{ successMsg }}</div>
 
             <button class="fp-submit" :disabled="!canSubmit || submitting" @click="onSubmit">
@@ -79,14 +78,14 @@
           </div>
         </div>
       </div>
-    </Transition>
-  </Teleport>
+  </BaseModal>
 </template>
 
 <script setup lang="ts">
 // ForgotPasswordModal 组件，封装局部界面和交互逻辑。
 import { ref, computed, onBeforeUnmount, watch } from 'vue'
-import { sendVerificationCode, resetPassword } from '../api/auth'
+import { sendVerificationCode, resetPassword } from '../../api/auth'
+import BaseModal from '../ui/BaseModal.vue'
 
 const props = defineProps<{ show: boolean }>()
 const emit = defineEmits<{ (e: 'close'): void }>()
@@ -222,20 +221,6 @@ onBeforeUnmount(() => {
 .fp-title svg {
   color: var(--blue-2);
 }
-.fp-close {
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  font-size: 14px;
-  color: var(--ink-3);
-  padding: 2px 6px;
-  border-radius: 4px;
-}
-.fp-close:hover {
-  background: var(--bg-2);
-  color: var(--ink);
-}
-
 .fp-body {
   padding: 18px 22px 22px;
   display: flex;
@@ -251,16 +236,6 @@ onBeforeUnmount(() => {
   border-radius: 8px;
 }
 
-.fp-field {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-.fp-field label {
-  font-size: 11.5px;
-  font-weight: 600;
-  color: var(--ink-2);
-}
 .fp-field input {
   height: 38px;
   padding: 0 12px;
@@ -309,14 +284,6 @@ onBeforeUnmount(() => {
   cursor: not-allowed;
 }
 
-.fp-error {
-  padding: 8px 12px;
-  background: #FCEBEB;
-  border: 1px solid #F7C1C1;
-  border-radius: 8px;
-  font-size: 12px;
-  color: #A32D2D;
-}
 .fp-success {
   padding: 8px 12px;
   background: #E8F5EE;

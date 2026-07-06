@@ -146,7 +146,7 @@
 import { ref, computed, onBeforeUnmount, defineAsyncComponent } from 'vue'
 import { useLearningStore } from '../stores/learning'
 
-const TopicManager = defineAsyncComponent(() => import('./TopicManager.vue'))
+const TopicManager = defineAsyncComponent(() => import('./navigation/TopicManager.vue'))
 import { generateTopic } from '../api/topic'
 
 const store = useLearningStore()

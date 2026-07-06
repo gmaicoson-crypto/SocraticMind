@@ -11,6 +11,7 @@ from core.ai_client import get_ai_client
 from models.user import User
 from models.topic import Topic
 from models.node import Node
+from models.progress import ChatMessage
 from ai.graph_generator import generate_graph, assign_positions
 from ai.prompts import RECOMMEND_TOPICS_PROMPT, build_recommend_prompt
 from ai.util import extract_json_from_markdown
@@ -128,9 +129,14 @@ def delete_topic(
     ).first()
     if not topic:
         raise HTTPException(status_code=404, detail="主题不存在")
+
+    deleted_messages = db.query(ChatMessage).filter(
+        ChatMessage.user_id == current_user.id,
+        ChatMessage.topic_id == topic.id,
+    ).delete(synchronize_session=False)
     db.delete(topic)
     db.commit()
-    return {"message": "删除成功"}
+    return {"message": "删除成功", "deleted_messages": deleted_messages}
 
 
 class UpdateTopicRequest(BaseModel):

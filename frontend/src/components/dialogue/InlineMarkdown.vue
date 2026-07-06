@@ -162,15 +162,6 @@ onBeforeUnmount(() => {
   margin: 10px 0;
 }
 
-.md-inline .inline-code {
-  font-family: var(--font-mono);
-  font-size: 0.88em;
-  background: var(--blue-tint);
-  color: var(--blue-2);
-  padding: 1px 6px;
-  border-radius: 4px;
-}
-
 .md-inline .code-block {
   margin: 10px 0;
   border-radius: 10px;
@@ -226,54 +217,6 @@ onBeforeUnmount(() => {
   background: transparent;
   padding: 0;
   color: #cdd6f4;
-}
-
-.md-inline .hljs-keyword,
-.md-inline .hljs-selector-tag {
-  color: #cba6f7;
-}
-
-.md-inline .hljs-string,
-.md-inline .hljs-attr {
-  color: #a6e3a1;
-}
-
-.md-inline .hljs-number,
-.md-inline .hljs-literal {
-  color: #fab387;
-}
-
-.md-inline .hljs-comment {
-  color: #6c7086;
-  font-style: italic;
-}
-
-.md-inline .hljs-function,
-.md-inline .hljs-title {
-  color: #89b4fa;
-}
-
-.md-inline .hljs-variable,
-.md-inline .hljs-name {
-  color: #cdd6f4;
-}
-
-.md-inline .hljs-type,
-.md-inline .hljs-class {
-  color: #f9e2af;
-}
-
-.md-inline .hljs-built_in {
-  color: #89dceb;
-}
-
-.md-inline .hljs-operator,
-.md-inline .hljs-punctuation {
-  color: #89dceb;
-}
-
-.md-inline .hljs-property {
-  color: #f38ba8;
 }
 
 .md-inline table {

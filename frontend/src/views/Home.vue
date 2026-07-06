@@ -59,8 +59,7 @@
 
 <script setup lang="ts">
 // Home 页面组件，承载对应页面的主要交互。
-import { ref, onMounted, onBeforeUnmount, defineAsyncComponent } from 'vue'
-import { addStudyMinutes } from '../utils/dailyGoal'
+import { ref, defineAsyncComponent } from 'vue'
 import TopBar from '../components/TopBar.vue'
 import Sidebar from '../components/Sidebar.vue'
 import SocraticDialogue from '../components/SocraticDialogue.vue'
@@ -68,6 +67,8 @@ import SocraticDialogue from '../components/SocraticDialogue.vue'
 const KnowledgeGraph = defineAsyncComponent(() => import('../components/KnowledgeGraph.vue'))
 const NotesPanel = defineAsyncComponent(() => import('../components/NotesPanel.vue'))
 import { useLearningStore } from '../stores/learning'
+import { useResizablePane } from '../composables/useResizablePane'
+import { useStudyTimer } from '../composables/useStudyTimer'
 
 const store = useLearningStore()
 const rightPanel = ref<'graph' | 'notes'>('graph')
@@ -77,92 +78,8 @@ function setRightPanel(panel: 'graph' | 'notes') {
 }
 
 const mainRef = ref<HTMLElement | null>(null)
-const leftWidth = ref(0)
-const dragging = ref(false)
-
-const MIN_LEFT = 320
-const MIN_RIGHT = 380
-const DIVIDER_W = 10
-
-let studyTimer: ReturnType<typeof setInterval> | null = null
-let studySeconds = 0
-
-const INACTIVE_TIMEOUT = 2 * 60 * 1000
-const ACTIVE_EVENTS = ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll']
-
-let lastActiveAt = Date.now()
-
-function startStudyTimer() {
-  if (studyTimer) return
-  studyTimer = setInterval(() => {
-    if (Date.now() - lastActiveAt > INACTIVE_TIMEOUT) return
-    studySeconds++
-    if (studySeconds % 60 === 0 && store.userInfo?.id) {
-      addStudyMinutes(store.userInfo.id, 1)
-    }
-  }, 1000)
-}
-
-function stopStudyTimer() {
-  if (!studyTimer) return
-  clearInterval(studyTimer)
-  studyTimer = null
-
-  const remaining = Math.floor(studySeconds % 60)
-  if (remaining >= 30 && store.userInfo?.id) {
-    addStudyMinutes(store.userInfo.id, 1)
-  }
-}
-
-function onUserActive() {
-  lastActiveAt = Date.now()
-}
-
-function handleVisibilityChange() {
-  if (!document.hidden) onUserActive()
-}
-
-onMounted(async () => {
-  startStudyTimer()
-  onUserActive()
-  document.addEventListener('visibilitychange', handleVisibilityChange)
-  ACTIVE_EVENTS.forEach(e => window.addEventListener(e, onUserActive, { passive: true }))
-
-  if (mainRef.value) {
-    const total = mainRef.value.clientWidth - DIVIDER_W - 28
-    leftWidth.value = Math.round(total * 0.45)
-  }
-})
-
-onBeforeUnmount(() => {
-  stopStudyTimer()
-  document.removeEventListener('visibilitychange', handleVisibilityChange)
-  ACTIVE_EVENTS.forEach(e => window.removeEventListener(e, onUserActive))
-})
-
-function startDrag(e: MouseEvent) {
-  dragging.value = true
-  e.preventDefault()
-  const startX = e.clientX
-  const startWidth = leftWidth.value
-
-  function onMove(e: MouseEvent) {
-    if (!mainRef.value) return
-    const totalW = mainRef.value.clientWidth - DIVIDER_W - 28
-    const delta = e.clientX - startX
-    const newLeft = startWidth + delta
-    leftWidth.value = Math.min(Math.max(newLeft, MIN_LEFT), totalW - MIN_RIGHT)
-  }
-
-  function onUp() {
-    dragging.value = false
-    window.removeEventListener('mousemove', onMove)
-    window.removeEventListener('mouseup', onUp)
-  }
-
-  window.addEventListener('mousemove', onMove)
-  window.addEventListener('mouseup', onUp)
-}
+const { leftWidth, dragging, startDrag } = useResizablePane(mainRef)
+useStudyTimer(() => store.userInfo?.id)
 </script>
 
 <style scoped>
