@@ -63,6 +63,11 @@ def chat_stream(
     )
 
     for chunk in stream:
-        delta = chunk.choices[0].delta
-        if delta.content:
-            yield delta.content
+        # OpenAI 兼容反代可能在流末尾发送仅包含 usage 等元数据的分片，
+        # 这类分片没有 choices，不应当被当作正文读取。
+        if not chunk.choices:
+            continue
+
+        content = getattr(chunk.choices[0].delta, "content", None)
+        if content:
+            yield content
