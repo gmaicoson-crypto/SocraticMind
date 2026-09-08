@@ -43,6 +43,14 @@ export function clearAuth() {
     localStorage.removeItem(k)
     sessionStorage.removeItem(k)
   }
+
+  for (const storage of [localStorage, sessionStorage]) {
+    const recoveryKeys = Array.from(
+      { length: storage.length },
+      (_, index) => storage.key(index),
+    ).filter((key): key is string => Boolean(key?.startsWith('sm_agent_runs_')))
+    recoveryKeys.forEach(key => storage.removeItem(key))
+  }
 }
 
 export function loadUser(): unknown | null {

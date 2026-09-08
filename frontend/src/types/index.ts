@@ -33,6 +33,8 @@ export interface Message {
   paired_db_id?: number
   choices?: { label: string; text: string }[]
   selected_choice?: string
+  messageType?: import('./learningAgent').StructuredMessageType
+  metadata?: Record<string, unknown> | null
 }
 
 export type ChatMode = 'socratic' | 'normal'

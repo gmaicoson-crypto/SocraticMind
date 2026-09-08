@@ -8,6 +8,17 @@ export interface ChatMessage {
   content: string
 }
 
+export interface StoredChatMessage extends ChatMessage {
+  id: number
+  node_key: string
+  mode: string
+  topic_id: number | null
+  session_id: string
+  message_type: import('../types/learningAgent').StructuredMessageType
+  metadata: Record<string, unknown> | null
+  created_at: string
+}
+
 export type ChatKind = 'qa' | 'topic_overview' | 'node_overview'
 
 export function chatStream(
@@ -83,6 +94,7 @@ export function chatStream(
               if (json.text) onChunk(json.text)
               if (json.signal) onSignal?.(json.signal)
               if (json.msg_ids) onMsgIds?.(json.msg_ids.user, json.msg_ids.ai)
+              if (json.error) onError(json.error)
             } catch (e) {
               console.warn('[SSE] JSON 解析失败，分片数据:', data.slice(0, 80), e)
             }
@@ -117,12 +129,12 @@ export function chatStream(
 
 export async function getChatHistory(nodeKey: string) {
   const res = await api.get(`/api/chat/history/${nodeKey}`)
-  return res.data as { id: number; role: string; content: string }[]
+  return res.data as StoredChatMessage[]
 }
 
 export async function getAllMessages(limit = 200, offset = 0) {
   const res = await api.get(`/api/chat/messages?limit=${limit}&offset=${offset}`)
-  return res.data as { id: number; role: string; content: string; node_key: string; mode: string; topic_id: number | null; session_id: string; created_at: string }[]
+  return res.data as StoredChatMessage[]
 }
 
 type ChatDeleteEndpoint = '/api/chat/messages' | '/api/chat/session'

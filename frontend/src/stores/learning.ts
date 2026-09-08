@@ -4,6 +4,8 @@ import { useProgressStore } from './progress'
 import { useTopicsStore } from './topics'
 import { useUiStore } from './ui'
 import { useUserStore } from './user'
+import { useAgentStore } from './agent'
+import { usePlansStore } from './plans'
 
 export const useLearningStore = defineStore('learning', () => {
   const uiStore = useUiStore()
@@ -11,18 +13,23 @@ export const useLearningStore = defineStore('learning', () => {
   const topicsStore = useTopicsStore()
   const dialogueStore = useDialogueStore()
   const progressStore = useProgressStore()
+  const agentStore = useAgentStore()
+  const plansStore = usePlansStore()
 
   const { isDark } = storeToRefs(uiStore)
   const { userInfo } = storeToRefs(userStore)
   const { nodes, edges, topics, activeTopicId, activeNode, lastMasteredId, recommendations, masteredCount, totalCount, availableCount } = storeToRefs(topicsStore)
   const { messages, pendingTopicOverviewId } = storeToRefs(dialogueStore)
   const { streakData } = storeToRefs(progressStore)
+  const { run: agentRun, submitting: agentSubmitting, error: agentError } = storeToRefs(agentStore)
+  const { todayPlan, replanning } = storeToRefs(plansStore)
 
   return {
     isDark, userInfo,
     nodes, edges, topics, activeTopicId, activeNode, lastMasteredId, recommendations,
     messages, pendingTopicOverviewId, streakData,
     masteredCount, totalCount, availableCount,
+    agentRun, agentSubmitting, agentError, todayPlan, replanning,
     toggleTheme: uiStore.toggleTheme,
     setUserInfo: userStore.setUserInfo,
     loadUserFromStorage: userStore.loadUserFromStorage,
@@ -38,5 +45,10 @@ export const useLearningStore = defineStore('learning', () => {
     requestTopicOverview: dialogueStore.requestTopicOverview,
     fetchStreak: progressStore.fetchStreak,
     recordLearning: progressStore.recordLearning,
+    beginOnboarding: agentStore.beginOnboarding,
+    restoreAgentRun: agentStore.restoreRun,
+    answerAgentRun: agentStore.answer,
+    fetchTodayPlan: plansStore.fetchToday,
+    replanStudyPlan: plansStore.replan,
   }
 })
