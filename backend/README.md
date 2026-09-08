@@ -67,9 +67,10 @@ DATABASE_URL=mysql+pymysql://root:your_password@localhost:3306/socraticmind
 CORS_ORIGINS=http://localhost:5173
 ```
 
-启动服务：
+先升级数据库，再启动服务：
 
 ```bash
+alembic upgrade head
 uvicorn main:app --reload --host 127.0.0.1 --port 8000
 ```
 
@@ -113,13 +114,22 @@ http://127.0.0.1:8000/health
 
 ## 数据库
 
-后端启动时会执行：
+数据库结构由 Alembic 管理，应用启动不会自动创建或修改表。
 
-```python
-Base.metadata.create_all(bind=engine)
+空数据库直接升级：
+
+```bash
+alembic upgrade head
 ```
 
-模型对应的数据表会在服务启动时自动创建。但仍然需要提前创建数据库本身，例如 MySQL 中的 `socraticmind` 数据库。
+已有 SocraticMind 数据库必须先备份并核对结构与 `0001_current_schema_baseline` 一致，再执行：
+
+```bash
+alembic stamp 0001_current_schema_baseline
+alembic upgrade head
+```
+
+不要对未知结构的数据库盲目执行 `stamp`。Alembic 只管理表结构，仍需提前创建 MySQL 数据库本身。
 
 当前主要数据模型包括：
 
@@ -184,4 +194,4 @@ backend/ai/prompts/
 - 修改环境变量后需要重启 Uvicorn。
 - 如果使用 `mysql+pymysql://` 连接串，请确保环境中已安装 PyMySQL 驱动。
 - 如果头像上传接口报 multipart 相关错误，请确保环境中已安装 `python-multipart`。
-- 当前仓库未配置后端测试脚本；接口改动后建议先访问 `/docs` 做基本联调，再与前端一起验证主流程。
+- 迁移定向测试：`.venv/bin/python -m pytest tests/p0/test_migrations.py`。

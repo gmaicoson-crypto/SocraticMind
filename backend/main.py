@@ -3,12 +3,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from core.config import settings
-from core.database import Base, engine
 from routers import auth, topics, nodes, chat, progress
-import models  # 必须导入，确保所有 ORM 模型在 create_all 前已注册到 metadata
-
-# 启动时自动建表，已存在的表不会被覆盖
-Base.metadata.create_all(bind=engine)
+import models  # noqa: F401 - ensure ORM relationships can resolve registered models
 
 # 头像文件存储目录，不存在时自动创建
 UPLOAD_DIR = Path(__file__).parent / "uploads" / "avatars"
