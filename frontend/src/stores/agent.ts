@@ -29,6 +29,7 @@ export const useAgentStore = defineStore('agent', () => {
   const loading = ref(false)
   const submitting = ref(false)
   const error = shallowRef<ApiProblem | null>(null)
+  const onboardingTopic = ref<string | null>(null)
   const preview = computed(() => run.value?.preview ?? null)
   const result = computed(() => run.value?.result ?? null)
   const canRetry = computed(() => run.value?.status === 'failed' && Boolean(run.value.error?.retryable))
@@ -193,9 +194,21 @@ export const useAgentStore = defineStore('agent', () => {
     requestIds.clear()
   }
 
+  function openOnboarding(topic: string) {
+    if (run.value && !['completed', 'cancelled'].includes(run.value.status)) return false
+    clearRun()
+    onboardingTopic.value = topic.trim() || null
+    return Boolean(onboardingTopic.value)
+  }
+
+  function closeOnboarding() {
+    onboardingTopic.value = null
+  }
+
   return {
-    run, loading, submitting, error, preview, result, canRetry,
+    run, loading, submitting, error, onboardingTopic, preview, result, canRetry,
     restoreRun, beginOnboarding, beginTopicPlan, beginAssessment, answer,
     update, confirm, cancel, retry, selfReportMastery, revertMastery, clearRun,
+    openOnboarding, closeOnboarding,
   }
 })

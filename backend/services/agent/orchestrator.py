@@ -327,6 +327,7 @@ def _existing_topic_preview(state: dict[str, Any]) -> dict[str, Any]:
             for item in plan.items
         ],
         "total_minutes": plan.total_minutes,
+        "daily_minutes": params["daily_minutes"],
         "start_date": start_date.isoformat(),
         "estimated_end_date": plan.estimated_end_date.isoformat(),
         "target_date": params.get("target_date"),
@@ -430,6 +431,7 @@ def _generate_preview(
             for item in plan.items
         ],
         "total_minutes": plan.total_minutes,
+        "daily_minutes": params["daily_minutes"],
         "start_date": start_date.isoformat(),
         "estimated_end_date": plan.estimated_end_date.isoformat(),
         "target_date": params.get("target_date"),

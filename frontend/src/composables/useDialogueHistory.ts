@@ -22,6 +22,20 @@ function sessionUpdatedTimestamp(session: DialogueSession): number | null {
   return Number.isNaN(timestamp) ? null : timestamp
 }
 
+function structuredMessageSignature(message: Message): string | null {
+  const runId = message.metadata?.run_id
+  if (typeof runId !== 'string') return null
+  if (message.messageType === 'agent_answer') {
+    const stepId = message.metadata?.step_id
+    return typeof stepId === 'string' ? `answer:${runId}:${stepId}` : null
+  }
+  if (message.messageType === 'agent_step') {
+    const version = message.metadata?.version
+    return typeof version === 'number' ? `step:${runId}:${version}` : null
+  }
+  return null
+}
+
 export function useDialogueHistory(options: DialogueHistoryOptions) {
   const {
     socraticSessions,
@@ -85,7 +99,10 @@ export function useDialogueHistory(options: DialogueHistoryOptions) {
       ): Message | null => {
         if (message.role === 'ai') {
           if (!parseAiChoices) {
-            return { role: 'ai', text: message.content, time: message.created_at || now(), db_id: message.id }
+            return {
+              role: 'ai', text: message.content, time: message.created_at || now(), db_id: message.id,
+              messageType: message.message_type, metadata: message.metadata,
+            }
           }
           const parsed = parseChoices(message.content)
           return {
@@ -94,10 +111,15 @@ export function useDialogueHistory(options: DialogueHistoryOptions) {
             time: message.created_at || now(),
             db_id: message.id,
             choices: parsed.choices ?? undefined,
+            messageType: message.message_type,
+            metadata: message.metadata,
           }
         }
         if (!message.content.trim()) return null
-        return { role: 'user', text: message.content, time: message.created_at || now(), db_id: message.id }
+        return {
+          role: 'user', text: message.content, time: message.created_at || now(), db_id: message.id,
+          messageType: message.message_type, metadata: message.metadata,
+        }
       }
 
       const rebuildMode = (mode: 'socratic' | 'normal', localSessions: DialogueSession[]) => {
@@ -115,7 +137,16 @@ export function useDialogueHistory(options: DialogueHistoryOptions) {
           const messages = group
             .map(message => convertMessage(message, mode === 'socratic'))
             .filter((message): message is Message => message != null)
-          if (existing) messages.push(...existing.messages.filter(message => message.db_id == null))
+          if (existing) {
+            const persistedStructured = new Set(
+              messages.map(structuredMessageSignature).filter((value): value is string => value != null),
+            )
+            messages.push(...existing.messages.filter(message => {
+              if (message.db_id != null) return false
+              const signature = structuredMessageSignature(message)
+              return !signature || !persistedStructured.has(signature)
+            }))
+          }
           messages.sort((a, b) => (a.time || '').localeCompare(b.time || ''))
           if (mode === 'socratic') inferSelectedChoices(messages)
           const topicId = group[0]?.topic_id ?? undefined

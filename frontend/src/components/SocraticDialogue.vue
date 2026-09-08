@@ -71,7 +71,47 @@
       @retry="retryAt"
       @quote="quoteMessage"
       @select-choice="sendChoiceText"
-    />
+    >
+      <template #agent>
+        <OnboardingForm
+          v-if="chatMode === 'socratic' && agentStore.onboardingTopic && !activeAgentRun"
+          :topic="agentStore.onboardingTopic"
+          :session-id="currentSessionId"
+          :busy="agentStore.submitting"
+          :error="agentStore.error?.message"
+          @submit="startOnboarding"
+          @cancel="cancelOnboardingDraft"
+        />
+        <AgentStepMessage
+          v-else-if="chatMode === 'socratic' && agentStore.run?.step && activeAgentRun"
+          :step="agentStore.run.step"
+          :kind="agentStore.run.type === 'assessment' ? 'assessment' : 'diagnostic'"
+          :busy="agentStore.submitting"
+          :show-prompt="!currentStepInHistory"
+          @answer="submitChoiceAnswer"
+          @cancel="cancelAgentFlow"
+        />
+        <PlanPreview
+          v-else-if="chatMode === 'socratic' && agentStore.run?.status === 'awaiting_confirmation' && agentStore.preview"
+          :preview="agentStore.preview"
+          :busy="agentStore.submitting"
+          @update="updatePlanPreview"
+          @confirm="confirmPlan"
+          @cancel="cancelAgentFlow"
+        />
+        <div
+          v-else-if="chatMode === 'socratic' && agentStore.run?.status === 'failed'"
+          class="agent-error"
+        >
+          <strong>{{ agentStore.error?.message ?? '流程执行失败' }}</strong>
+          <span>{{ agentStore.error?.code }}</span>
+          <div>
+            <button v-if="agentStore.canRetry" :disabled="agentStore.submitting" @click="retryAgentFlow">重试</button>
+            <button :disabled="agentStore.submitting" @click="cancelAgentFlow">取消流程</button>
+          </div>
+        </div>
+      </template>
+    </MessageList>
 
     <DialogueInputBar
       ref="inputBarRef"
@@ -83,7 +123,9 @@
       :chips-loading="chipsLoading"
       :quoted-text="quotedText"
       :is-thinking="isThinking"
-      :is-generating="isGenerating"
+      :is-generating="isGenerating || agentStore.submitting"
+      :send-disabled="agentStore.run?.status === 'awaiting_confirmation'"
+      :show-chips="!activeAgentRun && !agentStore.onboardingTopic"
       :socratic-badge="socraticBadge"
       :normal-badge="normalBadge"
       :placeholder="placeholder"
@@ -99,22 +141,31 @@
 // SocraticDialogue 组件，封装局部界面和交互逻辑。
 import { ref, watch, nextTick, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useLearningStore } from '../stores/learning'
+import { useAgentStore } from '../stores/agent'
+import { usePlansStore } from '../stores/plans'
 import type { DialogueSession as Session, Message } from '../types'
+import type { AgentRun, AgentRunUpdate, OnboardingInput } from '../types/learningAgent'
 import { chatStream, getSuggestions, deleteMessages, deleteChatSession } from '../api/chat'
-import { generateTopic, updateTopicTitle } from '../api/topic'
-import { now, nowDate, extractTopic, isNewTopicIntent, isConfirmation } from '../utils/chat'
+import { updateTopicTitle } from '../api/topic'
+import { now, nowDate, extractTopic, isNewTopicIntent } from '../utils/chat'
 import { useChatSessions } from '../composables/useChatSessions'
 import { useChatStream } from '../composables/useChatStream'
 import { useTopicDialogue } from '../composables/useTopicDialogue'
 import { useDialogueHistory } from '../composables/useDialogueHistory'
 import { useSessionTopicChoice } from '../composables/useSessionTopicChoice'
+import { useOnboardingFlow } from '../composables/useOnboardingFlow'
 
 import DialogueHistoryPanel from './dialogue/DialogueHistoryPanel.vue'
 import TopicNameBar from './dialogue/TopicNameBar.vue'
 import MessageList from './dialogue/MessageList.vue'
 import DialogueInputBar from './dialogue/DialogueInputBar.vue'
+import OnboardingForm from './agent/OnboardingForm.vue'
+import AgentStepMessage from './agent/AgentStepMessage.vue'
+import PlanPreview from './agent/PlanPreview.vue'
 
 const store = useLearningStore()
+const agentStore = useAgentStore()
+const plansStore = usePlansStore()
 const streamControl = useChatStream()
 const { parseChoices, stripSignals, inferSelectedChoices } = useTopicDialogue()
 const {
@@ -145,7 +196,6 @@ let pendingMsgIds: { user: number; ai: number } | null = null
 
 let isHydrated = false
 
-const pendingTopicName = ref('')
 const editingTopicName = ref(false)
 const editingTopicInput = ref('')
 
@@ -183,12 +233,16 @@ const currentSession = computed(() =>
 )
 
 const currentSessionName = computed(() => currentSession.value?.name ?? '苏格拉底式对话')
-
+const activeAgentRun = computed(() => Boolean(
+  agentStore.run && !['completed', 'cancelled'].includes(agentStore.run.status),
+))
 const socraticBadge = computed(() => Math.max(0, currentSocraticSession.value.messages.length - 1))
 const normalBadge = computed(() => Math.max(0, currentNormalSession.value.messages.length - 1))
 
 const placeholder = computed(() => chatMode.value === 'socratic'
-  ? '回答问题，或问我一个反问…  (Enter 发送 · Shift+Enter 换行)'
+  ? agentStore.run?.step
+    ? `${agentStore.run.type === 'assessment' ? '回答评估' : '回答诊断'} ${agentStore.run.step.current}/${agentStore.run.step.total}`
+    : '回答问题，或问我一个反问…  (Enter 发送 · Shift+Enter 换行)'
   : '随便问我什么…  (Enter 发送 · Shift+Enter 换行)'
 )
 
@@ -200,6 +254,15 @@ const messages = computed({
     currentSession.value.updatedAt = nowDate()
     saveSessions()
   },
+})
+const currentStepInHistory = computed(() => {
+  const run = agentStore.run
+  if (!run?.step) return false
+  return messages.value.some(message =>
+    message.messageType === 'agent_step'
+    && message.metadata?.run_id === run.run_id
+    && message.metadata?.version === run.version,
+  )
 })
 
 const defaultChips = {
@@ -269,6 +332,92 @@ const { prepareTopicChoice, handlePendingTopicChoice } = useSessionTopicChoice({
   setActiveTopic: store.setActiveTopic,
 })
 
+const onboardingFlow = useOnboardingFlow({
+  userId: () => store.userInfo?.id,
+  sessionId: () => currentSessionId.value,
+  onCompleted: handleOnboardingCompleted,
+})
+
+async function handleOnboardingCompleted(run: AgentRun) {
+  const result = run.result as Record<string, unknown> | null
+  const topicId = Number(result?.topic_id)
+  if (!topicId) return
+  const title = run.preview?.topic ?? agentStore.onboardingTopic ?? '学习主题'
+  const session = currentSocraticSession.value
+  if (session) {
+    session.topicId = topicId
+    session.topicTitle = title
+    session.name = title.slice(0, 12)
+    session.awaitingTopicChoice = false
+    saveSessions()
+  }
+  agentStore.closeOnboarding()
+  await store.fetchTopicsOnly()
+  store.requestTopicOverview(topicId)
+  await store.setActiveTopic(String(topicId))
+  await plansStore.fetchToday(run.preview?.effective_timezone)
+}
+
+async function startOnboarding(input: OnboardingInput) {
+  const response = await onboardingFlow.start(input)
+  if (response) agentStore.closeOnboarding()
+  scrollToBottom()
+}
+
+function cancelOnboardingDraft() {
+  agentStore.closeOnboarding()
+}
+
+async function submitChoiceAnswer(answer: string) {
+  const runId = agentStore.run?.run_id
+  const stepId = agentStore.run?.step?.step_id
+  recordCurrentAgentStep()
+  if (runId && stepId) {
+    pushMessage({
+      role: 'user', text: answer, time: now(), messageType: 'agent_answer',
+      metadata: { run_id: runId, step_id: stepId },
+    })
+  }
+  await onboardingFlow.answer(answer)
+  scrollToBottom()
+}
+
+function recordCurrentAgentStep() {
+  const run = agentStore.run
+  if (!run?.step || currentStepInHistory.value) return
+  pushMessage({
+    role: 'ai',
+    text: run.step.prompt,
+    time: now(),
+    messageType: 'agent_step',
+    metadata: { run_id: run.run_id, version: run.version, step_id: run.step.step_id },
+  })
+}
+
+async function updatePlanPreview(input: AgentRunUpdate) {
+  await onboardingFlow.update(input)
+  scrollToBottom()
+}
+
+async function confirmPlan() {
+  await onboardingFlow.confirm()
+  scrollToBottom()
+}
+
+async function cancelAgentFlow() {
+  const response = await onboardingFlow.cancel()
+  if (response?.status === 'cancelled') {
+    agentStore.closeOnboarding()
+    agentStore.clearRun()
+  }
+  scrollToBottom()
+}
+
+async function retryAgentFlow() {
+  await onboardingFlow.retry()
+  scrollToBottom()
+}
+
 function scrollToBottom() {
   messageListRef.value?.scrollToBottom()
 }
@@ -294,7 +443,6 @@ function newSession() {
     normalSessions.value.unshift(session)
     normalCurrentId.value = session.id
   }
-  pendingTopicName.value = ''
   showHistory.value = false
   saveSessions()
   scrollToBottom()
@@ -319,6 +467,26 @@ watch(chatMode, () => {
   chips.value = cached.length > 0 ? cached : defaultChips[chatMode.value]
   scrollToBottom()
 })
+
+watch(() => agentStore.onboardingTopic, (topic) => {
+  if (!topic) return
+  chatMode.value = 'socratic'
+  if (currentSocraticSession.value?.topicId != null) {
+    const session = createDefaultSession('socratic')
+    session.awaitingTopicChoice = false
+    socraticSessions.value.unshift(session)
+    socraticCurrentId.value = session.id
+    saveSessions()
+  }
+  nextTick(scrollToBottom)
+})
+
+watch([() => store.userInfo?.id, socraticCurrentId], async ([userId]) => {
+  if (!userId) return
+  agentStore.clearRun()
+  await onboardingFlow.restore()
+  scrollToBottom()
+}, { immediate: true })
 
 watch([() => store.activeTopicId, chatMode], async ([activeTopicId, mode], previous) => {
   const previousTopicId = previous?.[0]
@@ -559,10 +727,29 @@ function sendChoiceText(choiceText: string) {
 
 async function send() {
   const v = input.value.trim()
-  if (!v || isThinking.value || isGenerating.value) return
+  if (
+    !v || isThinking.value || isGenerating.value || agentStore.submitting
+    || (chatMode.value === 'socratic' && agentStore.run?.status === 'awaiting_confirmation')
+  ) return
 
   if (chatMode.value === 'socratic') {
     store.recordLearning()
+  }
+
+  if (chatMode.value === 'socratic' && agentStore.run?.step && activeAgentRun.value) {
+    const runId = agentStore.run.run_id
+    const stepId = agentStore.run.step.step_id
+    inputBarRef.value?.reset()
+    recordCurrentAgentStep()
+    pushMessage({
+      role: 'user', text: v, time: now(), messageType: 'agent_answer',
+      metadata: { run_id: runId, step_id: stepId },
+    })
+    input.value = ''
+    scrollToBottom()
+    await onboardingFlow.answer(v)
+    scrollToBottom()
+    return
   }
 
   inputBarRef.value?.reset()
@@ -570,7 +757,13 @@ async function send() {
   const quoteSnapshot = quotedText.value
   quotedText.value = ''
 
-  pushMessage({ role: 'user', text: v, quote: quoteSnapshot || undefined, time: now() })
+  pushMessage({
+    role: 'user',
+    text: v,
+    quote: quoteSnapshot || undefined,
+    time: now(),
+    messageType: 'chat',
+  })
   input.value = ''
   scrollToBottom()
 
@@ -616,21 +809,10 @@ async function send() {
     return
   }
 
-  if (pendingTopicName.value) {
-    if (isConfirmation(v)) {
-      const topicName = pendingTopicName.value
-      pendingTopicName.value = ''
-      // 清空先前无关对话内容
-      messages.value = []
-      await handleGenerateTopic(topicName)
-      return
-    }
-    pendingTopicName.value = ''
-  } else if (isNewTopicIntent(v)) {
+  if (isNewTopicIntent(v)) {
     const topicName = extractTopic(v)
     if (topicName.length >= 2) {
-      pendingTopicName.value = topicName
-      pushMessage({ role: 'ai', text: `好的！我将为你生成「**${topicName}**」的专属知识图谱，确认生成吗？\n\n回复**"确认"**开始生成，或直接继续聊天取消。`, time: now() })
+      agentStore.openOnboarding(topicName)
       scrollToBottom()
       return
     }
@@ -749,31 +931,6 @@ async function retryAt(aiIndex: number) {
     abortController,
     handleSignal,
   )
-}
-
-async function handleGenerateTopic(topicName: string) {
-  isGenerating.value = true
-  pushMessage({ role: 'ai', text: `好的！我正在为「**${topicName}**」生成知识图谱，请稍候…`, time: now() })
-  scrollToBottom()
-  try {
-    const topic = await generateTopic(topicName)
-    if (currentSession.value && currentSession.value.topicId == null) {
-      currentSession.value.topicId = topic.id
-      currentSession.value.topicTitle = topic.title
-      currentSession.value.name = topic.title.slice(0, 12)
-      saveSessions()
-    }
-    store.requestTopicOverview(topic.id)
-    await store.fetchTopics()
-    await store.setActiveTopic(String(topic.id))
-    pushMessage({ role: 'ai', text: `✦ 知识图谱已生成！共 **${topic.total_nodes}** 个知识节点。\n\n下面我先给你一个整体介绍 👇`, time: now() })
-    scrollToBottom()
-  } catch {
-    pushMessage({ role: 'ai', text: '生成失败，请重试或换个主题名称。', time: now() })
-  } finally {
-    isGenerating.value = false
-    scrollToBottom()
-  }
 }
 
 function streamOverview(kind: 'topic' | 'node', identifier: string): Promise<void> {
@@ -968,4 +1125,19 @@ onBeforeUnmount(() => {
 .hdr-btn:hover {
   background: var(--bg-2);
 }
+.agent-error {
+  display: grid;
+  width: min(100%, 680px);
+  align-self: center;
+  gap: 7px;
+  padding: 14px 16px;
+  border: 1px solid color-mix(in srgb, #dc2626 35%, var(--line));
+  border-radius: 8px;
+  background: color-mix(in srgb, #dc2626 7%, var(--surface));
+  color: var(--ink);
+  font-size: 12px;
+}
+.agent-error > span { color: var(--ink-3); font-family: var(--font-mono); overflow-wrap: anywhere; }
+.agent-error > div { display: flex; gap: 8px; }
+.agent-error button { padding: 6px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink-2); cursor: pointer; }
 </style>

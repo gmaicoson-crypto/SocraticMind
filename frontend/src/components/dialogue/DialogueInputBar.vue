@@ -8,7 +8,7 @@
     <button class="quote-clear" title="取消引用" @click="$emit('clearQuote')">✕</button>
   </div>
 
-  <div class="chips-wrap">
+  <div v-if="showChips" class="chips-wrap">
     <template v-if="chipsLoading">
       <div class="chips-loading">
         <span v-for="i in 4" :key="i" class="chip-skeleton" />
@@ -68,7 +68,7 @@
         rows="1"
         :placeholder="placeholder"
         @input="onInput"
-        @keydown.enter.exact.prevent="$emit('send')"
+        @keydown.enter.exact.prevent="requestSend"
       />
       <button v-if="isThinking" class="abort-btn" title="中断回答" @click="$emit('abort')">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
@@ -76,8 +76,8 @@
         </svg>
         中断
       </button>
-      <button v-else class="send-btn" :disabled="!input.trim() || isGenerating" @click="$emit('send')">
-        <span v-if="isGenerating">生成中…</span>
+      <button v-else class="send-btn" :disabled="!input.trim() || isGenerating || sendDisabled" @click="requestSend">
+        <span v-if="isGenerating">处理中…</span>
         <template v-else>
           发送
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
@@ -93,7 +93,7 @@
 // DialogueInputBar 组件，封装局部界面和交互逻辑。
 import { ref } from 'vue'
 
-defineProps<{
+const props = withDefaults(defineProps<{
   input: string
   chatMode: 'socratic' | 'normal'
   aiStyle: string
@@ -106,7 +106,12 @@ defineProps<{
   socraticBadge: number
   normalBadge: number
   placeholder: string
-}>()
+  sendDisabled?: boolean
+  showChips?: boolean
+}>(), {
+  sendDisabled: false,
+  showChips: true,
+})
 
 const emit = defineEmits<{
   (e: 'update:input', val: string): void
@@ -128,6 +133,10 @@ function onInput(e: Event) {
   const maxHeight = 110
   el.style.height = Math.min(el.scrollHeight, maxHeight) + 'px'
   el.style.overflowY = el.scrollHeight > maxHeight ? 'auto' : 'hidden'
+}
+
+function requestSend() {
+  if (!props.sendDisabled && !props.isGenerating && props.input.trim()) emit('send')
 }
 
 function reset() {

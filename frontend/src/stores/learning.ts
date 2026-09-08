@@ -46,6 +46,7 @@ export const useLearningStore = defineStore('learning', () => {
     fetchStreak: progressStore.fetchStreak,
     recordLearning: progressStore.recordLearning,
     beginOnboarding: agentStore.beginOnboarding,
+    openOnboarding: agentStore.openOnboarding,
     restoreAgentRun: agentStore.restoreRun,
     answerAgentRun: agentStore.answer,
     fetchTodayPlan: plansStore.fetchToday,

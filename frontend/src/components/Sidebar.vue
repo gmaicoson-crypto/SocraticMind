@@ -96,8 +96,8 @@
           v-for="r in store.recommendations"
           :key="r.title"
           class="recommend-row"
-          :disabled="!!generatingTitle"
-          @click="handleRecommend(r.title, r.emoji)"
+          :disabled="store.agentSubmitting"
+          @click="handleRecommend(r.title)"
         >
           <span class="rec-emoji">{{ r.emoji }}</span>
           <div>
@@ -147,7 +147,6 @@ import { ref, computed, onBeforeUnmount, defineAsyncComponent } from 'vue'
 import { useLearningStore } from '../stores/learning'
 
 const TopicManager = defineAsyncComponent(() => import('./navigation/TopicManager.vue'))
-import { generateTopic } from '../api/topic'
 
 const store = useLearningStore()
 const showManager = ref(false)
@@ -158,8 +157,6 @@ function openManager() {
   hasOpenedManager.value = true
   showManager.value = true
 }
-const generatingTitle = ref<string | null>(null)
-
 const MAX_VISIBLE = 3
 const visibleTopics = computed(() => store.topics.slice(0, MAX_VISIBLE))
 const showMoreTopics = computed(() => store.topics.length > MAX_VISIBLE)
@@ -188,22 +185,9 @@ async function refreshRecommend() {
   }
 }
 
-async function handleRecommend(title: string, emoji: string) {
-  if (generatingTitle.value) return
-  generatingTitle.value = title
-  showToastMsg(`正在将《${title}》加入学习计划，请稍等…`)
-  try {
-    const topic = await generateTopic(title, emoji)
-    await store.fetchTopicsOnly()
-    store.requestTopicOverview(topic.id)
-    await store.setActiveTopic(String(topic.id))
-    showToastMsg(`已成功将《${title}》加入学习计划`)
-  } catch (err) {
-    showToastMsg(`加入失败，请重试`)
-    console.error('生成推荐主题失败', err)
-  } finally {
-    generatingTitle.value = null
-  }
+function handleRecommend(title: string) {
+  const opened = store.openOnboarding(title)
+  showToastMsg(opened ? `请完善《${title}》的学习目标` : '请先完成当前学习流程')
 }
 
 function getBarStyle(i: number) {

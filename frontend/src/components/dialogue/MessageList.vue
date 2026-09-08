@@ -32,6 +32,8 @@
       @select-choice="$emit('select-choice', $event)"
     />
 
+    <slot name="agent" />
+
     <div v-if="streamingText" class="msg-row ai">
       <div class="ai-avatar sm">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none">

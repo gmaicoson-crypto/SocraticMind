@@ -64,6 +64,7 @@ export interface PlanPreview {
   nodes: PlanPreviewNode[]
   plan_items: PlanPreviewItem[]
   total_minutes: number
+  daily_minutes: number
   start_date: string
   estimated_end_date: string
   target_date: string | null
