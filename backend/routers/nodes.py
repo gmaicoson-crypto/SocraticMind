@@ -3,12 +3,15 @@ from sqlalchemy.orm import Session
 from sqlalchemy import or_
 from pydantic import BaseModel
 from typing import List
-from datetime import datetime, timezone
+import uuid
 from core.database import get_db
 from core.deps import get_current_user
 from models.user import User
 from models.topic import Topic
 from models.node import Node
+from models.enums import MasterySource
+from core.errors import ApiError
+from services.mastery import record_mastery
 
 router = APIRouter(prefix="/api/nodes", tags=["节点"])
 
@@ -119,39 +122,22 @@ def create_node(
     return node
 
 
-@router.put("/{node_id}/master", response_model=NodeResponse)
+@router.put("/{node_id}/master", response_model=NodeResponse, deprecated=True)
 def master_node(
     node_id: int,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """将节点标记为已掌握，并自动解锁所有父节点均已掌握的子节点。
-
-    parent_keys 是逗号分隔字符串而非关系表，解锁判断需在 Python 侧完成；
-    节点数量较少（< 1k）时性能可接受，若图谱规模扩大可考虑改为 join 表。
-    """
-    node = db.query(Node).join(Topic).filter(
-        Node.id == node_id,
-        Topic.user_id == current_user.id,
-    ).first()
-    if not node:
-        raise HTTPException(status_code=404, detail="节点不存在")
-    if node.state == "locked":
-        raise HTTPException(status_code=400, detail="节点未解锁")
-
-    node.state = "mastered"
-    node.mastered_at = datetime.now(timezone.utc)
-
-    # 加载同主题所有节点，计算哪些子节点的父节点已全部掌握
-    all_nodes = db.query(Node).filter(Node.topic_id == node.topic_id).all()
-    mastered_keys = {n.node_key for n in all_nodes if n.state == "mastered"}
-
-    for n in all_nodes:
-        if n.state == "locked" and n.parent_keys:
-            parents = set(n.parent_keys.split(","))
-            if parents.issubset(mastered_keys):
-                n.state = "available"
-
-    db.commit()
-    db.refresh(node)
-    return node
+    """兼容旧客户端的一键掌握入口，新客户端应使用 /mastery。"""
+    try:
+        result = record_mastery(
+            db,
+            user_id=current_user.id,
+            node_id=node_id,
+            source=MasterySource.SELF_REPORTED,
+            request_id=f"legacy-{node_id}-{uuid.uuid4()}",
+        )
+    except ApiError as error:
+        status_code = 400 if error.code == "NODE_LOCKED" else error.status_code
+        raise HTTPException(status_code=status_code, detail=error.message) from error
+    return db.get(Node, result.node_id)

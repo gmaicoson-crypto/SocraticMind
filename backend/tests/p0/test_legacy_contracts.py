@@ -53,6 +53,26 @@ def test_legacy_master_endpoint_unlocks_child(client, db_session, auth_user):
     assert child.state == "available"
 
 
+def test_legacy_master_endpoint_keeps_locked_error_shape(client, db_session, auth_user):
+    topic = Topic(user_id=auth_user.id, title="Locked graph")
+    db_session.add(topic)
+    db_session.flush()
+    locked = Node(
+        topic_id=topic.id,
+        node_key="locked",
+        label="Locked",
+        state="locked",
+        parent_keys="missing",
+    )
+    db_session.add(locked)
+    db_session.commit()
+
+    response = client.put(f"/api/nodes/{locked.id}/master")
+
+    assert response.status_code == 400
+    assert response.json() == {"detail": "节点尚未解锁"}
+
+
 def test_chat_stream_emits_text_signal_and_message_ids(
     client, db_session, auth_user, monkeypatch
 ):
