@@ -58,4 +58,17 @@ describe('memories store', () => {
     resolveRequest({ ...memory, kind: 'goal', content: 'Learn' })
     await Promise.all([first, second])
   })
+
+  it('keeps a memory when deletion fails', async () => {
+    vi.mocked(memoriesApi.getMemories).mockResolvedValue([memory])
+    vi.mocked(memoriesApi.deleteMemory).mockRejectedValue(new Error('network'))
+    const store = useMemoriesStore()
+    await store.fetchMemories()
+
+    const result = await store.removeMemory(memory.id)
+
+    expect(result).toBeNull()
+    expect(store.memories).toEqual([memory])
+    expect(store.error).not.toBeNull()
+  })
 })

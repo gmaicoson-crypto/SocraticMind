@@ -60,6 +60,8 @@
         </div>
       </div>
 
+      <AgentMemorySection />
+
       <div class="card ui-card">
         <div class="card-title">成就徽章</div>
         <div class="badge-grid">
@@ -106,6 +108,7 @@ import { useLearningStore } from '../stores/learning'
 import TopBar from '../components/TopBar.vue'
 
 const EditProfileModal = defineAsyncComponent(() => import('../components/profile/EditProfileModal.vue'))
+const AgentMemorySection = defineAsyncComponent(() => import('../components/profile/AgentMemorySection.vue'))
 import { getProfileStats, recordToday } from '../api/progress'
 import { loadTodayProgress } from '../utils/dailyGoal'
 import type { ProfileStats } from '../api/progress'
