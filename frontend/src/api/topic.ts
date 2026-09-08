@@ -19,6 +19,10 @@ export interface NodeData {
   x: number
   y: number
   parent_keys: string
+  estimated_minutes: number
+  mastery_source: 'assessment' | 'self_reported' | 'legacy' | null
+  mastery_confidence: number | null
+  assessment_result: import('../types/learningAgent').AssessmentResult | null
 }
 
 export interface Recommendation {
@@ -40,11 +44,6 @@ export async function createTopic(title: string, emoji: string = '📚') {
 export async function getNodes(topicId: number) {
   const res = await api.get(`/api/nodes/topic/${topicId}`)
   return res.data as NodeData[]
-}
-
-export async function masterNode(nodeId: number) {
-  const res = await api.put(`/api/nodes/${nodeId}/master`)
-  return res.data as NodeData
 }
 
 export async function generateTopic(title: string, emoji: string = '📚') {

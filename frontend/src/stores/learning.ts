@@ -39,7 +39,6 @@ export const useLearningStore = defineStore('learning', () => {
     fetchRecommendations: topicsStore.fetchRecommendations,
     setActiveTopic: topicsStore.setActiveTopic,
     setActiveNode: topicsStore.setActiveNode,
-    masterNode: topicsStore.masterNode,
     clearGraph: topicsStore.clearGraph,
     addMessage: dialogueStore.addMessage,
     requestTopicOverview: dialogueStore.requestTopicOverview,

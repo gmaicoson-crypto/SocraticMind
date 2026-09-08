@@ -9,6 +9,10 @@ export interface KNode {
   y: number
   state: NodeState
   dbId?: number
+  estimatedMinutes?: number
+  masterySource?: 'assessment' | 'self_reported' | 'legacy' | null
+  masteryConfidence?: number | null
+  assessmentResult?: import('./learningAgent').AssessmentResult | null
 }
 
 export interface KEdge {

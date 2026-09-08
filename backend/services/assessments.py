@@ -298,6 +298,8 @@ def _score_assessment(
     )
     result = {
         **score.model_dump(mode="json"),
+        "node_id": params["node_id"],
+        "node_label": params["node_label"],
         "passed": passed,
         "professional_review_required": professional_review_required,
         "threshold": {

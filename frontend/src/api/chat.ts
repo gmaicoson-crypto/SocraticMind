@@ -33,7 +33,6 @@ export function chatStream(
   onDone: () => void,
   onError: (err: any) => void,
   controllers?: AbortController,
-  onSignal?: (signal: string) => void,
   onMsgIds?: (userMsgId: number, aiMsgId: number) => void,
   kind: ChatKind = 'qa',
 ) {
@@ -92,7 +91,6 @@ export function chatStream(
             try {
               const json = JSON.parse(data)
               if (json.text) onChunk(json.text)
-              if (json.signal) onSignal?.(json.signal)
               if (json.msg_ids) onMsgIds?.(json.msg_ids.user, json.msg_ids.ai)
               if (json.error) onError(json.error)
             } catch (e) {

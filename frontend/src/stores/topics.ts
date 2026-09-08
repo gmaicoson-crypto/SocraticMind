@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { computed, ref, shallowRef } from 'vue'
 import type { KEdge, KNode, Topic } from '../types'
-import { getNodes, getRecommendations, getTopics, masterNode as apiMasterNode } from '../api/topic'
+import { getNodes, getRecommendations, getTopics } from '../api/topic'
 
 export const useTopicsStore = defineStore('topics', () => {
   const nodes = shallowRef<KNode[]>([])
@@ -30,6 +30,10 @@ export const useTopicsStore = defineStore('topics', () => {
         y: node.y,
         state: node.state,
         dbId: node.id,
+        estimatedMinutes: node.estimated_minutes,
+        masterySource: node.mastery_source,
+        masteryConfidence: node.mastery_confidence,
+        assessmentResult: node.assessment_result,
       }))
       const nextEdges: KEdge[] = []
       data.forEach((node) =>
@@ -103,33 +107,8 @@ export const useTopicsStore = defineStore('topics', () => {
     activeNode.value = null
   }
 
-  async function masterNode(nodeId: string) {
-    const node = nodes.value.find((candidate) => candidate.id === nodeId)
-    if (!node?.dbId) return
-    try {
-      await apiMasterNode(node.dbId)
-      nodes.value = nodes.value.map((candidate) =>
-        candidate.id === nodeId ? { ...candidate, state: 'mastered' as const } : candidate,
-      )
-      const masteredIds = new Set(
-        nodes.value
-          .filter((candidate) => candidate.state === 'mastered')
-          .map((candidate) => candidate.id),
-      )
-      nodes.value = nodes.value.map((candidate) => {
-        if (candidate.state !== 'locked') return candidate
-        const parents = edges.value
-          .filter((edge) => edge.target === candidate.id)
-          .map((edge) => edge.source)
-        return parents.some((parent) => masteredIds.has(parent))
-          ? { ...candidate, state: 'available' as const }
-          : candidate
-      })
-      lastMasteredId.value = nodeId
-    } catch (err) {
-      console.error('标记掌握失败', err)
-      throw err
-    }
+  function notifyMastery(nodeId: string) {
+    lastMasteredId.value = nodeId
   }
 
   return {
@@ -149,7 +128,7 @@ export const useTopicsStore = defineStore('topics', () => {
     fetchRecommendations,
     setActiveTopic,
     setActiveNode,
-    masterNode,
+    notifyMastery,
     clearGraph,
   }
 })

@@ -1,14 +1,15 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
-from sqlalchemy import or_
+from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import func, or_
 from pydantic import BaseModel
-from typing import List
+from typing import Any, List
 import uuid
 from core.database import get_db
 from core.deps import get_current_user
 from models.user import User
 from models.topic import Topic
 from models.node import Node
+from models.assessment import AssessmentAttempt
 from models.enums import MasterySource
 from core.errors import ApiError
 from services.mastery import record_mastery
@@ -73,6 +74,10 @@ class NodeResponse(BaseModel):
     x: float
     y: float
     parent_keys: str
+    estimated_minutes: int
+    mastery_source: str | None = None
+    mastery_confidence: float | None = None
+    assessment_result: dict[str, Any] | None = None
 
     class Config:
         from_attributes = True
@@ -145,7 +150,54 @@ def get_nodes(
     ).first()
     if not topic:
         raise HTTPException(status_code=404, detail="主题不存在")
-    return db.query(Node).filter(Node.topic_id == topic_id).all()
+    nodes = db.query(Node).filter(Node.topic_id == topic_id).all()
+    node_ids = [node.id for node in nodes]
+    latest_by_node = {}
+    if node_ids:
+        latest_ids = (
+            db.query(
+                AssessmentAttempt.node_id.label("node_id"),
+                func.max(AssessmentAttempt.id).label("attempt_id"),
+            )
+            .filter(
+                AssessmentAttempt.user_id == current_user.id,
+                AssessmentAttempt.node_id.in_(node_ids),
+                AssessmentAttempt.status == "completed",
+            )
+            .group_by(AssessmentAttempt.node_id)
+            .subquery()
+        )
+        attempts = (
+            db.query(AssessmentAttempt)
+            .options(joinedload(AssessmentAttempt.run))
+            .join(latest_ids, AssessmentAttempt.id == latest_ids.c.attempt_id)
+            .all()
+        )
+        latest_by_node = {attempt.node_id: attempt for attempt in attempts}
+    response = []
+    for node in nodes:
+        latest = latest_by_node.get(node.id)
+        response.append(
+            NodeResponse(
+                id=node.id,
+                node_key=node.node_key,
+                label=node.label,
+                sub=node.sub or "",
+                state=node.state,
+                x=node.x,
+                y=node.y,
+                parent_keys=node.parent_keys or "",
+                estimated_minutes=node.estimated_minutes,
+                mastery_source=node.mastery_source,
+                mastery_confidence=node.mastery_confidence,
+                assessment_result=(
+                    latest.run.result_json
+                    if latest and latest.run and latest.run.result_json
+                    else None
+                ),
+            )
+        )
+    return response
 
 
 @router.post("", response_model=NodeResponse)

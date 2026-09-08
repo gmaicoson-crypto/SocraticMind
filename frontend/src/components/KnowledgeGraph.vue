@@ -302,7 +302,6 @@ watch(() => store.lastMasteredId, (id) => {
 })
 
 function handleClick(node: KNode) {
-  if (node.state === 'locked') return
   store.setActiveNode(node)
 }
 </script>

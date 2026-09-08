@@ -100,6 +100,14 @@
           @confirm="confirmPlan"
           @cancel="cancelAgentFlow"
         />
+        <AssessmentResult
+          v-else-if="chatMode === 'socratic' && assessmentResult"
+          :result="assessmentResult"
+          :busy="agentStore.submitting"
+          @continue="continueLearning"
+          @retry="startAssessment"
+          @revert="requestMasteryAction('revert')"
+        />
         <div
           v-else-if="chatMode === 'socratic' && agentStore.run?.status === 'failed'"
           class="agent-error"
@@ -111,6 +119,15 @@
             <button :disabled="agentStore.submitting" @click="cancelAgentFlow">取消流程</button>
           </div>
         </div>
+        <NodeMasteryControls
+          v-else-if="chatMode === 'socratic' && store.activeNode && !draftTopic"
+          :node="store.activeNode"
+          :busy="agentStore.submitting"
+          :error="agentStore.error?.message"
+          @assess="startAssessment"
+          @self-report="requestMasteryAction('self_report')"
+          @revert="requestMasteryAction('revert')"
+        />
       </template>
     </MessageList>
 
@@ -135,6 +152,19 @@
       @clear-quote="quotedText = ''"
       @refresh-chips="loadSuggestions(true)"
     />
+    <ConfirmDialog
+      :model-value="masteryConfirm !== null"
+      :title="masteryConfirm === 'revert' ? '撤销掌握状态？' : '确认自报掌握？'"
+      :confirm-text="masteryConfirm === 'revert' ? '确认撤销' : '确认掌握'"
+      :loading="agentStore.submitting"
+      @close="masteryConfirm = null"
+      @update:model-value="value => { if (!value) masteryConfirm = null }"
+      @confirm="confirmMasteryAction"
+    >
+      {{ masteryConfirm === 'revert'
+        ? '撤销后，未满足先修条件的后续节点会由服务端重新锁定，已有学习证据不会删除。'
+        : '自报掌握不会生成评估分数。如需可验证结果，请先选择“开始评估”。' }}
+    </ConfirmDialog>
   </div>
 </template>
 
@@ -145,7 +175,7 @@ import { useLearningStore } from '../stores/learning'
 import { useAgentStore } from '../stores/agent'
 import { usePlansStore } from '../stores/plans'
 import type { DialogueSession as Session, Message } from '../types'
-import type { AgentRun, AgentRunUpdate, OnboardingInput } from '../types/learningAgent'
+import type { AgentRun, AgentRunUpdate, AssessmentResult as AssessmentResultData, OnboardingInput } from '../types/learningAgent'
 import { chatStream, getSuggestions, deleteMessages, deleteChatSession } from '../api/chat'
 import { updateTopicTitle } from '../api/topic'
 import { now, nowDate, extractTopic, isNewTopicIntent } from '../utils/chat'
@@ -155,6 +185,7 @@ import { useTopicDialogue } from '../composables/useTopicDialogue'
 import { useDialogueHistory } from '../composables/useDialogueHistory'
 import { useSessionTopicChoice } from '../composables/useSessionTopicChoice'
 import { useOnboardingFlow } from '../composables/useOnboardingFlow'
+import { useAssessment } from '../composables/useAssessment'
 
 import DialogueHistoryPanel from './dialogue/DialogueHistoryPanel.vue'
 import TopicNameBar from './dialogue/TopicNameBar.vue'
@@ -163,6 +194,9 @@ import DialogueInputBar from './dialogue/DialogueInputBar.vue'
 import OnboardingForm from './agent/OnboardingForm.vue'
 import AgentStepMessage from './agent/AgentStepMessage.vue'
 import PlanPreview from './agent/PlanPreview.vue'
+import AssessmentResult from './agent/AssessmentResult.vue'
+import NodeMasteryControls from './agent/NodeMasteryControls.vue'
+import ConfirmDialog from './ui/ConfirmDialog.vue'
 
 const store = useLearningStore()
 const agentStore = useAgentStore()
@@ -192,6 +226,8 @@ const quotedText = ref('')
 const showHistory = ref(false)
 const editingSessionId = ref<string | null>(null)
 const editingName = ref('')
+const masteryConfirm = ref<'self_report' | 'revert' | null>(null)
+const dismissedAssessmentNodeId = ref<number | null>(null)
 
 let pendingMsgIds: { user: number; ai: number } | null = null
 
@@ -238,6 +274,16 @@ const activeAgentRun = computed(() => Boolean(
   agentStore.run && !['completed', 'cancelled'].includes(agentStore.run.status),
 ))
 const draftTopic = computed(() => agentStore.onboardingTopic ?? agentStore.topicPlanDraft?.title ?? null)
+const assessmentResult = computed<AssessmentResultData | null>(() => {
+  const run = agentStore.run
+  if (run?.type === 'assessment' && run.status === 'completed' && run.result && 'scores' in run.result) {
+    const result = run.result as AssessmentResultData
+    if (!store.activeNode?.dbId || result.node_id === store.activeNode.dbId) return result
+  }
+  const node = store.activeNode
+  if (!node?.assessmentResult || dismissedAssessmentNodeId.value === node.dbId) return null
+  return node.assessmentResult
+})
 const socraticBadge = computed(() => Math.max(0, currentSocraticSession.value.messages.length - 1))
 const normalBadge = computed(() => Math.max(0, currentNormalSession.value.messages.length - 1))
 
@@ -339,6 +385,10 @@ const onboardingFlow = useOnboardingFlow({
   sessionId: () => currentSessionId.value,
   onCompleted: handleOnboardingCompleted,
 })
+const assessmentFlow = useAssessment({
+  userId: () => store.userInfo?.id,
+  sessionId: () => currentSessionId.value,
+})
 
 async function handleOnboardingCompleted(run: AgentRun) {
   const result = run.result as Record<string, unknown> | null
@@ -392,7 +442,9 @@ async function submitChoiceAnswer(answer: string) {
       metadata: { run_id: runId, step_id: stepId },
     })
   }
-  await onboardingFlow.answer(answer)
+  await (agentStore.run?.type === 'assessment'
+    ? assessmentFlow.answer(answer)
+    : onboardingFlow.answer(answer))
   scrollToBottom()
 }
 
@@ -419,7 +471,9 @@ async function confirmPlan() {
 }
 
 async function cancelAgentFlow() {
-  const response = await onboardingFlow.cancel()
+  const response = await (agentStore.run?.type === 'assessment'
+    ? assessmentFlow.cancel()
+    : onboardingFlow.cancel())
   if (response?.status === 'cancelled') {
     agentStore.closeOnboarding()
     agentStore.clearRun()
@@ -428,7 +482,44 @@ async function cancelAgentFlow() {
 }
 
 async function retryAgentFlow() {
-  await onboardingFlow.retry()
+  await (agentStore.run?.type === 'assessment'
+    ? assessmentFlow.retry()
+    : onboardingFlow.retry())
+  scrollToBottom()
+}
+
+async function startAssessment() {
+  const nodeId = store.activeNode?.dbId
+  if (!nodeId || store.activeNode?.state === 'locked') return
+  dismissedAssessmentNodeId.value = null
+  await assessmentFlow.start(nodeId)
+  scrollToBottom()
+}
+
+function continueLearning() {
+  dismissedAssessmentNodeId.value = store.activeNode?.dbId ?? null
+  agentStore.clearRun()
+  scrollToBottom()
+}
+
+function requestMasteryAction(action: 'self_report' | 'revert') {
+  masteryConfirm.value = action
+}
+
+async function confirmMasteryAction() {
+  const action = masteryConfirm.value
+  const nodeId = store.activeNode?.dbId
+  if (!action || !nodeId) return
+  const response = action === 'revert'
+    ? await assessmentFlow.revert(nodeId)
+    : await assessmentFlow.selfReport(nodeId)
+  if (response) {
+    masteryConfirm.value = null
+    if (action === 'revert') {
+      dismissedAssessmentNodeId.value = nodeId
+      agentStore.clearRun()
+    }
+  }
   scrollToBottom()
 }
 
@@ -666,31 +757,6 @@ function abortChat() {
   scrollToBottom()
 }
 
-async function handleAutoMaster() {
-  if (!store.activeNode) return
-  const currentTopicIdSnapshot = store.activeTopicId
-  try {
-    await store.masterNode(store.activeNode.id)
-    store.setActiveNode({ ...store.activeNode, state: 'mastered' })
-    await store.fetchTopicsOnly()
-    await store.fetchNodes(Number(currentTopicIdSnapshot))
-    const allMastered = store.nodes.length > 0 && store.nodes.every(n => n.state === 'mastered')
-    if (allMastered) {
-      pushMessage({
-        role: 'ai',
-        text: '🎉 恭喜！你已经掌握了本主题的**所有知识节点**！\n\n这是一个了不起的成就，继续保持这种学习热情，探索下一个主题吧！',
-        time: now(),
-      })
-    }
-  } catch (err) {
-    console.error('自动标记掌握失败', err)
-  }
-}
-
-function handleSignal(signal: string) {
-  if (signal === 'MASTERED') handleAutoMaster()
-}
-
 function buildUserInput(v: string): string {
   if (quotedText.value) {
     const q = quotedText.value
@@ -773,7 +839,9 @@ async function send() {
     })
     input.value = ''
     scrollToBottom()
-    await onboardingFlow.answer(v)
+    await (agentStore.run.type === 'assessment'
+      ? assessmentFlow.answer(v)
+      : onboardingFlow.answer(v))
     scrollToBottom()
     return
   }
@@ -909,7 +977,6 @@ async function send() {
       streamingText.value = ''; isThinking.value = false; scrollToBottom()
     },
     abortController,
-    handleSignal,
     (userMsgId, aiMsgId) => { pendingMsgIds = { user: userMsgId, ai: aiMsgId } },
   )
 }
@@ -955,7 +1022,6 @@ async function retryAt(aiIndex: number) {
       streamingText.value = ''; isThinking.value = false; scrollToBottom()
     },
     abortController,
-    handleSignal,
   )
 }
 
@@ -1001,7 +1067,6 @@ function streamOverview(kind: 'topic' | 'node', identifier: string): Promise<voi
         resolve()
       },
       abortController,
-      undefined,
       (userMsgId, aiMsgId) => { pendingMsgIds = { user: userMsgId, ai: aiMsgId } },
       apiKind,
     )
@@ -1051,7 +1116,6 @@ watch(() => store.activeNode?.id, async (id) => {
         isThinking.value = false
       },
       abortController,
-      handleSignal,
       (userMsgId, aiMsgId) => { pendingMsgIds = { user: userMsgId, ai: aiMsgId } },
     )
     return

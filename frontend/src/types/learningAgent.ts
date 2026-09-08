@@ -81,6 +81,8 @@ export interface AssessmentScoreItem {
 }
 
 export interface AssessmentResult {
+  node_id: number
+  node_label: string
   scores: AssessmentScoreItem[]
   total_score: number
   evaluation_confidence: number

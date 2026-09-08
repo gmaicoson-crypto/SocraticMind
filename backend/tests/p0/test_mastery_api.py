@@ -26,6 +26,13 @@ def test_assessment_api_and_answer_protocol(app, client, db_session, auth_user):
         assert response.status_code == 200
         run = response.json()
     assert run["result"]["passed"] is True
+    assert run["result"]["node_id"] == node.id
+
+    nodes = client.get(f"/api/nodes/topic/{node.topic_id}")
+    assert nodes.status_code == 200
+    node_payload = next(item for item in nodes.json() if item["id"] == node.id)
+    assert node_payload["mastery_source"] == "assessment"
+    assert node_payload["assessment_result"]["passed"] is True
 
 
 def test_self_report_and_revert_are_idempotent(app, client, db_session, auth_user):
