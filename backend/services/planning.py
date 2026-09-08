@@ -47,6 +47,7 @@ def _schedule(
     timezone: str | None,
     target_date: date | None,
     completed_items: Sequence[PlanItemDraft],
+    skip_node_keys: set[str],
 ) -> PlanningResult:
     if not 5 <= daily_minutes <= 240:
         raise ValueError("daily_minutes must be between 5 and 240")
@@ -74,6 +75,8 @@ def _schedule(
     for node in ordered_nodes:
         node_key = node["key"]
         duration = int(node.get("estimated_minutes", 30))
+        if node_key in skip_node_keys:
+            continue
         total_minutes += duration
         remaining = max(0, duration - completed_by_node.get(node_key, 0))
         while remaining:
@@ -125,6 +128,7 @@ def build_schedule(
     start_date: date,
     timezone: str | None,
     target_date: date | None = None,
+    skip_node_keys: set[str] | None = None,
 ) -> PlanningResult:
     return _schedule(
         nodes,
@@ -133,6 +137,7 @@ def build_schedule(
         timezone=timezone,
         target_date=target_date,
         completed_items=[],
+        skip_node_keys=skip_node_keys or set(),
     )
 
 
@@ -144,6 +149,7 @@ def replan_schedule(
     existing_items: Sequence[PlanItemDraft],
     today: date | None = None,
     target_date: date | None = None,
+    skip_node_keys: set[str] | None = None,
 ) -> PlanningResult:
     effective_today, _ = today_in_timezone(timezone)
     return _schedule(
@@ -153,4 +159,5 @@ def replan_schedule(
         timezone=timezone,
         target_date=target_date,
         completed_items=existing_items,
+        skip_node_keys=skip_node_keys or set(),
     )

@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from core.errors import ApiError
 from models import AgentRun, LearnerMemory, Node, StudyPlan, StudyPlanItem, Topic
 from models.enums import AgentRunStatus, AgentRunType, MemorySource
-from schemas.agent import OnboardingRequest
+from schemas.agent import OnboardingRequest, TopicPlanRequest
 from schemas.structured_ai import (
     DiagnosticQuestions,
     DiagnosticScore,
@@ -290,6 +290,53 @@ def _graph_messages(state: dict[str, Any]) -> list[dict]:
     ]
 
 
+def _existing_topic_preview(state: dict[str, Any]) -> dict[str, Any]:
+    params = state["params"]
+    graph = deepcopy(state["node_snapshot"])
+    start_date, effective_timezone = today_in_timezone(params.get("timezone"))
+    target_date = params.get("target_date")
+    if target_date:
+        from datetime import date
+
+        target_date = date.fromisoformat(target_date)
+    plan = build_schedule(
+        graph,
+        daily_minutes=params["daily_minutes"],
+        start_date=start_date,
+        target_date=target_date,
+        timezone=effective_timezone,
+        skip_node_keys={node["key"] for node in graph if node["state"] == "mastered"},
+    )
+    return {
+        "existing_topic_id": params["existing_topic_id"],
+        "topic": params["topic"],
+        "emoji": state["topic_emoji"],
+        "goal": params["goal"],
+        "domain": params["domain"],
+        "outcome_type": params["outcome_type"],
+        "diagnostic": state.get("diagnostic_result"),
+        "nodes": graph,
+        "plan_items": [
+            {
+                "node_key": item.node_key,
+                "scheduled_date": item.scheduled_date.isoformat(),
+                "day_order": item.day_order,
+                "estimated_minutes": item.estimated_minutes,
+                "status": item.status,
+            }
+            for item in plan.items
+        ],
+        "total_minutes": plan.total_minutes,
+        "start_date": start_date.isoformat(),
+        "estimated_end_date": plan.estimated_end_date.isoformat(),
+        "target_date": params.get("target_date"),
+        "will_miss_target": plan.will_miss_target,
+        "delay_days": plan.delay_days,
+        "effective_timezone": plan.effective_timezone,
+        "risk_notice": high_risk_notice(params["domain"], params["topic"]),
+    }
+
+
 def _generate_preview(
     db: Session, snapshot: RunSnapshot, generator: Generator | None
 ) -> AgentRun:
@@ -317,6 +364,22 @@ def _generate_preview(
             state=state,
             ai_result=score,
         )
+
+    if state["params"].get("existing_topic_id"):
+        try:
+            preview = _existing_topic_preview(state)
+        except (GraphValidationError, ValueError):
+            return _mark_failed(db, current, code="EXISTING_GRAPH_INVALID", retryable=False)
+        state["preview"] = preview
+        state["processing"] = False
+        state["processing_stage"] = None
+        saved = _conditional_save(
+            db,
+            current,
+            status=AgentRunStatus.AWAITING_CONFIRMATION,
+            state=state,
+        )
+        return _load_owned(db, saved.user_id, saved.id)
 
     try:
         graph_result = _invoke(
@@ -428,6 +491,118 @@ def start_onboarding(
     return _generate_preview(db, snapshot, generator)
 
 
+def _serialize_node_snapshot(node: Node) -> dict[str, Any]:
+    return {
+        "id": node.id,
+        "key": node.node_key,
+        "label": node.label,
+        "sub": node.sub or "",
+        "state": node.state,
+        "x": node.x,
+        "y": node.y,
+        "parent_keys": [
+            key.strip() for key in (node.parent_keys or "").split(",") if key.strip()
+        ],
+        "estimated_minutes": node.estimated_minutes,
+    }
+
+
+def start_topic_plan(
+    db: Session,
+    *,
+    user_id: int,
+    topic_id: int,
+    request: TopicPlanRequest,
+    generator: Generator | None = None,
+) -> AgentRun:
+    topic = (
+        db.query(Topic)
+        .filter(Topic.id == topic_id, Topic.user_id == user_id)
+        .first()
+    )
+    if topic is None:
+        raise ApiError(status_code=404, code="TOPIC_NOT_FOUND", message="主题不存在")
+    if db.query(StudyPlan.id).filter(StudyPlan.topic_id == topic.id).first():
+        raise ApiError(status_code=409, code="PLAN_ALREADY_EXISTS", message="主题已有学习计划")
+    nodes = db.query(Node).filter(Node.topic_id == topic.id).order_by(Node.id).all()
+    if not nodes:
+        raise ApiError(status_code=409, code="TOPIC_HAS_NO_NODES", message="主题没有可排期节点")
+
+    params = request.model_dump(mode="json")
+    params.update({"topic": topic.title, "existing_topic_id": topic.id})
+    run = AgentRun(
+        user_id=user_id,
+        session_id=request.session_id,
+        topic_id=topic.id,
+        run_type=AgentRunType.TOPIC_PLAN.value,
+        status=AgentRunStatus.COLLECTING.value,
+        state_json={
+            "params": params,
+            "processing": False,
+            "topic_emoji": topic.emoji,
+            "node_snapshot": [_serialize_node_snapshot(node) for node in nodes],
+        },
+    )
+    db.add(run)
+    db.flush()
+    run_id = run.id
+    db.commit()
+    if request.use_diagnostic:
+        snapshot = _begin_processing(
+            db,
+            user_id=user_id,
+            run_id=run_id,
+            target_status=AgentRunStatus.DIAGNOSING,
+            stage="diagnostic_questions",
+        )
+        return _generate_questions(db, snapshot, generator)
+    snapshot = _begin_processing(
+        db,
+        user_id=user_id,
+        run_id=run_id,
+        target_status=AgentRunStatus.DRAFTING,
+        stage="existing_plan",
+    )
+    return _generate_preview(db, snapshot, generator)
+
+
+def update_run_parameters(
+    db: Session,
+    *,
+    user_id: int,
+    run_id: str,
+    updates: dict[str, Any],
+    generator: Generator | None = None,
+) -> AgentRun:
+    run = _load_owned(db, user_id, run_id, for_update=True)
+    if run.status not in {
+        AgentRunStatus.COLLECTING.value,
+        AgentRunStatus.AWAITING_CONFIRMATION.value,
+    }:
+        db.rollback()
+        raise ApiError(
+            status_code=409,
+            code="AGENT_STATE_CONFLICT",
+            message="当前阶段不能修改计划参数",
+            retryable=False,
+        )
+    state = deepcopy(run.state_json or {})
+    params = deepcopy(state["params"])
+    params.update(updates)
+    state["params"] = params
+    state.pop("preview", None)
+    state["processing"] = True
+    state["processing_stage"] = (
+        "existing_plan" if params.get("existing_topic_id") else "graph_draft"
+    )
+    run.status = transition(run.status, AgentRunStatus.DRAFTING).value
+    run.state_json = state
+    run.version += 1
+    snapshot = _snapshot(run)
+    db.commit()
+    return _generate_preview(db, snapshot, generator)
+
+
 def submit_answer(
     db: Session,
     *,
@@ -527,7 +702,7 @@ def retry_run(
     db.commit()
     if stage == "diagnostic_questions":
         return _generate_questions(db, snapshot, generator)
-    if stage in {"diagnostic_score", "graph_draft"}:
+    if stage in {"diagnostic_score", "graph_draft", "existing_plan"}:
         return _generate_preview(db, snapshot, generator)
     return _mark_failed(db, snapshot, code="AGENT_STAGE_UNKNOWN", retryable=False)
 
@@ -557,29 +732,64 @@ def confirm_run(
 
     from datetime import date
 
-    topic = Topic(
-        user_id=user_id,
-        title=preview["topic"],
-        emoji=preview.get("emoji") or "📚",
-    )
-    db.add(topic)
-    db.flush()
-    nodes_by_key: dict[str, Node] = {}
-    for draft in preview["nodes"]:
-        node = Node(
-            topic_id=topic.id,
-            node_key=draft["key"],
-            label=draft["label"],
-            sub=draft.get("sub", ""),
-            state="available" if not draft.get("parent_keys") else "locked",
-            x=draft["x"],
-            y=draft["y"],
-            parent_keys=",".join(draft.get("parent_keys", [])),
-            estimated_minutes=draft["estimated_minutes"],
+    existing_topic_id = state["params"].get("existing_topic_id")
+    if existing_topic_id:
+        topic = (
+            db.query(Topic)
+            .filter(Topic.id == existing_topic_id, Topic.user_id == user_id)
+            .with_for_update()
+            .first()
         )
-        db.add(node)
-        nodes_by_key[node.node_key] = node
-    db.flush()
+        if topic is None:
+            db.rollback()
+            raise ApiError(status_code=404, code="TOPIC_NOT_FOUND", message="主题不存在")
+        live_nodes = (
+            db.query(Node)
+            .filter(Node.topic_id == topic.id)
+            .order_by(Node.id)
+            .with_for_update()
+            .all()
+        )
+        if [_serialize_node_snapshot(node) for node in live_nodes] != state["node_snapshot"]:
+            db.rollback()
+            raise ApiError(
+                status_code=409,
+                code="AGENT_STATE_CONFLICT",
+                message="主题节点已变化，请重新生成计划预览",
+                retryable=False,
+            )
+        if db.query(StudyPlan.id).filter(StudyPlan.topic_id == topic.id).first():
+            db.rollback()
+            raise ApiError(
+                status_code=409,
+                code="PLAN_ALREADY_EXISTS",
+                message="主题已有学习计划",
+            )
+        nodes_by_key = {node.node_key: node for node in live_nodes}
+    else:
+        topic = Topic(
+            user_id=user_id,
+            title=preview["topic"],
+            emoji=preview.get("emoji") or "📚",
+        )
+        db.add(topic)
+        db.flush()
+        nodes_by_key: dict[str, Node] = {}
+        for draft in preview["nodes"]:
+            node = Node(
+                topic_id=topic.id,
+                node_key=draft["key"],
+                label=draft["label"],
+                sub=draft.get("sub", ""),
+                state="available" if not draft.get("parent_keys") else "locked",
+                x=draft["x"],
+                y=draft["y"],
+                parent_keys=",".join(draft.get("parent_keys", [])),
+                estimated_minutes=draft["estimated_minutes"],
+            )
+            db.add(node)
+            nodes_by_key[node.node_key] = node
+        db.flush()
     plan = StudyPlan(
         user_id=user_id,
         topic_id=topic.id,

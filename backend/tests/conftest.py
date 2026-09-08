@@ -19,7 +19,7 @@ from sqlalchemy.pool import StaticPool
 from core.database import Base, get_db
 from core.deps import get_current_user
 from models import User
-from routers import chat, nodes, topics
+from routers import agent, chat, nodes, topics
 
 
 @pytest.fixture()
@@ -64,6 +64,10 @@ def app(db_session, auth_user):
     test_app.include_router(topics.router)
     test_app.include_router(nodes.router)
     test_app.include_router(chat.router)
+    test_app.include_router(agent.router)
+    from core.errors import install_api_error_handler
+
+    install_api_error_handler(test_app)
 
     def override_db():
         yield db_session
