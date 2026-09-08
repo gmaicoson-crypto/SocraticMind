@@ -1,6 +1,6 @@
 // Vite 构建配置，控制插件、别名和打包策略。
 
-import { defineConfig } from 'vite'
+import { defineConfig } from 'vitest/config'
 import vue from '@vitejs/plugin-vue'
 
 const vendorChunks: Record<string, string[]> = {
@@ -14,6 +14,10 @@ const vendorChunks: Record<string, string[]> = {
 
 export default defineConfig({
   plugins: [vue()],
+  test: {
+    environment: 'jsdom',
+    clearMocks: true,
+  },
   build: {
     rollupOptions: {
       output: {
