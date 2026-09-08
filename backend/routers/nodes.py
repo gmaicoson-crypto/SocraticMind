@@ -12,6 +12,8 @@ from models.node import Node
 from models.enums import MasterySource
 from core.errors import ApiError
 from services.mastery import record_mastery
+from services.mastery import revert_mastery
+from schemas.mastery import MasteryRequest
 
 router = APIRouter(prefix="/api/nodes", tags=["节点"])
 
@@ -84,6 +86,50 @@ class CreateNodeRequest(BaseModel):
     x: float = 0
     y: float = 0
     parent_keys: str = ""
+
+
+def _mastery_response(result):
+    return {
+        "event_id": result.event_id,
+        "node_id": result.node_id,
+        "state": result.state,
+        "refresh_required": result.refresh_required,
+    }
+
+
+@router.post("/{node_id}/mastery")
+def self_report_mastery(
+    node_id: int,
+    req: MasteryRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return _mastery_response(
+        record_mastery(
+            db,
+            user_id=current_user.id,
+            node_id=node_id,
+            source=MasterySource.SELF_REPORTED,
+            request_id=req.request_id,
+        )
+    )
+
+
+@router.post("/{node_id}/mastery/revert")
+def undo_mastery(
+    node_id: int,
+    req: MasteryRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return _mastery_response(
+        revert_mastery(
+            db,
+            user_id=current_user.id,
+            node_id=node_id,
+            request_id=req.request_id,
+        )
+    )
 
 
 @router.get("/topic/{topic_id}", response_model=List[NodeResponse])
