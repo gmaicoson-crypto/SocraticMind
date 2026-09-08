@@ -68,4 +68,16 @@ describe('useOnboardingFlow', () => {
     expect(agentApi.getAgentRun).toHaveBeenCalledWith('run-1')
     expect(agentApi.startOnboarding).not.toHaveBeenCalled()
   })
+
+  it('indexes an existing-topic plan run with the same recovery protocol', async () => {
+    const topicRun = { ...active, type: 'topic_plan' as const }
+    vi.mocked(agentApi.startTopicPlan).mockResolvedValue(topicRun)
+    const flow = useOnboardingFlow({ userId: () => 5, sessionId: () => 'session-1' })
+    const { topic: _topic, ...topicInput } = input
+
+    await flow.startTopicPlan(9, topicInput)
+
+    expect(agentApi.startTopicPlan).toHaveBeenCalledWith(9, topicInput)
+    expect(localStorage.getItem('sm_agent_runs_5')).toContain('run-1')
+  })
 })

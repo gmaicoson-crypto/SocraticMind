@@ -14,6 +14,7 @@ export const usePlansStore = defineStore('plans', () => {
   const error = shallowRef<ApiProblem | null>(null)
   const requestIds = new Map<number, string>()
   let activeReplan: Promise<StudyPlan | null> | null = null
+  let activeOverdueReplan: Promise<TodayPlan | null> | null = null
 
   async function fetchToday(timezone?: string) {
     loading.value = true
@@ -65,6 +66,21 @@ export const usePlansStore = defineStore('plans', () => {
     return activeReplan
   }
 
+  function replanOverdue(planIds: number[], timezone?: string) {
+    if (activeOverdueReplan) return activeOverdueReplan
+    const uniquePlanIds = [...new Set(planIds)]
+    activeOverdueReplan = (async () => {
+      for (const planId of uniquePlanIds) {
+        const response = await replan(planId, timezone)
+        if (!response) return null
+      }
+      return fetchToday(timezone)
+    })().finally(() => {
+      activeOverdueReplan = null
+    })
+    return activeOverdueReplan
+  }
+
   function clearPlans() {
     todayPlan.value = null
     topicPlan.value = null
@@ -74,6 +90,6 @@ export const usePlansStore = defineStore('plans', () => {
 
   return {
     todayPlan, topicPlan, loading, replanning, error,
-    fetchToday, fetchTopicPlan, replan, clearPlans,
+    fetchToday, fetchTopicPlan, replan, replanOverdue, clearPlans,
   }
 })

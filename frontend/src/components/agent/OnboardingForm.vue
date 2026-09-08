@@ -2,7 +2,7 @@
   <form class="agent-tool onboarding-form" @submit.prevent="submit">
     <div class="tool-heading">
       <div>
-        <p class="tool-kicker">新学习主题</p>
+        <p class="tool-kicker">{{ mode === 'existing-topic' ? '创建主题计划' : '新学习主题' }}</p>
         <h3>{{ form.topic }}</h3>
       </div>
       <span class="step-badge">设置目标</span>
@@ -58,7 +58,7 @@
       <BaseButton :disabled="busy" @click="emit('cancel')">取消</BaseButton>
       <BaseButton class="primary" type="submit" :loading="busy">
         <template #loading>处理中</template>
-        开始
+        {{ mode === 'existing-topic' ? '生成计划' : '开始' }}
       </BaseButton>
     </div>
   </form>
@@ -76,10 +76,12 @@ const props = withDefaults(defineProps<{
   busy?: boolean
   defaultTimezone?: string
   error?: string
+  mode?: 'new-topic' | 'existing-topic'
 }>(), {
   busy: false,
   defaultTimezone: '',
   error: '',
+  mode: 'new-topic',
 })
 
 const emit = defineEmits<{

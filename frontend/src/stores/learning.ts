@@ -47,9 +47,11 @@ export const useLearningStore = defineStore('learning', () => {
     recordLearning: progressStore.recordLearning,
     beginOnboarding: agentStore.beginOnboarding,
     openOnboarding: agentStore.openOnboarding,
+    openTopicPlan: agentStore.openTopicPlan,
     restoreAgentRun: agentStore.restoreRun,
     answerAgentRun: agentStore.answer,
     fetchTodayPlan: plansStore.fetchToday,
     replanStudyPlan: plansStore.replan,
+    replanOverduePlans: plansStore.replanOverdue,
   }
 })

@@ -42,12 +42,24 @@
               </svg>
               笔记与画布
             </button>
+            <button
+              class="right-tab"
+              :class="{ active: rightPanel === 'plan' }"
+              @click="setRightPanel('plan')"
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                <path d="M8 2v4M16 2v4M3 9h18M5 4h14a2 2 0 0 1 2 2v14H3V6a2 2 0 0 1 2-2Z"/>
+                <path d="m8 15 2 2 5-5"/>
+              </svg>
+              今日计划
+            </button>
           </div>
 
           <div class="right-panel">
             <KeepAlive>
               <KnowledgeGraph v-if="rightPanel === 'graph'" />
               <NotesPanel v-else-if="rightPanel === 'notes'" />
+              <TodayPlanPanel v-else @navigated="setRightPanel('graph')" />
             </KeepAlive>
           </div>
         </div>
@@ -66,14 +78,15 @@ import SocraticDialogue from '../components/SocraticDialogue.vue'
 
 const KnowledgeGraph = defineAsyncComponent(() => import('../components/KnowledgeGraph.vue'))
 const NotesPanel = defineAsyncComponent(() => import('../components/NotesPanel.vue'))
+const TodayPlanPanel = defineAsyncComponent(() => import('../components/TodayPlanPanel.vue'))
 import { useLearningStore } from '../stores/learning'
 import { useResizablePane } from '../composables/useResizablePane'
 import { useStudyTimer } from '../composables/useStudyTimer'
 
 const store = useLearningStore()
-const rightPanel = ref<'graph' | 'notes'>('graph')
+const rightPanel = ref<'graph' | 'notes' | 'plan'>('graph')
 
-function setRightPanel(panel: 'graph' | 'notes') {
+function setRightPanel(panel: 'graph' | 'notes' | 'plan') {
   rightPanel.value = panel
 }
 
@@ -178,6 +191,8 @@ useStudyTimer(() => store.userInfo?.id)
   cursor: pointer;
   font-family: var(--font-sans);
   transition: all .15s;
+  min-width: 0;
+  white-space: nowrap;
 }
 .right-tab:hover {
   background: var(--bg-3);
@@ -198,5 +213,9 @@ useStudyTimer(() => store.userInfo?.id)
   inset: 0;
   width: 100%;
   height: 100%;
+}
+@media (max-width: 900px) {
+  .right-tab { padding-inline: 7px; font-size: 11.5px; }
+  .right-tab svg { display: none; }
 }
 </style>

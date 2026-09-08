@@ -83,4 +83,18 @@ describe('plans store', () => {
     expect(calls[0][1]).toBe(calls[1][1])
     expect(calls[2][1]).not.toBe(calls[1][1])
   })
+
+  it('replans each overdue plan once and replaces today data from the server', async () => {
+    const refreshed = { ...today, date: '2026-09-08' }
+    vi.mocked(plansApi.replanStudyPlan).mockResolvedValue(plan)
+    vi.mocked(plansApi.getTodayPlan).mockResolvedValue(refreshed)
+    const store = usePlansStore()
+
+    const result = await store.replanOverdue([4, 4, 5], 'UTC')
+
+    expect(plansApi.replanStudyPlan).toHaveBeenCalledTimes(2)
+    expect(plansApi.getTodayPlan).toHaveBeenCalledWith('UTC')
+    expect(result).toEqual(refreshed)
+    expect(store.todayPlan).toEqual(refreshed)
+  })
 })

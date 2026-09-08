@@ -30,6 +30,7 @@ export const useAgentStore = defineStore('agent', () => {
   const submitting = ref(false)
   const error = shallowRef<ApiProblem | null>(null)
   const onboardingTopic = ref<string | null>(null)
+  const topicPlanDraft = shallowRef<{ topicId: number; title: string } | null>(null)
   const preview = computed(() => run.value?.preview ?? null)
   const result = computed(() => run.value?.result ?? null)
   const canRetry = computed(() => run.value?.status === 'failed' && Boolean(run.value.error?.retryable))
@@ -197,6 +198,7 @@ export const useAgentStore = defineStore('agent', () => {
   function openOnboarding(topic: string) {
     if (run.value && !['completed', 'cancelled'].includes(run.value.status)) return false
     clearRun()
+    topicPlanDraft.value = null
     onboardingTopic.value = topic.trim() || null
     return Boolean(onboardingTopic.value)
   }
@@ -205,10 +207,22 @@ export const useAgentStore = defineStore('agent', () => {
     onboardingTopic.value = null
   }
 
+  function openTopicPlan(topicId: number, title: string) {
+    if (run.value && !['completed', 'cancelled'].includes(run.value.status)) return false
+    clearRun()
+    onboardingTopic.value = null
+    topicPlanDraft.value = { topicId, title }
+    return true
+  }
+
+  function closeTopicPlan() {
+    topicPlanDraft.value = null
+  }
+
   return {
-    run, loading, submitting, error, onboardingTopic, preview, result, canRetry,
+    run, loading, submitting, error, onboardingTopic, topicPlanDraft, preview, result, canRetry,
     restoreRun, beginOnboarding, beginTopicPlan, beginAssessment, answer,
     update, confirm, cancel, retry, selfReportMastery, revertMastery, clearRun,
-    openOnboarding, closeOnboarding,
+    openOnboarding, closeOnboarding, openTopicPlan, closeTopicPlan,
   }
 })

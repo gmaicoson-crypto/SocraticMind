@@ -74,12 +74,13 @@
     >
       <template #agent>
         <OnboardingForm
-          v-if="chatMode === 'socratic' && agentStore.onboardingTopic && !activeAgentRun"
-          :topic="agentStore.onboardingTopic"
+          v-if="chatMode === 'socratic' && draftTopic && !activeAgentRun"
+          :topic="draftTopic"
           :session-id="currentSessionId"
           :busy="agentStore.submitting"
           :error="agentStore.error?.message"
-          @submit="startOnboarding"
+          :mode="agentStore.topicPlanDraft ? 'existing-topic' : 'new-topic'"
+          @submit="startLearningPlan"
           @cancel="cancelOnboardingDraft"
         />
         <AgentStepMessage
@@ -125,7 +126,7 @@
       :is-thinking="isThinking"
       :is-generating="isGenerating || agentStore.submitting"
       :send-disabled="agentStore.run?.status === 'awaiting_confirmation'"
-      :show-chips="!activeAgentRun && !agentStore.onboardingTopic"
+      :show-chips="!activeAgentRun && !draftTopic"
       :socratic-badge="socraticBadge"
       :normal-badge="normalBadge"
       :placeholder="placeholder"
@@ -236,6 +237,7 @@ const currentSessionName = computed(() => currentSession.value?.name ?? '苏格�
 const activeAgentRun = computed(() => Boolean(
   agentStore.run && !['completed', 'cancelled'].includes(agentStore.run.status),
 ))
+const draftTopic = computed(() => agentStore.onboardingTopic ?? agentStore.topicPlanDraft?.title ?? null)
 const socraticBadge = computed(() => Math.max(0, currentSocraticSession.value.messages.length - 1))
 const normalBadge = computed(() => Math.max(0, currentNormalSession.value.messages.length - 1))
 
@@ -358,14 +360,26 @@ async function handleOnboardingCompleted(run: AgentRun) {
   await plansStore.fetchToday(run.preview?.effective_timezone)
 }
 
-async function startOnboarding(input: OnboardingInput) {
-  const response = await onboardingFlow.start(input)
-  if (response) agentStore.closeOnboarding()
+async function startLearningPlan(input: OnboardingInput) {
+  const topicPlanDraft = agentStore.topicPlanDraft
+  const response = topicPlanDraft
+    ? await onboardingFlow.startTopicPlan(topicPlanDraft.topicId, withoutTopic(input))
+    : await onboardingFlow.start(input)
+  if (response) {
+    agentStore.closeOnboarding()
+    agentStore.closeTopicPlan()
+  }
   scrollToBottom()
+}
+
+function withoutTopic(input: OnboardingInput) {
+  const { topic: _topic, ...topicPlanInput } = input
+  return topicPlanInput
 }
 
 function cancelOnboardingDraft() {
   agentStore.closeOnboarding()
+  agentStore.closeTopicPlan()
 }
 
 async function submitChoiceAnswer(answer: string) {
@@ -476,6 +490,18 @@ watch(() => agentStore.onboardingTopic, (topic) => {
     session.awaitingTopicChoice = false
     socraticSessions.value.unshift(session)
     socraticCurrentId.value = session.id
+    saveSessions()
+  }
+  nextTick(scrollToBottom)
+})
+
+watch(() => agentStore.topicPlanDraft, (draft) => {
+  if (!draft) return
+  chatMode.value = 'socratic'
+  const session = findOrCreateTopicSession(draft.topicId)
+  if (socraticCurrentId.value !== session.id) {
+    socraticCurrentId.value = session.id
+    showHistory.value = false
     saveSessions()
   }
   nextTick(scrollToBottom)

@@ -1,5 +1,5 @@
 import { useAgentStore } from '../stores/agent'
-import type { AgentRun, AgentRunUpdate, OnboardingInput } from '../types/learningAgent'
+import type { AgentRun, AgentRunUpdate, OnboardingInput, TopicPlanInput } from '../types/learningAgent'
 import { useAgentRun } from './useAgentRun'
 
 interface OnboardingFlowOptions {
@@ -31,6 +31,10 @@ export function useOnboardingFlow(options: OnboardingFlowOptions) {
     return accept(await agent.beginOnboarding(input))
   }
 
+  async function startTopicPlan(topicId: number, input: TopicPlanInput) {
+    return accept(await agent.beginTopicPlan(topicId, input))
+  }
+
   async function restore() {
     const index = recovery()
     if (!index) return null
@@ -57,5 +61,5 @@ export function useOnboardingFlow(options: OnboardingFlowOptions) {
     return accept(await agent.retry())
   }
 
-  return { agent, start, restore, answer, update, confirm, cancel, retry }
+  return { agent, start, startTopicPlan, restore, answer, update, confirm, cancel, retry }
 }
