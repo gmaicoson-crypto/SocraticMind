@@ -19,10 +19,6 @@ export function useTopicDialogue() {
     return { cleanText, choices: choices.length >= 2 ? choices : null }
   }
 
-  function stripSignals(text: string): string {
-    return text.replace(/\[MASTERED\]/g, '').replace(/\[CONFIRM_MASTER\]/g, '')
-  }
-
   function inferSelectedChoices(messages: Message[]) {
     for (let index = 0; index < messages.length - 1; index++) {
       const message = messages[index]
@@ -36,5 +32,5 @@ export function useTopicDialogue() {
     }
   }
 
-  return { parseChoices, stripSignals, inferSelectedChoices }
+  return { parseChoices, inferSelectedChoices }
 }

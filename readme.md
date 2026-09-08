@@ -21,7 +21,7 @@ SocraticMind 是一个基于 **Vue 3 + TypeScript + FastAPI + MySQL** 构建的 
 
 系统围绕三个核心维度展开：**知识图谱**将学习内容拆解为带依赖关系的结构化节点；**苏格拉底对话**根据当前节点与用户掌握程度动态调整问答策略；**学习追踪**以打卡、连续天数、热力图和成就徽章完整记录学习历程。
 
-前端通过 **Server-Sent Events** 实时接收 AI 流式回复，后端基于 LangChain / LangGraph 编排多轮对话逻辑。
+前端通过 **Server-Sent Events** 实时接收 AI 流式回复；Learning Agent 使用可恢复状态机、结构化模型输出和确定性业务规则完成诊断、图谱、计划与评估。
 
 ---
 
@@ -29,10 +29,17 @@ SocraticMind 是一个基于 **Vue 3 + TypeScript + FastAPI + MySQL** 构建的 
 
 ### 知识图谱
 
-- AI 一键生成指定主题的结构化知识图谱
+- 新主题先完成目标与节奏 onboarding，可选三题诊断，确认计划预览后再创建图谱
 - 节点带父子依赖关系，父节点掌握后自动解锁子节点
 - 节点三态管理：锁定 → 可学习 → 已掌握
 - 基于 Vue Flow + Dagre 的交互式图谱可视化，支持拖拽与缩放
+
+### Learning Agent
+
+- Agent run 按步骤和版本持久化，刷新后可从当前问题或计划预览继续
+- 今日计划按用户时区分为过期、今天和后续任务，支持依赖感知的重新规划
+- 节点支持三题正式评估、自报掌握和撤销，状态变化由服务端统一重算
+- 学习记忆支持查看、添加、编辑和删除，并以条数与总字符预算进入对话上下文
 
 ### 苏格拉底 AI 对话
 
@@ -78,8 +85,8 @@ flowchart LR
   Backend --> AI[AI 服务\nDeepSeek / OpenAI 兼容]
 
   Backend --> Auth[JWT 鉴权]
-  Backend --> LangChain[LangChain / LangGraph\n对话编排]
-  LangChain --> AI
+  Backend --> Agent[可恢复 Agent 状态机\n结构化 AI 调用]
+  Agent --> AI
 ```
 
 ---
@@ -104,7 +111,7 @@ flowchart LR
 - **服务器**：Uvicorn
 - **ORM**：SQLAlchemy 2
 - **数据校验**：Pydantic v2 Settings
-- **AI 编排**：LangChain + LangGraph
+- **AI 编排**：可恢复状态机 + Pydantic 结构化输出
 - **AI 调用**：OpenAI SDK（兼容 DeepSeek 等）
 - **认证**：JWT (python-jose) + Passlib
 - **实时通信**：Server-Sent Events
@@ -140,11 +147,19 @@ cd SocraticMind
 
 #### 2. 初始化数据库
 
-在 MySQL 中手动创建数据库（表结构由后端首次启动时自动生成）：
+在 MySQL 中手动创建数据库。表结构由 Alembic 管理，后端不会在启动时自动建表或改表：
 
 ```sql
 CREATE DATABASE socraticmind CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 ```
+
+空数据库随后在 `backend/` 目录执行：
+
+```bash
+alembic upgrade head
+```
+
+已有数据库必须先备份并核对为 `0001_current_schema_baseline` 对应结构，再执行 `stamp` 与升级。不要对未知结构盲目 `stamp`，完整步骤与恢复方法见 [P0 迁移与验收报告](docs/P0-learning-agent-acceptance-report.md)。数据库未到 Alembic head 时，API 会拒绝启动并给出迁移提示。
 
 #### 3. 配置并启动后端
 
@@ -239,11 +254,11 @@ VITE_API_BASE=http://127.0.0.1:8000
    ↓
 前端携带节点信息与历史对话发起请求
    ↓
-后端 LangChain 编排 → 调用 AI 服务
+后端读取服务端历史与学习记忆 → 调用 AI 服务
    ↓
 SSE 流式返回，前端实时逐字渲染回复
    ↓
-AI 检测到掌握信号 → 自动解锁后续依赖节点
+正式评估或用户明确自报掌握 → 服务端记录事件并重算后续节点
 ```
 
 ### 节点状态流转
@@ -251,9 +266,10 @@ AI 检测到掌握信号 → 自动解锁后续依赖节点
 ```text
 locked（锁定）
    └─── 父节点全部掌握 ───→ available（可学习）
-                                 └─── 用户标记掌握 ───→ mastered（已掌握）
+                                 └─── 评估通过或自报 ───→ mastered（已掌握）
                                                               └─── 触发庆祝动效
                                                               └─── 解锁子节点
+                                                              └─── 可撤销并重算后代
 ```
 
 ### 学习统计流程
@@ -336,6 +352,10 @@ SocraticMind/
 | `/api/nodes` | 节点列表、节点搜索、创建节点、标记掌握 |
 | `/api/chat` | SSE 流式对话、历史消息、快捷建议、消息删除 |
 | `/api/progress` | 每日打卡、连续天数、热力图数据、周统计 |
+| `/api/agent` | Onboarding、已有主题计划、run 恢复、评估、重试和学习记忆 |
+| `/api/plans` | 今日计划和重新规划 |
+
+P0 定向验证命令、ACC-01 至 ACC-13 的验收证据和上线清单见 [P0 迁移与验收报告](docs/P0-learning-agent-acceptance-report.md)。
 
 完整接口文档在后端启动后访问：`http://127.0.0.1:8000/docs`
 

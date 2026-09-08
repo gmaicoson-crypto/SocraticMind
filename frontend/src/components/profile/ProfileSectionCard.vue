@@ -35,4 +35,15 @@ defineProps<{ title: string }>()
   letter-spacing: 0.07em;
   text-transform: uppercase;
 }
+@media (max-width: 500px) {
+  .profile-section-card {
+    min-width: 0;
+    padding: 14px;
+  }
+  .profile-section-card__header {
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+}
 </style>

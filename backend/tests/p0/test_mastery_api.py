@@ -1,3 +1,5 @@
+from sqlalchemy import event
+
 from models import User
 from routers.agent import get_agent_generator
 from tests.p0.test_assessment_service import AssessmentGenerator, create_assessable_node
@@ -28,8 +30,19 @@ def test_assessment_api_and_answer_protocol(app, client, db_session, auth_user):
     assert run["result"]["passed"] is True
     assert run["result"]["node_id"] == node.id
 
-    nodes = client.get(f"/api/nodes/topic/{node.topic_id}")
+    selects = []
+
+    def count_selects(_conn, _cursor, statement, _parameters, _context, _executemany):
+        if statement.lstrip().upper().startswith("SELECT"):
+            selects.append(statement)
+
+    event.listen(db_session.bind, "before_cursor_execute", count_selects)
+    try:
+        nodes = client.get(f"/api/nodes/topic/{node.topic_id}")
+    finally:
+        event.remove(db_session.bind, "before_cursor_execute", count_selects)
     assert nodes.status_code == 200
+    assert len(selects) <= 3
     node_payload = next(item for item in nodes.json() if item["id"] == node.id)
     assert node_payload["mastery_source"] == "assessment"
     assert node_payload["assessment_result"]["passed"] is True

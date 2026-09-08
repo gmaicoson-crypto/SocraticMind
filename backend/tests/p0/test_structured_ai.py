@@ -1,4 +1,5 @@
 import json
+import logging
 from types import SimpleNamespace
 
 import pytest
@@ -161,3 +162,21 @@ def test_structured_schemas_enforce_question_count_and_score_total():
 def test_high_risk_notice_is_deterministic():
     assert high_risk_notice("medical", "First aid")
     assert high_risk_notice("art", "Watercolor") is None
+
+
+def test_logs_exclude_prompts_answers_and_provider_payloads(caplog):
+    secret = "private-answer-never-log"
+    client, _ = client_with(response(json.dumps(questions_payload())))
+    logger = logging.getLogger("services.agent.structured_ai")
+    logger.disabled = False
+    with caplog.at_level(logging.INFO, logger=logger.name):
+        generate_structured(
+            DiagnosticQuestions,
+            [{"role": "user", "content": secret}],
+            RunContext(run_id="safe-log-run", call_type="diagnostic_questions"),
+            client=client,
+        )
+
+    assert "safe-log-run" in caplog.text
+    assert secret not in caplog.text
+    assert "prior_knowledge" not in caplog.text

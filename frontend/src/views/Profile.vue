@@ -395,4 +395,31 @@ function topicColor(index: number) {
   font-family: var(--font-mono);
   white-space: nowrap;
 }
+@media (max-width: 760px) {
+  .profile-body {
+    min-width: 0;
+    padding: 12px;
+    gap: 12px;
+  }
+  .grid-3col,
+  .grid-topics {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .card,
+  .topic-card {
+    min-width: 0;
+    padding: 14px;
+  }
+  .tc-title,
+  .tl-title,
+  .tl-sub {
+    overflow-wrap: anywhere;
+  }
+  .badge-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .tl-item {
+    gap: 9px;
+  }
+}
 </style>

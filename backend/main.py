@@ -1,9 +1,13 @@
+from contextlib import asynccontextmanager
 from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from core.config import settings
 from core.errors import install_api_error_handler
+from core.database import engine
+from core.migrations import assert_database_at_head
 from routers import agent, auth, topics, nodes, chat, memories, plans, progress
 import models  # noqa: F401 - ensure ORM relationships can resolve registered models
 
@@ -11,10 +15,18 @@ import models  # noqa: F401 - ensure ORM relationships can resolve registered mo
 UPLOAD_DIR = Path(__file__).parent / "uploads" / "avatars"
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    assert_database_at_head(engine)
+    yield
+
+
 app = FastAPI(
     title="SocraticMind API",
     description="AI 引导的知识图谱学习系统",
     version="1.0.0",
+    lifespan=lifespan,
 )
 install_api_error_handler(app)
 

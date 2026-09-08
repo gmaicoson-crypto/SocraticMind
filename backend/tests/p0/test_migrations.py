@@ -1,8 +1,11 @@
 from pathlib import Path
 
+import pytest
 from alembic import command
 from alembic.config import Config
 from sqlalchemy import create_engine, inspect, text
+
+from core.migrations import assert_database_at_head
 
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
@@ -39,6 +42,9 @@ def test_empty_database_upgrades_to_head(tmp_path):
     assert {"message_type", "metadata_json"}.issubset(
         {column["name"] for column in inspector.get_columns("chat_messages")}
     )
+    assert "ix_chat_user_session_type_id" in {
+        index["name"] for index in inspector.get_indexes("chat_messages")
+    }
 
 
 def test_legacy_data_is_preserved_and_backfilled(tmp_path):
@@ -86,6 +92,12 @@ def test_legacy_data_is_preserved_and_backfilled(tmp_path):
         assert connection.scalar(
             text("SELECT message_type FROM chat_messages WHERE id = 1")
         ) == "chat"
+        profile = connection.execute(
+            text(
+                "SELECT avatar_grad, bio, daily_goal, ai_style FROM users WHERE id = 1"
+            )
+        ).one()
+        assert all(value is not None for value in profile)
 
 
 def test_p0_downgrade_keeps_legacy_tables(tmp_path):
@@ -104,3 +116,17 @@ def test_p0_downgrade_keeps_legacy_tables(tmp_path):
     assert "estimated_minutes" not in {
         column["name"] for column in inspector.get_columns("nodes")
     }
+
+
+def test_application_guard_rejects_legacy_revision_and_accepts_head(tmp_path):
+    database_url = f"sqlite:///{tmp_path / 'guard.sqlite'}"
+    config = alembic_config(database_url)
+    command.upgrade(config, "0001_current_schema_baseline")
+    engine = create_engine(database_url)
+
+    with pytest.raises(RuntimeError, match="Database migration required"):
+        assert_database_at_head(engine)
+
+    command.upgrade(config, "head")
+    assert_database_at_head(engine)
+    engine.dispose()

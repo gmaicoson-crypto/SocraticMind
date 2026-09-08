@@ -167,4 +167,56 @@ defineEmits<{
   font-weight: 600;
   color: var(--blue-2);
 }
+@media (max-width: 760px) {
+  .hero-card {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 14px;
+    padding: 16px;
+  }
+  .big-avatar {
+    width: 56px;
+    height: 56px;
+    border-radius: 14px;
+    font-size: 21px;
+  }
+  .hero-info {
+    min-width: 0;
+  }
+  .hero-name,
+  .hero-sig {
+    overflow-wrap: anywhere;
+  }
+  .hero-name {
+    font-size: 17px;
+  }
+  .hero-sig {
+    margin-bottom: 12px;
+  }
+  .stat-row {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 6px;
+  }
+  .stat-div {
+    display: none;
+  }
+  .stat-num {
+    font-size: 16px;
+  }
+  .stat-label {
+    overflow-wrap: anywhere;
+  }
+  .hero-actions {
+    grid-column: 1 / -1;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-start;
+  }
+  .edit-btn,
+  .back-btn {
+    padding: 7px 11px;
+  }
+}
 </style>

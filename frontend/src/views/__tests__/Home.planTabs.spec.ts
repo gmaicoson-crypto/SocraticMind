@@ -32,4 +32,25 @@ describe('Home plan tab', () => {
     await tab!.trigger('click')
     expect(tab!.classes()).toContain('active')
   })
+
+  it('switches between dialogue and the shared workspace on narrow screens', async () => {
+    const wrapper = mount(Home, {
+      global: {
+        plugins: [createPinia()],
+        stubs: {
+          TopBar: true,
+          Sidebar: true,
+          SocraticDialogue: true,
+          KnowledgeGraph: true,
+          NotesPanel: true,
+          TodayPlanPanel: true,
+        },
+      },
+    })
+
+    expect(wrapper.find('.right-col').classes()).toContain('mobile-hidden')
+    await wrapper.findAll('.mobile-pane-tabs button')[1].trigger('click')
+    expect(wrapper.find('.dialogue-col').classes()).toContain('mobile-hidden')
+    expect(wrapper.find('.right-col').classes()).not.toContain('mobile-hidden')
+  })
 })

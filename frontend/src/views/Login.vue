@@ -237,6 +237,7 @@
 import { ref, computed, h, watch, onBeforeUnmount, defineAsyncComponent } from 'vue'
 import { useRouter } from 'vue-router'
 import { login, register, sendVerificationCode } from '../api/auth'
+import { parseApiError } from '../api'
 import { useLearningStore } from '../stores/learning'
 import { setAuth } from '../utils/token'
 
@@ -383,7 +384,7 @@ async function handleSubmit() {
     await store.recordLearning()
     router.push('/')
   } catch (err: any) {
-    errorMsg.value = err.response?.data?.detail || '操作失败，请重试'
+    errorMsg.value = parseApiError(err).message
   } finally {
     submitting.value = false
   }

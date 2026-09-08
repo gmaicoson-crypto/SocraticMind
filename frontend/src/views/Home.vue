@@ -5,7 +5,22 @@
       <Sidebar />
       <main class="app-main" ref="mainRef">
 
-        <div class="dialogue-col" :style="{ width: leftWidth + 'px' }">
+        <div class="mobile-pane-tabs" aria-label="移动端主视图">
+          <button
+            :class="{ active: mobilePane === 'dialogue' }"
+            @click="mobilePane = 'dialogue'"
+          >对话</button>
+          <button
+            :class="{ active: mobilePane === 'workspace' }"
+            @click="mobilePane = 'workspace'"
+          >学习工具</button>
+        </div>
+
+        <div
+          class="dialogue-col"
+          :class="{ 'mobile-hidden': mobilePane !== 'dialogue' }"
+          :style="{ width: leftWidth + 'px' }"
+        >
           <SocraticDialogue />
         </div>
 
@@ -19,7 +34,7 @@
           </div>
         </div>
 
-        <div class="right-col">
+        <div class="right-col" :class="{ 'mobile-hidden': mobilePane !== 'workspace' }">
           <div class="right-tabs">
             <button
               class="right-tab"
@@ -59,7 +74,7 @@
             <KeepAlive>
               <KnowledgeGraph v-if="rightPanel === 'graph'" />
               <NotesPanel v-else-if="rightPanel === 'notes'" />
-              <TodayPlanPanel v-else @navigated="setRightPanel('graph')" />
+              <TodayPlanPanel v-else @navigated="showGraphPanel" />
             </KeepAlive>
           </div>
         </div>
@@ -85,9 +100,15 @@ import { useStudyTimer } from '../composables/useStudyTimer'
 
 const store = useLearningStore()
 const rightPanel = ref<'graph' | 'notes' | 'plan'>('graph')
+const mobilePane = ref<'dialogue' | 'workspace'>('dialogue')
 
 function setRightPanel(panel: 'graph' | 'notes' | 'plan') {
   rightPanel.value = panel
+}
+
+function showGraphPanel() {
+  rightPanel.value = 'graph'
+  mobilePane.value = 'workspace'
 }
 
 const mainRef = ref<HTMLElement | null>(null)
@@ -115,6 +136,9 @@ useStudyTimer(() => store.userInfo?.id)
   padding: 14px;
   min-height: 0;
   height: 100%;
+}
+.mobile-pane-tabs {
+  display: none;
 }
 .dialogue-col {
   flex-shrink: 0;
@@ -217,5 +241,67 @@ useStudyTimer(() => store.userInfo?.id)
 @media (max-width: 900px) {
   .right-tab { padding-inline: 7px; font-size: 11.5px; }
   .right-tab svg { display: none; }
+}
+@media (max-width: 760px) {
+  .app-body {
+    min-width: 0;
+  }
+  .app-body :deep(.sidebar) {
+    display: none;
+  }
+  .app-main {
+    display: grid;
+    grid-template-rows: 40px minmax(0, 1fr);
+    width: 100%;
+    padding: 8px;
+    gap: 8px;
+  }
+  .mobile-pane-tabs {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 4px;
+    padding: 4px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    background: var(--bg-2);
+  }
+  .mobile-pane-tabs button {
+    min-width: 0;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--ink-2);
+    font: 600 12px var(--font-sans);
+    cursor: pointer;
+  }
+  .mobile-pane-tabs button.active {
+    background: var(--surface);
+    color: var(--blue-2);
+    box-shadow: 0 1px 3px oklch(0.5 0.04 235 / 0.08);
+  }
+  .dialogue-col,
+  .right-col {
+    grid-row: 2;
+    width: 100% !important;
+    height: 100%;
+    min-width: 0;
+  }
+  .dialogue-col.mobile-hidden,
+  .right-col.mobile-hidden {
+    display: none;
+  }
+  .divider {
+    display: none;
+  }
+  .right-tabs {
+    min-height: 42px;
+  }
+  .right-tab {
+    padding: 6px 4px;
+    font-size: 11px;
+    line-height: 1.25;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
 }
 </style>

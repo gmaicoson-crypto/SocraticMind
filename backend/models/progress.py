@@ -25,6 +25,13 @@ class ChatMessage(Base):
     # 热力图、连续打卡、活跃时段统计均按 user_id + created_at 范围过滤
     __table_args__ = (
         Index("ix_chat_user_created", "user_id", "created_at"),
+        Index(
+            "ix_chat_user_session_type_id",
+            "user_id",
+            "session_id",
+            "message_type",
+            "id",
+        ),
         Index("ix_chat_role", "role"),
         Index("ix_chat_mode", "mode"),
     )

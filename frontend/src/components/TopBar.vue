@@ -453,4 +453,37 @@ onMounted(async () => {
   height: 100%;
   object-fit: cover;
 }
+@media (max-width: 760px) {
+  .topbar {
+    height: 52px;
+    gap: 8px;
+    padding: 0 10px;
+  }
+  .logo-wrap {
+    min-width: 0;
+  }
+  .logo-text {
+    font-size: 13px;
+  }
+  .logo-sub,
+  .search-outer,
+  .topbar > .divider,
+  .topbar :deep(.progress-wrap) {
+    display: none;
+  }
+  .topbar > div[style] {
+    min-width: 0;
+  }
+  .topbar :deep(.profile-info) {
+    display: none;
+  }
+  .topbar :deep(.profile-wrap) {
+    padding: 2px;
+  }
+  .topbar :deep(.avatar) {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+  }
+}
 </style>

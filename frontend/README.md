@@ -1,6 +1,6 @@
 # Frontend
 
-SocraticMind 前端是基于 Vue 3、TypeScript、Vite 和 Pinia 构建的学习应用界面。它负责用户登录注册、知识图谱展示、苏格拉底式对话、普通聊天、学习进度统计、个人资料和账户设置等交互。
+SocraticMind 前端是基于 Vue 3、TypeScript、Vite 和 Pinia 构建的学习应用界面。它负责用户登录注册、可恢复 Learning Agent、知识图谱、今日计划、节点评估、学习记忆、苏格拉底式对话和个人资料等交互。
 
 ## 技术栈
 
@@ -72,6 +72,13 @@ pnpm preview
 
 本地预览生产构建结果。
 
+P0 定向测试和类型检查：
+
+```bash
+pnpm exec vitest run src/stores/__tests__/agent.spec.ts src/stores/__tests__/plans.spec.ts src/stores/__tests__/memories.spec.ts src/components/agent src/components/planning src/components/profile/__tests__/AgentMemorySection.spec.ts
+pnpm exec vue-tsc --noEmit -p tsconfig.app.json
+```
+
 ## 环境变量
 
 | 变量 | 说明 | 示例 |
@@ -85,8 +92,10 @@ pnpm preview
 - 用户注册、登录、找回密码、修改密码和注销账户
 - JWT 登录态保存和请求拦截
 - 主题列表和 AI 推荐主题
-- AI 生成学习主题的知识图谱
-- 知识节点搜索、查看、解锁和掌握状态更新
+- 新主题 onboarding、可选诊断、计划预览、刷新恢复与确认创建
+- 今日/过期/后续计划、已有主题补计划与重新规划
+- 知识节点搜索、正式评估、自报掌握、撤销和服务端状态刷新
+- 学习记忆查看、添加、编辑和删除
 - 苏格拉底式对话和普通聊天模式
 - SSE 流式接收 AI 回复
 - Markdown 编辑、渲染和代码高亮
@@ -141,7 +150,10 @@ Authorization: Bearer <token>
 
 当后端返回 `401` 时，前端会清除本地登录态并跳转到 `/login`。
 
+Agent run 是流程事实来源。页面刷新后用保存的 `run_id` 重新获取步骤；发生冲突或模型错误时显示服务端错误与重试入口。客户端不根据 `[MASTERED]` 等文本标记修改节点状态，所有掌握动作完成后重新获取服务端节点。
+
 聊天接口使用 `fetch` 调用 `/api/chat/stream`，通过 `text/event-stream` 接收后端流式返回的数据。
 
 部署时需要让静态站点服务指向该目录，并确保 `VITE_API_BASE` 指向真实后端地址。
 
+上线前同时验证桌面与窄屏下的 onboarding、计划标签、长题目和学习记忆操作；完整清单见 [`../docs/P0-learning-agent-acceptance-report.md`](../docs/P0-learning-agent-acceptance-report.md)。

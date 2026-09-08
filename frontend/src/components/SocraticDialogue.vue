@@ -202,7 +202,7 @@ const store = useLearningStore()
 const agentStore = useAgentStore()
 const plansStore = usePlansStore()
 const streamControl = useChatStream()
-const { parseChoices, stripSignals, inferSelectedChoices } = useTopicDialogue()
+const { parseChoices, inferSelectedChoices } = useTopicDialogue()
 const {
   socraticSessions,
   normalSessions,
@@ -869,12 +869,12 @@ async function send() {
     chatStream(
       'normal', 0, currentSession.value!.id, userInput, history, 'normal', '标准',
       (chunk) => {
-        streamingText.value = stripSignals(streamingText.value + chunk)
+        streamingText.value += chunk
         checkStreamingChoices()
         scrollToBottom()
       },
       () => {
-        const t = stripSignals(streamingText.value).trim()
+        const t = streamingText.value.trim()
         streamingText.value = ''; streamingChoices.value = null; isThinking.value = false
         if (t) {
           const { cleanText, choices } = parseChoices(t)
@@ -952,12 +952,12 @@ async function send() {
   chatStream(
     store.activeNode.id, currentTopicId.value, currentSession.value!.id, userInput, history, 'socratic', aiStyle.value,
     (chunk) => {
-      streamingText.value = stripSignals(streamingText.value + chunk)
+      streamingText.value += chunk
       checkStreamingChoices()
       scrollToBottom()
     },
     () => {
-      const t = stripSignals(streamingText.value).trim()
+      const t = streamingText.value.trim()
       streamingText.value = ''; streamingChoices.value = null; isThinking.value = false
       if (t) {
         const { cleanText, choices } = parseChoices(t)
@@ -1003,12 +1003,12 @@ async function retryAt(aiIndex: number) {
   chatStream(
     store.activeNode?.id ?? 'normal', currentTopicId.value, currentSession.value.id, userMsg.text, history, chatMode.value, aiStyle.value,
     (chunk) => {
-      streamingText.value = stripSignals(streamingText.value + chunk)
+      streamingText.value += chunk
       checkStreamingChoices()
       scrollToBottom()
     },
     () => {
-      const t = stripSignals(streamingText.value).trim()
+      const t = streamingText.value.trim()
       streamingText.value = ''; streamingChoices.value = null; isThinking.value = false
       if (t) {
         const { cleanText, choices } = parseChoices(t)
@@ -1036,12 +1036,12 @@ function streamOverview(kind: 'topic' | 'node', identifier: string): Promise<voi
       [],
       'socratic', aiStyle.value,
       (chunk) => {
-        streamingText.value = stripSignals(streamingText.value + chunk)
+        streamingText.value += chunk
         checkStreamingChoices()
         scrollToBottom()
       },
       () => {
-        const t = stripSignals(streamingText.value).trim()
+        const t = streamingText.value.trim()
         streamingText.value = ''; streamingChoices.value = null
         isThinking.value = false
         if (t) {
@@ -1090,12 +1090,12 @@ watch(() => store.activeNode?.id, async (id) => {
       [],
       'socratic', aiStyle.value,
       (chunk) => {
-        streamingText.value = stripSignals(streamingText.value + chunk)
+        streamingText.value += chunk
         checkStreamingChoices()
         scrollToBottom()
       },
       () => {
-        const t = stripSignals(streamingText.value).trim()
+        const t = streamingText.value.trim()
         streamingText.value = ''; streamingChoices.value = null
         isThinking.value = false
         if (t) {

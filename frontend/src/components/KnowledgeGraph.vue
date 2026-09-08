@@ -446,4 +446,30 @@ function handleClick(node: KNode) {
 .ctrl-btn:hover {
   background: var(--bg-3);
 }
+@media (max-width: 500px) {
+  .graph-header {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px;
+  }
+  .graph-title {
+    font-size: 14px;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+  }
+  .graph-header :deep(.legend-wrap) {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    width: 100%;
+  }
+  .graph-header :deep(.legend-item) {
+    justify-content: center;
+    gap: 4px;
+    min-width: 0;
+    padding: 4px 6px;
+    font-size: 10.5px;
+    white-space: nowrap;
+  }
+}
 </style>

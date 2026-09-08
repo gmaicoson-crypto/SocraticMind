@@ -1,6 +1,6 @@
 # Backend
 
-SocraticMind 后端是基于 FastAPI、SQLAlchemy 和 DeepSeek/OpenAI 兼容接口构建的 API 服务。它负责用户认证、邮箱验证码、知识主题和节点管理、AI 对话、AI 生成知识图谱、学习进度统计以及头像静态文件服务。
+SocraticMind 后端是基于 FastAPI、SQLAlchemy 和 DeepSeek/OpenAI 兼容接口构建的 API 服务。它负责用户认证、可恢复 Learning Agent、知识图谱、学习计划、节点评估、学习记忆、AI 对话和学习统计。
 
 ## 技术栈
 
@@ -11,7 +11,7 @@ SocraticMind 后端是基于 FastAPI、SQLAlchemy 和 DeepSeek/OpenAI 兼容接�
 - Pydantic Settings
 - JWT + OAuth2 Password Flow
 - Passlib
-- LangChain / LangGraph
+- 可恢复 Agent 状态机与 Pydantic 结构化输出
 - OpenAI Python SDK 兼容调用
 - MySQL 或其他 SQLAlchemy 支持的数据库
 
@@ -131,6 +131,10 @@ alembic upgrade head
 
 不要对未知结构的数据库盲目执行 `stamp`。Alembic 只管理表结构，仍需提前创建 MySQL 数据库本身。
 
+应用启动时会校验 `alembic_version` 必须等于当前 head。缺少版本表或 revision 落后时，Uvicorn 会明确失败；先执行迁移，不要绕过守卫。
+
+升级前后应分别核对 `users`、`topics`、`nodes`、`chat_messages` 等旧表计数。若升级失败，停止应用并把备份恢复到新建空库，再修复迁移问题；不要在未验证备份时执行 downgrade。完整演练记录见 [`../docs/P0-learning-agent-acceptance-report.md`](../docs/P0-learning-agent-acceptance-report.md)。
+
 当前主要数据模型包括：
 
 - `User`：用户账号、密码哈希、头像、个人偏好
@@ -139,6 +143,10 @@ alembic upgrade head
 - `ChatMessage`：用户和 AI 的对话记录
 - `LearningRecord`：学习打卡记录
 - `EmailCode`：邮箱验证码
+- `AgentRun`：可恢复的 onboarding、计划和评估运行状态
+- `StudyPlan` / `StudyPlanItem`：按依赖和时区排期的学习计划
+- `AssessmentAttempt` / `MasteryEvent`：正式评估与可审计掌握事件
+- `LearnerMemory`：有范围、来源和长度约束的长期学习记忆
 
 头像上传文件会保存到：
 
@@ -161,6 +169,11 @@ backend/uploads/avatars/
 | `routers/nodes.py` | `/api/nodes` | 节点列表、节点搜索、创建节点、标记掌握 |
 | `routers/chat.py` | `/api/chat` | SSE 流式 AI 对话、历史消息、快捷建议、删除消息 |
 | `routers/progress.py` | `/api/progress` | 学习打卡、连续学习天数、统计和热力图 |
+| `routers/agent.py` | `/api/agent` | Onboarding、run 恢复/作答/确认/取消/重试、已有主题计划和评估 |
+| `routers/plans.py` | `/api/plans`、`/api/topics/{id}/plan` | 今日计划、主题计划和重新规划 |
+| `routers/memories.py` | `/api/agent/memories` | 学习记忆 CRUD 与筛选 |
+
+`POST /api/topics/generate` 仅保留为 deprecated 兼容端点，并返回 onboarding 提示；新客户端必须从 `POST /api/agent/onboarding` 开始。
 
 ## AI 能力
 
@@ -194,4 +207,14 @@ backend/ai/prompts/
 - 修改环境变量后需要重启 Uvicorn。
 - 如果使用 `mysql+pymysql://` 连接串，请确保环境中已安装 PyMySQL 驱动。
 - 如果头像上传接口报 multipart 相关错误，请确保环境中已安装 `python-multipart`。
-- 迁移定向测试：`.venv/bin/python -m pytest tests/p0/test_migrations.py`。
+- P0 后端定向测试：`.venv/bin/python -m pytest tests/p0 tests/test_agent.py`。
+- 迁移单项测试：`.venv/bin/python -m pytest tests/p0/test_migrations.py`。
+- 测试使用固定模型 mock，不需要真实 AI、SMTP 或生产数据库。
+
+## 上线检查
+
+1. 备份目标 MySQL，并在隔离库验证备份可读取。
+2. 核对旧库结构后再 `alembic stamp 0001_current_schema_baseline`；空库不执行 stamp。
+3. 执行 `alembic upgrade head`，复核 revision 和旧数据计数。
+4. 启动 API，检查 `/health`，再验证跨用户资源访问返回 403 或 404。
+5. 确认日志不含 JWT、API Key、完整 prompt 或完整用户答案。

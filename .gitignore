@@ -49,6 +49,7 @@ Thumbs.db
 *.swp
 
 # Doc
-docs/
+docs/*
+!docs/P0-learning-agent-acceptance-report.md
 
 plan/
