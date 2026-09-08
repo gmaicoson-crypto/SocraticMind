@@ -1,6 +1,8 @@
+import logging
 from typing import Any
 
 from fastapi import APIRouter, Depends, status
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from core.database import get_db
@@ -21,6 +23,7 @@ from services.assessments import (
     start_assessment,
     submit_assessment_answer,
 )
+from services.chat_context import sync_agent_run_message
 from services.agent.orchestrator import (
     cancel_run,
     confirm_run,
@@ -35,10 +38,31 @@ from services.agent.structured_ai import generate_structured
 
 
 router = APIRouter(prefix="/api/agent", tags=["Learning Agent"])
+log = logging.getLogger(__name__)
 
 
 def get_agent_generator():
     return generate_structured
+
+
+def serialize_and_sync(
+    db: Session,
+    run: AgentRun,
+    *,
+    answer: dict[str, Any] | None = None,
+) -> AgentRunResponse:
+    response = serialize_run(run)
+    try:
+        sync_agent_run_message(
+            db,
+            run=run,
+            payload=response.model_dump(mode="json"),
+            answer=answer,
+        )
+    except SQLAlchemyError:
+        db.rollback()
+        log.exception("failed to sync display message for agent run %s", run.id)
+    return response
 
 
 @router.post(
@@ -52,12 +76,14 @@ def create_assessment(
     db: Session = Depends(get_db),
     generator: Any = Depends(get_agent_generator),
 ):
-    return serialize_run(
+    return serialize_and_sync(
+        db,
         start_assessment(
             db,
             user_id=current_user.id,
             node_id=request.node_id,
             request_id=request.request_id,
+            session_id=request.session_id,
             generator=generator,
         )
     )
@@ -105,7 +131,8 @@ def create_onboarding_run(
     db: Session = Depends(get_db),
     generator: Any = Depends(get_agent_generator),
 ):
-    return serialize_run(
+    return serialize_and_sync(
+        db,
         start_onboarding(
             db,
             user_id=current_user.id,
@@ -127,7 +154,8 @@ def create_topic_plan_run(
     db: Session = Depends(get_db),
     generator: Any = Depends(get_agent_generator),
 ):
-    return serialize_run(
+    return serialize_and_sync(
+        db,
         start_topic_plan(
             db,
             user_id=current_user.id,
@@ -161,16 +189,23 @@ def answer_run(
         if run.run_type == "assessment"
         else submit_answer
     )
-    return serialize_run(
-        submit(
-            db,
-            user_id=current_user.id,
-            run_id=run_id,
-            step_id=request.step_id,
-            version=request.version,
-            answer=request.answer,
-            generator=generator,
-        )
+    completed = submit(
+        db,
+        user_id=current_user.id,
+        run_id=run_id,
+        step_id=request.step_id,
+        version=request.version,
+        answer=request.answer,
+        generator=generator,
+    )
+    return serialize_and_sync(
+        db,
+        completed,
+        answer={
+            "step_id": request.step_id,
+            "version": request.version,
+            "answer": request.answer,
+        },
     )
 
 
@@ -182,7 +217,8 @@ def patch_run(
     db: Session = Depends(get_db),
     generator: Any = Depends(get_agent_generator),
 ):
-    return serialize_run(
+    return serialize_and_sync(
+        db,
         update_run_parameters(
             db,
             user_id=current_user.id,
@@ -200,7 +236,8 @@ def confirm_agent_run(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    return serialize_run(
+    return serialize_and_sync(
+        db,
         confirm_run(
             db,
             user_id=current_user.id,
@@ -218,7 +255,9 @@ def cancel_agent_run(
 ):
     run = get_run(db, user_id=current_user.id, run_id=run_id)
     cancel = cancel_assessment if run.run_type == "assessment" else cancel_run
-    return serialize_run(cancel(db, user_id=current_user.id, run_id=run_id))
+    return serialize_and_sync(
+        db, cancel(db, user_id=current_user.id, run_id=run_id)
+    )
 
 
 @router.post("/runs/{run_id}/retry", response_model=AgentRunResponse)
@@ -230,7 +269,8 @@ def retry_agent_run(
 ):
     run = get_run(db, user_id=current_user.id, run_id=run_id)
     retry = retry_assessment if run.run_type == "assessment" else retry_run
-    return serialize_run(
+    return serialize_and_sync(
+        db,
         retry(
             db,
             user_id=current_user.id,

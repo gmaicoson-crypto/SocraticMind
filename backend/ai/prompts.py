@@ -13,7 +13,6 @@ def _load(name: str) -> str:
 SOCRATIC_GENTLE_PROMPT   = _load("socratic_gentle")
 SOCRATIC_STANDARD_PROMPT = _load("socratic_standard")
 SOCRATIC_STRICT_PROMPT   = _load("socratic_strict")
-_MASTERED_RULES          = _load("mastered_rules")  # 掌握判断规则，附加在所有苏格拉底 prompt 末尾
 
 # 各场景的独立 prompt
 TOPIC_OVERVIEW_PROMPT   = _load("topic_overview")    # 主题概览（约 500 字）
@@ -24,12 +23,12 @@ RECOMMEND_TOPICS_PROMPT = _load("recommend_topics")  # 推荐学习主题
 
 
 def get_socratic_prompt(ai_style: str) -> str:
-    """根据用户设置的 AI 风格返回对应的苏格拉底式 prompt，并追加掌握判断规则。"""
+    """根据用户设置的 AI 风格返回对应的苏格拉底式 prompt。"""
     if ai_style == "温和":
-        return SOCRATIC_GENTLE_PROMPT + _MASTERED_RULES
+        return SOCRATIC_GENTLE_PROMPT
     elif ai_style == "严格":
-        return SOCRATIC_STRICT_PROMPT + _MASTERED_RULES
-    return SOCRATIC_STANDARD_PROMPT + _MASTERED_RULES
+        return SOCRATIC_STRICT_PROMPT
+    return SOCRATIC_STANDARD_PROMPT
 
 
 def build_topic_overview_prompt(topic_title: str) -> str:

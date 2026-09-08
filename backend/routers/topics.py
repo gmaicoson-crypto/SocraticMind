@@ -8,11 +8,11 @@ from core.config import settings
 from core.database import get_db
 from core.deps import get_current_user
 from core.ai_client import get_ai_client
+from core.errors import ApiError
 from models.user import User
 from models.topic import Topic
 from models.node import Node
 from models.progress import ChatMessage
-from ai.graph_generator import generate_graph, assign_positions
 from ai.prompts import RECOMMEND_TOPICS_PROMPT, build_recommend_prompt
 from ai.util import extract_json_from_markdown
 
@@ -68,52 +68,18 @@ def get_topics(
     return [_topic_to_response(t, t.nodes) for t in topics]
 
 
-@router.post("/generate", response_model=TopicResponse)
+@router.post("/generate", response_model=TopicResponse, deprecated=True)
 def generate_topic(
     req: GenerateTopicRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """调用 AI 为指定主题生成知识图谱节点，自动计算布局坐标后存入数据库。"""
-    try:
-        graph = generate_graph(req.title)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"AI 生成失败：{str(e)}")
-
-    raw_nodes = graph.get("nodes", [])
-    if not raw_nodes:
-        raise HTTPException(status_code=500, detail="AI 未返回有效节点")
-
-    # 根据父子关系计算 SVG 坐标
-    raw_nodes = assign_positions(raw_nodes)
-
-    topic = Topic(user_id=current_user.id, title=req.title, emoji=req.emoji)
-    db.add(topic)
-    db.flush()
-
-    for n in raw_nodes:
-        parents = n.get("parent_keys", [])
-        state = "available" if not parents else "locked"
-        db.add(Node(
-            topic_id=topic.id,
-            node_key=n["key"],
-            label=n["label"],
-            sub=n.get("sub", ""),
-            x=n.get("x", 300),
-            y=n.get("y", 100),
-            state=state,
-            parent_keys=",".join(parents),
-        ))
-
-    db.commit()
-    db.refresh(topic)
-
-    return TopicResponse(
-        id=topic.id,
-        title=topic.title,
-        emoji=topic.emoji,
-        total_nodes=len(raw_nodes),
-        mastered_nodes=0,
+    """旧客户端兼容入口；新主题必须通过 Learning Agent onboarding 创建。"""
+    raise ApiError(
+        status_code=409,
+        code="ONBOARDING_REQUIRED",
+        message="请通过新主题引导流程创建学习主题",
+        retryable=False,
     )
 
 

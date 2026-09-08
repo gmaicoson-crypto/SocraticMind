@@ -5,23 +5,12 @@ from models.progress import ChatMessage
 from models.topic import Topic
 
 
-def test_topic_generation_persists_generated_graph(client, db_session, monkeypatch):
-    monkeypatch.setattr(
-        "routers.topics.generate_graph",
-        lambda _title: {
-            "nodes": [
-                {"key": "root", "label": "Root", "parent_keys": []},
-                {"key": "child", "label": "Child", "parent_keys": ["root"]},
-            ]
-        },
-    )
-
+def test_topic_generation_requires_onboarding(client, db_session):
     response = client.post("/api/topics/generate", json={"title": "Testing"})
 
-    assert response.status_code == 200
-    assert response.json()["total_nodes"] == 2
-    persisted = db_session.query(Node).order_by(Node.id).all()
-    assert [node.state for node in persisted] == ["available", "locked"]
+    assert response.status_code == 409
+    assert response.json()["code"] == "ONBOARDING_REQUIRED"
+    assert db_session.query(Node).count() == 0
 
 
 def test_legacy_master_endpoint_unlocks_child(client, db_session, auth_user):
@@ -73,7 +62,7 @@ def test_legacy_master_endpoint_keeps_locked_error_shape(client, db_session, aut
     assert response.json() == {"detail": "节点尚未解锁"}
 
 
-def test_chat_stream_emits_text_signal_and_message_ids(
+def test_chat_stream_treats_mastered_marker_as_plain_text(
     client, db_session, auth_user, monkeypatch
 ):
     topic = Topic(user_id=auth_user.id, title="Streaming")
@@ -110,8 +99,11 @@ def test_chat_stream_emits_text_signal_and_message_ids(
         if line.startswith("data: {")
     ]
     assert "".join(event.get("text", "") for event in events) == "Good work [MASTERED]"
-    assert {event.get("signal") for event in events} == {None, "MASTERED"}
+    assert not any("signal" in event for event in events)
     assert any("msg_ids" in event for event in events)
     messages = db_session.query(ChatMessage).order_by(ChatMessage.id).all()
     assert [message.role for message in messages] == ["user", "ai"]
-    assert messages[-1].content == "Good work"
+    assert messages[-1].content == "Good work [MASTERED]"
+    assert messages[-1].metadata_json == {"status": "complete"}
+    db_session.refresh(node)
+    assert node.state == "available"

@@ -162,6 +162,7 @@ def start_assessment(
     user_id: int,
     node_id: int,
     request_id: str,
+    session_id: str | None = None,
     generator: Generator | None = None,
 ) -> AgentRun:
     existing_request = (
@@ -220,6 +221,7 @@ def start_assessment(
     }
     run = AgentRun(
         user_id=user_id,
+        session_id=session_id,
         topic_id=node.topic_id,
         run_type=AgentRunType.ASSESSMENT.value,
         status=AgentRunStatus.ASSESSING.value,

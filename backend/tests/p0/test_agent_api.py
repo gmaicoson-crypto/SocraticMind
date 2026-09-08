@@ -1,5 +1,6 @@
 from services.agent.structured_ai import StructuredResult
 from schemas.structured_ai import DiagnosticQuestions, DiagnosticScore, PersonalizedGraphDraft
+from models import ChatMessage
 from routers.agent import get_agent_generator
 
 
@@ -57,7 +58,7 @@ def onboarding_payload(use_diagnostic=False):
     }
 
 
-def test_onboarding_api_exposes_recoverable_run_protocol(app, client):
+def test_onboarding_api_exposes_recoverable_run_protocol(app, client, db_session):
     app.dependency_overrides[get_agent_generator] = lambda: fake_generator
 
     started = client.post("/api/agent/onboarding", json=onboarding_payload(True))
@@ -89,6 +90,28 @@ def test_onboarding_api_exposes_recoverable_run_protocol(app, client):
     )
     assert confirmed.status_code == 200
     assert confirmed.json()["result"]["topic_id"] > 0
+    repeated = client.post(
+        f"/api/agent/runs/{run_id}/confirm", json={"request_id": "api-confirm"}
+    )
+    assert repeated.json() == confirmed.json()
+    messages = (
+        db_session.query(ChatMessage)
+        .filter(ChatMessage.session_id == "api-session")
+        .order_by(ChatMessage.id)
+        .all()
+    )
+    assert [message.message_type for message in messages] == [
+        "agent_step",
+        "agent_answer",
+        "agent_step",
+        "agent_answer",
+        "agent_step",
+        "agent_answer",
+        "plan_preview",
+        "agent_result",
+    ]
+    assert messages[0].metadata_json["step"]["current"] == 1
+    assert messages[-1].metadata_json["result"] == confirmed.json()["result"]
 
 
 def test_patch_regenerates_preview_and_cancel_is_terminal(app, client):

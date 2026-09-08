@@ -1,22 +1,33 @@
+from datetime import datetime
+import json
+import logging
+from typing import Any, List, Optional
+
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
-from pydantic import BaseModel
-from typing import List, Optional
-import json
+from pydantic import BaseModel, ConfigDict, Field
+
+from ai.agent import chat_stream
+from ai.prompts import build_socratic_suggestions_prompt, NORMAL_SUGGESTIONS_PROMPT
+from ai.util import extract_json_from_markdown
 from core.config import settings
 from core.database import get_db
 from core.deps import get_current_user
 from core.ai_client import get_ai_client
-from models.user import User
-from models.topic import Topic
-from models.node import Node
 from models.progress import ChatMessage
-from ai.agent import chat_stream
-from ai.util import extract_json_from_markdown
-from ai.prompts import build_socratic_suggestions_prompt, NORMAL_SUGGESTIONS_PROMPT
+from models.node import Node
+from models.topic import Topic
+from models.user import User
+from services.chat_context import (
+    finish_ai_message,
+    load_recent_chat_history,
+    start_chat_messages,
+)
+from services.memories import select_relevant_memories
 
 router = APIRouter(prefix="/api/chat", tags=["对话"])
+log = logging.getLogger(__name__)
 
 
 class MessageItem(BaseModel):
@@ -29,13 +40,15 @@ class ChatRequest(BaseModel):
     topic_id: int
     session_id: str
     user_input: str
-    history: List[MessageItem] = []
+    history: List[MessageItem] = Field(default_factory=list)
     mode: str = "socratic"
     ai_style: str = "标准"
     kind: str = "qa"  # qa（默认 Q&A）/ topic_overview（主题概览）/ node_overview（节点概览）
 
 
 class HistoryResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+
     id: int
     role: str
     content: str
@@ -43,10 +56,11 @@ class HistoryResponse(BaseModel):
     mode: str = ""
     topic_id: Optional[int] = None
     session_id: str
-    created_at: str = ""
-
-    class Config:
-        from_attributes = True
+    message_type: str = "chat"
+    metadata: dict[str, Any] | None = Field(
+        default=None, validation_alias="metadata_json"
+    )
+    created_at: datetime | None = None
 
 
 @router.post("/stream")
@@ -74,70 +88,80 @@ def chat_stream_endpoint(
         node_label = node.label
         node_sub = node.sub
 
-    # 先将用户消息写入数据库，获取 ID 后再开始流式响应
-    user_msg = ChatMessage(
+    # 请求携带的 history 仅为旧客户端兼容字段，事实上下文始终从数据库读取。
+    history = load_recent_chat_history(
+        db,
+        user_id=current_user.id,
+        session_id=req.session_id,
+    )
+    relevant_memories = []
+    if req.mode == "socratic" and req.kind == "qa":
+        relevant_memories = select_relevant_memories(
+            db,
+            user_id=current_user.id,
+            topic_id=req.topic_id,
+        )
+    user_msg, ai_msg = start_chat_messages(
+        db,
         user_id=current_user.id,
         topic_id=req.topic_id or None,
         session_id=req.session_id,
         node_key=req.node_key,
-        role="user",
-        content=req.user_input,
+        user_input=req.user_input,
         mode=req.mode,
     )
-    db.add(user_msg)
-    db.flush()
-    user_msg_id = user_msg.id
-    db.commit()
-
-    # 将前端传来的历史消息格式化为 AI 接口所需的格式
-    history = [
-        {"role": "assistant" if m.role == "ai" else "user", "content": m.content}
-        for m in req.history
-    ]
 
     def generate():
         full_text = []
+        try:
+            for chunk in chat_stream(
+                messages=history,
+                node_label=node_label,
+                node_sub=node_sub,
+                user_input=req.user_input,
+                mode=req.mode,
+                ai_style=req.ai_style,
+                kind=req.kind,
+                memories=[
+                    {"kind": memory.kind, "content": memory.content}
+                    for memory in relevant_memories
+                ],
+            ):
+                full_text.append(chunk)
+                yield f"data: {json.dumps({'text': chunk}, ensure_ascii=False)}\n\n"
+        except GeneratorExit:
+            finish_ai_message(
+                db,
+                user_id=current_user.id,
+                message_id=ai_msg.id,
+                content="".join(full_text),
+                status="interrupted",
+            )
+            raise
+        except Exception:
+            log.exception("chat stream failed for message %s", ai_msg.id)
+            finish_ai_message(
+                db,
+                user_id=current_user.id,
+                message_id=ai_msg.id,
+                content="".join(full_text),
+                status="failed",
+                error_code="AI_STREAM_ERROR",
+            )
+            yield f"data: {json.dumps({'msg_ids': {'user': user_msg.id, 'ai': ai_msg.id}}, ensure_ascii=False)}\n\n"
+            yield f"data: {json.dumps({'error': {'code': 'AI_STREAM_ERROR', 'retryable': True}}, ensure_ascii=False)}\n\n"
+            yield "data: [DONE]\n\n"
+            return
 
-        for chunk in chat_stream(
-            messages=history,
-            node_label=node_label,
-            node_sub=node_sub,
-            user_input=req.user_input,
-            mode=req.mode,
-            ai_style=req.ai_style,
-            kind=req.kind,
-        ):
-            full_text.append(chunk)
-            yield f"data: {json.dumps({'text': chunk}, ensure_ascii=False)}\n\n"
-
-        full_reply = "".join(full_text)
-
-        # 检测 AI 回复中的 [MASTERED] 信号，去掉标记后再入库
-        signal = None
-        if "[MASTERED]" in full_reply:
-            signal = "MASTERED"
-            full_reply = full_reply.replace("[MASTERED]", "").strip()
-
-        ai_msg = ChatMessage(
+        finish_ai_message(
+            db,
             user_id=current_user.id,
-            topic_id=req.topic_id or None,
-            session_id=req.session_id,
-            node_key=req.node_key,
-            role="ai",
-            content=full_reply,
-            mode=req.mode,
+            message_id=ai_msg.id,
+            content="".join(full_text),
+            status="complete",
         )
-        db.add(ai_msg)
-        db.flush()
-        ai_msg_id = ai_msg.id
-        db.commit()
-
-        if signal:
-            yield f"data: {json.dumps({'signal': signal}, ensure_ascii=False)}\n\n"
-
-        # 将数据库消息 ID 发给前端，便于前端将 UI 消息与数据库记录关联（删除时同步）
-        yield f"data: {json.dumps({'msg_ids': {'user': user_msg_id, 'ai': ai_msg_id}}, ensure_ascii=False)}\n\n"
-
+        # 保留消息 ID 事件，兼容现有前端删除与会话管理逻辑。
+        yield f"data: {json.dumps({'msg_ids': {'user': user_msg.id, 'ai': ai_msg.id}}, ensure_ascii=False)}\n\n"
         yield "data: [DONE]\n\n"
 
     return StreamingResponse(
@@ -184,7 +208,9 @@ def get_all_messages(
             "mode": message.mode,
             "topic_id": message.topic_id,
             "session_id": message.session_id,
-            "created_at": message.created_at.strftime("%Y-%m-%d %H:%M:%S") if message.created_at else "",
+            "message_type": message.message_type,
+            "metadata": message.metadata_json,
+            "created_at": message.created_at,
         }
         for message in messages
     ]
