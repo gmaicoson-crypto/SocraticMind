@@ -17,6 +17,7 @@ from services.agent.orchestrator import (
 from services.agent.state_machine import transition
 from services.agent.structured_ai import StructuredAIError, high_risk_notice
 from services.mastery import record_mastery
+from services.memories import upsert_assessment_memories
 
 
 def _owned_node(db: Session, user_id: int, node_id: int) -> Node:
@@ -318,6 +319,15 @@ def _score_assessment(
     from datetime import datetime, timezone
 
     attempt.completed_at = datetime.now(timezone.utc)
+    node = db.get(Node, params["node_id"])
+    upsert_assessment_memories(
+        db,
+        user_id=snapshot.user_id,
+        node=node,
+        weaknesses=score.weaknesses,
+        passed=passed,
+        confidence=score.evaluation_confidence,
+    )
     state["assessment_result"] = result
     state["processing_stage"] = "assessment_mastery" if passed else "assessment_complete"
     next_version = snapshot.version + 1

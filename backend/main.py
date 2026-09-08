@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from core.config import settings
 from core.errors import install_api_error_handler
-from routers import agent, auth, topics, nodes, chat, plans, progress
+from routers import agent, auth, topics, nodes, chat, memories, plans, progress
 import models  # noqa: F401 - ensure ORM relationships can resolve registered models
 
 # 头像文件存储目录，不存在时自动创建
@@ -38,6 +38,7 @@ app.include_router(chat.router)
 app.include_router(progress.router)
 app.include_router(agent.router)
 app.include_router(plans.router)
+app.include_router(memories.router)
 
 
 @app.get("/")

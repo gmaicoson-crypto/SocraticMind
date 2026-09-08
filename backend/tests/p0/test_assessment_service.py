@@ -3,7 +3,7 @@ from datetime import date
 import pytest
 
 from core.errors import ApiError
-from models import Node, StudyPlan, StudyPlanItem, Topic
+from models import LearnerMemory, Node, StudyPlan, StudyPlanItem, Topic
 from schemas.structured_ai import AssessmentQuestions, AssessmentScore
 from services.assessments import (
     retry_assessment,
@@ -140,6 +140,11 @@ def test_passing_assessment_records_evidence_and_mastery(db_session, auth_user):
     assert node.state == "mastered"
     assert node.mastery_source == "assessment"
     assert item.status == "completed"
+    memory = db_session.query(LearnerMemory).one()
+    assert memory.topic_id == node.topic_id
+    assert memory.kind == "strength"
+    assert memory.source == "assessment"
+    assert memory.confidence == pytest.approx(0.82)
 
 
 @pytest.mark.parametrize(
@@ -164,6 +169,12 @@ def test_deterministic_gate_keeps_failed_assessment_available(
     db_session.refresh(node)
     assert run.result_json["passed"] is False
     assert node.state == "available"
+    memory = db_session.query(LearnerMemory).one()
+    assert memory.topic_id == node.topic_id
+    assert memory.kind == "weakness"
+    assert memory.source == "assessment"
+    expected = "A weak point" if score < 9 else "“Root”的评估尚未通过"
+    assert memory.content == expected
 
 
 def test_high_risk_practical_assessment_never_auto_masters(db_session, auth_user):
