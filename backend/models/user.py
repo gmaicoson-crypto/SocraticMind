@@ -22,4 +22,11 @@ class User(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     # cascade="all, delete" 确保注销账号时，关联的主题和节点一并级联删除
-    topics = relationship("Topic", back_populates="user", cascade="all, delete")
+    topics = relationship("Topic", back_populates="user", cascade="all, delete-orphan")
+    agent_runs = relationship("AgentRun", back_populates="user", cascade="all, delete-orphan")
+    memories = relationship("LearnerMemory", back_populates="user", cascade="all, delete-orphan")
+    study_plans = relationship("StudyPlan", back_populates="user", cascade="all, delete-orphan")
+    assessment_attempts = relationship(
+        "AssessmentAttempt", back_populates="user", cascade="all, delete-orphan"
+    )
+    mastery_events = relationship("MasteryEvent", back_populates="user", cascade="all, delete-orphan")

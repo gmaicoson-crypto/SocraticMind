@@ -19,9 +19,17 @@ class Node(Base):
     y = Column(Float, default=0)                     # SVG 画布纵坐标
     parent_keys = Column(String(500), default="")    # 逗号分隔的父节点 key，无父节点则为空
     mastered_at = Column(DateTime(timezone=True), nullable=True)
+    estimated_minutes = Column(Integer, default=30, nullable=False)
+    mastery_source = Column(String(30), nullable=True)
+    mastery_confidence = Column(Float, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     topic = relationship("Topic", back_populates="nodes")
+    plan_items = relationship("StudyPlanItem", back_populates="node", cascade="all, delete-orphan")
+    assessment_attempts = relationship(
+        "AssessmentAttempt", back_populates="node", cascade="all, delete-orphan"
+    )
+    mastery_events = relationship("MasteryEvent", back_populates="node", cascade="all, delete-orphan")
 
     # 复合索引覆盖"按主题 + 状态过滤"的高频查询（统计已掌握节点数、解锁逻辑等）
     __table_args__ = (

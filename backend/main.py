@@ -3,6 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from core.config import settings
+from core.errors import install_api_error_handler
 from routers import auth, topics, nodes, chat, progress
 import models  # noqa: F401 - ensure ORM relationships can resolve registered models
 
@@ -15,6 +16,7 @@ app = FastAPI(
     description="AI 引导的知识图谱学习系统",
     version="1.0.0",
 )
+install_api_error_handler(app)
 
 # 允许的前端源通过环境变量 CORS_ORIGINS 配置（逗号分隔），生产环境须改为实际域名
 app.add_middleware(

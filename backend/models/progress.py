@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Text, Index
+from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Text, Index, JSON
 from sqlalchemy.sql import func
 from core.database import Base
 
@@ -18,6 +18,8 @@ class ChatMessage(Base):
     role = Column(String(10), nullable=False)   # "user" 或 "ai"
     content = Column(Text, nullable=False)
     mode = Column(String(50), default="socratic")  # socratic / normal
+    message_type = Column(String(30), default="chat", nullable=False)
+    metadata_json = Column(JSON, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     # 热力图、连续打卡、活跃时段统计均按 user_id + created_at 范围过滤

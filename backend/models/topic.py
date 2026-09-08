@@ -16,5 +16,10 @@ class Topic(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     # cascade="all, delete" 确保删除主题时，关联的所有节点一并级联删除
-    nodes = relationship("Node", back_populates="topic", cascade="all, delete")
+    nodes = relationship("Node", back_populates="topic", cascade="all, delete-orphan")
     user = relationship("User", back_populates="topics")
+    agent_runs = relationship("AgentRun", back_populates="topic")
+    memories = relationship("LearnerMemory", back_populates="topic", cascade="all, delete-orphan")
+    study_plan = relationship(
+        "StudyPlan", back_populates="topic", cascade="all, delete-orphan", uselist=False
+    )
