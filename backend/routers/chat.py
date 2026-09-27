@@ -1,12 +1,12 @@
 from datetime import datetime
 import json
 import logging
-from typing import Any, List, Optional
+from typing import Any, List, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from ai.agent import chat_stream
 from ai.prompts import build_socratic_suggestions_prompt, NORMAL_SUGGESTIONS_PROMPT
@@ -31,19 +31,35 @@ log = logging.getLogger(__name__)
 
 
 class MessageItem(BaseModel):
-    role: str
-    content: str
+    role: str = Field(min_length=1, max_length=20)
+    content: str = Field(max_length=5000)
 
 
 class ChatRequest(BaseModel):
-    node_key: str
-    topic_id: int
-    session_id: str
-    user_input: str
-    history: List[MessageItem] = Field(default_factory=list)
-    mode: str = "socratic"
-    ai_style: str = "标准"
-    kind: str = "qa"  # qa（默认 Q&A）/ topic_overview（主题概览）/ node_overview（节点概览）
+    node_key: str = Field(min_length=1, max_length=200)
+    topic_id: int = Field(ge=0)
+    session_id: str = Field(min_length=1, max_length=100)
+    user_input: str = Field(max_length=5000)
+    history: List[MessageItem] = Field(default_factory=list, max_length=20)
+    mode: Literal["socratic", "normal"] = "socratic"
+    ai_style: str = Field(default="标准", min_length=1, max_length=20)
+    kind: Literal["qa", "topic_overview", "node_overview"] = "qa"
+
+    @field_validator("node_key", "session_id", "ai_style")
+    @classmethod
+    def strip_required_text(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("must not be blank")
+        return value
+
+    @model_validator(mode="after")
+    def validate_request(self):
+        if self.kind == "qa" and not self.user_input.strip():
+            raise ValueError("user_input must not be blank for qa")
+        if self.kind != "qa" and self.mode != "socratic":
+            raise ValueError("overview requests must use socratic mode")
+        return self
 
 
 class HistoryResponse(BaseModel):
@@ -57,9 +73,7 @@ class HistoryResponse(BaseModel):
     topic_id: Optional[int] = None
     session_id: str
     message_type: str = "chat"
-    metadata: dict[str, Any] | None = Field(
-        default=None, validation_alias="metadata_json"
-    )
+    metadata: dict[str, Any] | None = Field(default=None, validation_alias="metadata_json")
     created_at: datetime | None = None
 
 
@@ -71,18 +85,33 @@ def chat_stream_endpoint(
 ):
     # topic_overview 模式下 node_key 承载的是主题名，不需要查节点表
     if req.kind == "topic_overview":
-        node_label = req.node_key
+        topic = (
+            db.query(Topic)
+            .filter(
+                Topic.id == req.topic_id,
+                Topic.user_id == current_user.id,
+            )
+            .first()
+        )
+        if not topic:
+            raise HTTPException(status_code=404, detail="主题不存在")
+        node_label = topic.title
         node_sub = ""
     elif req.mode == "normal":
         node_label = "通用助手"
         node_sub = "General Assistant"
     else:
         # 通过 join Topic 校验节点归属，防止越权访问其他用户的节点
-        node = db.query(Node).join(Topic).filter(
-            Node.node_key == req.node_key,
-            Topic.id == req.topic_id,
-            Topic.user_id == current_user.id,
-        ).first()
+        node = (
+            db.query(Node)
+            .join(Topic)
+            .filter(
+                Node.node_key == req.node_key,
+                Topic.id == req.topic_id,
+                Topic.user_id == current_user.id,
+            )
+            .first()
+        )
         if not node:
             raise HTTPException(status_code=404, detail="节点不存在")
         node_label = node.label
@@ -106,7 +135,7 @@ def chat_stream_endpoint(
         user_id=current_user.id,
         topic_id=req.topic_id or None,
         session_id=req.session_id,
-        node_key=req.node_key,
+        node_key=node_label if req.kind == "topic_overview" else req.node_key,
         user_input=req.user_input,
         mode=req.mode,
     )
@@ -123,8 +152,7 @@ def chat_stream_endpoint(
                 ai_style=req.ai_style,
                 kind=req.kind,
                 memories=[
-                    {"kind": memory.kind, "content": memory.content}
-                    for memory in relevant_memories
+                    {"kind": memory.kind, "content": memory.content} for memory in relevant_memories
                 ],
             ):
                 full_text.append(chunk)
@@ -182,10 +210,16 @@ def get_history(
     db: Session = Depends(get_db),
 ):
     """获取指定节点的对话历史，按消息 ID 升序排列，最多返回 50 条。"""
-    return db.query(ChatMessage).filter(
-        ChatMessage.user_id == current_user.id,
-        ChatMessage.node_key == node_key,
-    ).order_by(ChatMessage.id).limit(50).all()
+    return (
+        db.query(ChatMessage)
+        .filter(
+            ChatMessage.user_id == current_user.id,
+            ChatMessage.node_key == node_key,
+        )
+        .order_by(ChatMessage.id)
+        .limit(50)
+        .all()
+    )
 
 
 @router.get("/messages", response_model=List[HistoryResponse])
@@ -196,9 +230,16 @@ def get_all_messages(
     db: Session = Depends(get_db),
 ):
     """分页获取当前用户的全部消息，按 ID 倒序。"""
-    messages = db.query(ChatMessage).filter(
-        ChatMessage.user_id == current_user.id,
-    ).order_by(ChatMessage.id.desc()).offset(offset).limit(limit).all()
+    messages = (
+        db.query(ChatMessage)
+        .filter(
+            ChatMessage.user_id == current_user.id,
+        )
+        .order_by(ChatMessage.id.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
     return [
         {
             "id": message.id,
@@ -229,10 +270,14 @@ def delete_messages_endpoint(
     """批量删除指定 ID 的消息，过滤 user_id 确保只能删除自己的消息。"""
     if not req.ids:
         return {"deleted": 0}
-    deleted = db.query(ChatMessage).filter(
-        ChatMessage.id.in_(req.ids),
-        ChatMessage.user_id == current_user.id,
-    ).delete(synchronize_session=False)
+    deleted = (
+        db.query(ChatMessage)
+        .filter(
+            ChatMessage.id.in_(req.ids),
+            ChatMessage.user_id == current_user.id,
+        )
+        .delete(synchronize_session=False)
+    )
     db.commit()
     return {"deleted": deleted}
 
@@ -248,10 +293,14 @@ def delete_session_endpoint(
     db: Session = Depends(get_db),
 ):
     """按稳定的 session_id 删除当前用户的完整会话。"""
-    deleted = db.query(ChatMessage).filter(
-        ChatMessage.user_id == current_user.id,
-        ChatMessage.session_id == req.session_id,
-    ).delete(synchronize_session=False)
+    deleted = (
+        db.query(ChatMessage)
+        .filter(
+            ChatMessage.user_id == current_user.id,
+            ChatMessage.session_id == req.session_id,
+        )
+        .delete(synchronize_session=False)
+    )
     db.commit()
     return {"deleted": deleted}
 
@@ -265,10 +314,16 @@ def get_suggestions(
     """根据当前聊天模式，让 AI 生成快捷回复建议；生成失败时返回兜底的静态建议列表。"""
     if mode == "socratic":
         # 取用户当前可学习的节点作为上下文，让建议更贴合学习进度
-        recent_nodes = db.query(Node).join(Topic).filter(
-            Topic.user_id == current_user.id,
-            Node.state == "available",
-        ).limit(3).all()
+        recent_nodes = (
+            db.query(Node)
+            .join(Topic)
+            .filter(
+                Topic.user_id == current_user.id,
+                Node.state == "available",
+            )
+            .limit(3)
+            .all()
+        )
         context = "、".join([n.label for n in recent_nodes]) if recent_nodes else "编程基础"
         prompt = build_socratic_suggestions_prompt(context)
     else:
@@ -284,6 +339,10 @@ def get_suggestions(
         return json.loads(extract_json_from_markdown(response.choices[0].message.content))
     except Exception:
         if mode == "socratic":
-            return {"suggestions": ["我想学 Python", "教我机器学习", "讲讲数据结构", "学习 Web 开发"]}
+            return {
+                "suggestions": ["我想学 Python", "教我机器学习", "讲讲数据结构", "学习 Web 开发"]
+            }
         else:
-            return {"suggestions": ["今天天气怎么样", "推荐一部电影", "给我讲个笑话", "聊聊最近的新闻"]}
+            return {
+                "suggestions": ["今天天气怎么样", "推荐一部电影", "给我讲个笑话", "聊聊最近的新闻"]
+            }

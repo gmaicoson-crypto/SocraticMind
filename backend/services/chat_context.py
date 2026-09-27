@@ -48,11 +48,14 @@ def start_chat_messages(
     user_input: str,
     mode: str,
 ) -> tuple[ChatMessage, ChatMessage]:
+    # node_key is a display/context field for topic overviews and may contain
+    # a longer topic title than the legacy column allows.
+    persisted_node_key = node_key[:100]
     user_message = ChatMessage(
         user_id=user_id,
         topic_id=topic_id,
         session_id=session_id,
-        node_key=node_key,
+        node_key=persisted_node_key,
         role="user",
         content=user_input,
         mode=mode,
@@ -63,7 +66,7 @@ def start_chat_messages(
         user_id=user_id,
         topic_id=topic_id,
         session_id=session_id,
-        node_key=node_key,
+        node_key=persisted_node_key,
         role="ai",
         content="",
         mode=mode,
@@ -95,8 +98,10 @@ def finish_ai_message(
             ChatMessage.id == message_id,
             ChatMessage.user_id == user_id,
         )
-        .one()
+        .one_or_none()
     )
+    if message is None:
+        return
     message.content = content
     message.metadata_json = metadata
     db.commit()

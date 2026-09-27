@@ -1,6 +1,6 @@
 import json
 
-from models import ChatMessage, LearnerMemory, Node, Topic
+from models import ChatMessage, LearnerMemory, Node, Topic, User
 
 
 def create_chat_node(db_session, user, *, title="Chat topic", key="chat-node"):
@@ -42,9 +42,7 @@ def parse_events(response):
     ]
 
 
-def test_stream_uses_last_ten_complete_server_messages(
-    client, db_session, auth_user, monkeypatch
-):
+def test_stream_uses_last_ten_complete_server_messages(client, db_session, auth_user, monkeypatch):
     topic, node = create_chat_node(db_session, auth_user)
     for index in range(12):
         db_session.add(
@@ -112,9 +110,7 @@ def test_stream_uses_last_ten_complete_server_messages(
     assert "forged history" not in str(captured["messages"])
 
 
-def test_only_socratic_learning_chat_receives_memories(
-    client, db_session, auth_user, monkeypatch
-):
+def test_only_socratic_learning_chat_receives_memories(client, db_session, auth_user, monkeypatch):
     topic, node = create_chat_node(db_session, auth_user)
     other_topic = Topic(user_id=auth_user.id, title="Other")
     db_session.add(other_topic)
@@ -191,6 +187,23 @@ def test_stream_failure_is_persisted_as_incomplete_message(
     assert messages[1].metadata_json["status"] == "failed"
 
 
+def test_success_stream_returns_persisted_message_ids(client, db_session, auth_user, monkeypatch):
+    topic, node = create_chat_node(db_session, auth_user)
+
+    monkeypatch.setattr(
+        "routers.chat.chat_stream",
+        lambda **_kwargs: iter(["reply"]),
+    )
+    response = client.post("/api/chat/stream", json=stream_request(topic, node))
+
+    assert response.status_code == 200
+    events = parse_events(response)
+    ids = next(event["msg_ids"] for event in events if "msg_ids" in event)
+    messages = db_session.query(ChatMessage).order_by(ChatMessage.id).all()
+    assert ids == {"user": messages[0].id, "ai": messages[1].id}
+    assert messages[1].metadata_json == {"status": "complete"}
+
+
 def test_history_exposes_structured_message_fields(client, db_session, auth_user):
     topic, node = create_chat_node(db_session, auth_user)
     db_session.add(
@@ -216,3 +229,42 @@ def test_history_exposes_structured_message_fields(client, db_session, auth_user
     all_messages = client.get("/api/chat/messages")
     assert all_messages.status_code == 200
     assert all_messages.json()[0]["metadata"] == {"current": 2, "total": 3}
+
+
+def test_topic_overview_requires_an_owned_topic(client, db_session, auth_user):
+    other = User(
+        username="chat-other",
+        email="chat-other@example.com",
+        hashed_password="hash",
+    )
+    db_session.add(other)
+    db_session.flush()
+    topic = Topic(user_id=other.id, title="Private topic")
+    db_session.add(topic)
+    db_session.commit()
+
+    response = client.post(
+        "/api/chat/stream",
+        json={
+            "node_key": "Private topic",
+            "topic_id": topic.id,
+            "session_id": "new-session",
+            "user_input": "",
+            "mode": "socratic",
+            "ai_style": "标准",
+            "kind": "topic_overview",
+        },
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "主题不存在"
+
+
+def test_qa_rejects_blank_user_input(client, db_session, auth_user):
+    topic, node = create_chat_node(db_session, auth_user)
+    response = client.post(
+        "/api/chat/stream",
+        json=stream_request(topic, node, user_input=" "),
+    )
+
+    assert response.status_code == 422
