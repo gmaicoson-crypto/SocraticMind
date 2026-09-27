@@ -111,9 +111,7 @@ def _generate_assessment_questions(
             "assessment_questions",
         )
     except StructuredAIError as error:
-        return _fail_assessment(
-            db, snapshot, code=error.code, retryable=error.retryable
-        )
+        return _fail_assessment(db, snapshot, code=error.code, retryable=error.retryable)
 
     questions = generated.value.model_dump(mode="json")["questions"]
     state = deepcopy(snapshot.state)
@@ -128,7 +126,11 @@ def _generate_assessment_questions(
     )
     updated = (
         db.query(AgentRun)
-        .filter(AgentRun.id == snapshot.id, AgentRun.version == snapshot.version)
+        .filter(
+            AgentRun.id == snapshot.id,
+            AgentRun.user_id == snapshot.user_id,
+            AgentRun.version == snapshot.version,
+        )
         .update(
             {
                 AgentRun.state_json: state,
@@ -254,9 +256,7 @@ def start_assessment(
     return _generate_assessment_questions(db, snapshot, generator)
 
 
-def _score_assessment(
-    db: Session, snapshot: RunSnapshot, generator: Generator | None
-) -> AgentRun:
+def _score_assessment(db: Session, snapshot: RunSnapshot, generator: Generator | None) -> AgentRun:
     state = deepcopy(snapshot.state)
     messages = [
         {
@@ -276,16 +276,21 @@ def _score_assessment(
         },
     ]
     try:
-        scored = _invoke(
-            generator, AssessmentScore, messages, snapshot, "assessment_score"
-        )
+        scored = _invoke(generator, AssessmentScore, messages, snapshot, "assessment_score")
     except StructuredAIError as error:
-        return _fail_assessment(
-            db, snapshot, code=error.code, retryable=error.retryable
-        )
+        return _fail_assessment(db, snapshot, code=error.code, retryable=error.retryable)
 
     score = scored.value
     params = state["params"]
+    expected_question_ids = {question["question_id"] for question in state["questions"]}
+    scored_question_ids = {item.question_id for item in score.scores}
+    if scored_question_ids != expected_question_ids:
+        return _fail_assessment(
+            db,
+            snapshot,
+            code="ASSESSMENT_SCORE_INVALID",
+            retryable=True,
+        )
     professional_review_required = bool(
         high_risk_notice(params["domain"], params["topic"])
         and params["outcome_type"] == "procedure"
@@ -337,7 +342,11 @@ def _score_assessment(
     next_version = snapshot.version + 1
     updated = (
         db.query(AgentRun)
-        .filter(AgentRun.id == snapshot.id, AgentRun.version == snapshot.version)
+        .filter(
+            AgentRun.id == snapshot.id,
+            AgentRun.user_id == snapshot.user_id,
+            AgentRun.version == snapshot.version,
+        )
         .update(
             {
                 AgentRun.state_json: state,
@@ -387,7 +396,11 @@ def _score_assessment(
     state["processing_stage"] = None
     updated = (
         db.query(AgentRun)
-        .filter(AgentRun.id == snapshot.id, AgentRun.version == next_version)
+        .filter(
+            AgentRun.id == snapshot.id,
+            AgentRun.user_id == snapshot.user_id,
+            AgentRun.version == next_version,
+        )
         .update(
             {
                 AgentRun.status: AgentRunStatus.COMPLETED.value,
@@ -497,9 +510,7 @@ def retry_assessment(
         return _generate_assessment_questions(db, snapshot, generator)
     if stage == "assessment_score":
         return _score_assessment(db, snapshot, generator)
-    return _fail_assessment(
-        db, snapshot, code="ASSESSMENT_STAGE_UNKNOWN", retryable=False
-    )
+    return _fail_assessment(db, snapshot, code="ASSESSMENT_STAGE_UNKNOWN", retryable=False)
 
 
 def cancel_assessment(db: Session, *, user_id: int, run_id: str) -> AgentRun:

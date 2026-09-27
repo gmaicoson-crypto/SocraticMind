@@ -3,7 +3,14 @@ from datetime import date
 import pytest
 
 from core.errors import ApiError
-from models import LearnerMemory, Node, StudyPlan, StudyPlanItem, Topic
+from models import (
+    AssessmentAttempt,
+    LearnerMemory,
+    Node,
+    StudyPlan,
+    StudyPlanItem,
+    Topic,
+)
 from schemas.structured_ai import AssessmentQuestions, AssessmentScore
 from services.assessments import (
     retry_assessment,
@@ -63,7 +70,9 @@ class AssessmentGenerator:
         return StructuredResult(value=value, token_usage=5, latency_ms=2, attempts=1)
 
 
-def create_assessable_node(db_session, user, *, domain="education", outcome="concept", state="available"):
+def create_assessable_node(
+    db_session, user, *, domain="education", outcome="concept", state="available"
+):
     topic = Topic(user_id=user.id, title="Assessment topic")
     db_session.add(topic)
     db_session.flush()
@@ -155,9 +164,7 @@ def test_deterministic_gate_keeps_failed_assessment_available(
     db_session, auth_user, score, confidence, critical
 ):
     node, _item = create_assessable_node(db_session, auth_user)
-    generator = AssessmentGenerator(
-        score=score, confidence=confidence, critical=critical
-    )
+    generator = AssessmentGenerator(score=score, confidence=confidence, critical=critical)
     run = start_assessment(
         db_session,
         user_id=auth_user.id,
@@ -265,3 +272,30 @@ def test_failed_question_generation_can_retry(db_session, auth_user):
     )
     assert recovered.status == "assessing"
     assert recovered.state_json["step_id"] == "assessment-question-1"
+
+
+def test_invalid_score_question_ids_fail_before_recording_evidence(db_session, auth_user):
+    node, _item = create_assessable_node(db_session, auth_user)
+    good = AssessmentGenerator(score=10, confidence=0.8)
+
+    def invalid_score(schema, messages, context):
+        result = good(schema, messages, context)
+        if schema is AssessmentScore:
+            result.value.scores[0].question_id = "unknown-question"
+        return result
+
+    run = start_assessment(
+        db_session,
+        user_id=auth_user.id,
+        node_id=node.id,
+        request_id="invalid-score-ids",
+        generator=invalid_score,
+    )
+    run = complete_answers(db_session, auth_user.id, run, invalid_score)
+
+    assert run.status == "failed"
+    assert run.error_code == "ASSESSMENT_SCORE_INVALID"
+    assert run.retryable is True
+    attempt = db_session.query(AssessmentAttempt).filter_by(run_id=run.id).one()
+    assert attempt.status == "failed"
+    assert db_session.query(LearnerMemory).count() == 0
