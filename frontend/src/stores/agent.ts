@@ -33,10 +33,13 @@ export const useAgentStore = defineStore('agent', () => {
   const topicPlanDraft = shallowRef<{ topicId: number; title: string } | null>(null)
   const preview = computed(() => run.value?.preview ?? null)
   const result = computed(() => run.value?.result ?? null)
-  const canRetry = computed(() => run.value?.status === 'failed' && Boolean(run.value.error?.retryable))
+  const canRetry = computed(
+    () => run.value?.status === 'failed' && Boolean(run.value.error?.retryable),
+  )
   const requestIds = new Map<string, string>()
   let activeRunMutation: Promise<AgentRun | null> | null = null
   let activeMasteryMutation: Promise<MasteryResult | null> | null = null
+  let runEpoch = 0
 
   function acceptRun(response: AgentRun) {
     run.value = response
@@ -59,29 +62,36 @@ export const useAgentStore = defineStore('agent', () => {
   }
 
   async function restoreRun(runId: string) {
+    const epoch = runEpoch
     loading.value = true
     error.value = null
     try {
       const response = await getAgentRun(runId)
+      if (epoch !== runEpoch) return null
       return acceptRun(response)
     } catch (cause) {
+      if (epoch !== runEpoch) return null
       error.value = parseApiError(cause)
       return null
     } finally {
-      loading.value = false
+      if (epoch === runEpoch) loading.value = false
     }
   }
 
   function mutateRun(request: () => Promise<AgentRun>, refreshOnConflict = true) {
     if (activeRunMutation) return activeRunMutation
+    const epoch = runEpoch
     submitting.value = true
     error.value = null
     const currentRunId = run.value?.run_id
-    activeRunMutation = (async () => {
+    let operation: Promise<AgentRun | null> | null = null
+    operation = (async () => {
       try {
         const response = await request()
+        if (epoch !== runEpoch) return null
         return acceptRun(response)
       } catch (cause) {
+        if (epoch !== runEpoch) return null
         const problem = parseApiError(cause)
         error.value = problem
         if (problem.status === 409 && currentRunId && refreshOnConflict) {
@@ -93,10 +103,13 @@ export const useAgentStore = defineStore('agent', () => {
         }
         return null
       } finally {
-        submitting.value = false
-        activeRunMutation = null
+        if (operation && activeRunMutation === operation) {
+          submitting.value = false
+          activeRunMutation = null
+        }
       }
     })()
+    activeRunMutation = operation
     return activeRunMutation
   }
 
@@ -111,7 +124,7 @@ export const useAgentStore = defineStore('agent', () => {
   function beginAssessment(nodeId: number, sessionId?: string) {
     const key = `assessment:${nodeId}`
     const id = requestId(key, 'assessment')
-    return mutateRun(() => apiStartAssessment(nodeId, id, sessionId), false).then(response => {
+    return mutateRun(() => apiStartAssessment(nodeId, id, sessionId), false).then((response) => {
       if (response) requestIds.delete(key)
       return response
     })
@@ -120,11 +133,13 @@ export const useAgentStore = defineStore('agent', () => {
   function answer(answerText: string) {
     const current = run.value
     if (!current?.step) return Promise.resolve(null)
-    return mutateRun(() => answerAgentRun(current.run_id, {
-      step_id: current.step!.step_id,
-      version: current.version,
-      answer: answerText,
-    }))
+    return mutateRun(() =>
+      answerAgentRun(current.run_id, {
+        step_id: current.step!.step_id,
+        version: current.version,
+        answer: answerText,
+      }),
+    )
   }
 
   function update(input: AgentRunUpdate) {
@@ -137,7 +152,7 @@ export const useAgentStore = defineStore('agent', () => {
     const runId = run.value.run_id
     const key = `confirm:${runId}`
     const id = requestId(key, 'confirm')
-    return mutateRun(() => confirmAgentRun(runId, id)).then(response => {
+    return mutateRun(() => confirmAgentRun(runId, id)).then((response) => {
       if (response) requestIds.delete(key)
       return response
     })
@@ -174,7 +189,7 @@ export const useAgentStore = defineStore('agent', () => {
   function selfReportMastery(nodeId: number) {
     const key = `mastery:${nodeId}`
     const id = requestId(key, 'mastery')
-    return mutateMastery(() => apiSelfReportMastery(nodeId, id)).then(response => {
+    return mutateMastery(() => apiSelfReportMastery(nodeId, id)).then((response) => {
       if (response) requestIds.delete(key)
       return response
     })
@@ -183,15 +198,19 @@ export const useAgentStore = defineStore('agent', () => {
   function revertMastery(nodeId: number) {
     const key = `revert:${nodeId}`
     const id = requestId(key, 'revert')
-    return mutateMastery(() => apiRevertMastery(nodeId, id)).then(response => {
+    return mutateMastery(() => apiRevertMastery(nodeId, id)).then((response) => {
       if (response) requestIds.delete(key)
       return response
     })
   }
 
   function clearRun() {
+    runEpoch += 1
+    activeRunMutation = null
     run.value = null
     error.value = null
+    loading.value = false
+    submitting.value = false
     requestIds.clear()
   }
 
@@ -220,9 +239,30 @@ export const useAgentStore = defineStore('agent', () => {
   }
 
   return {
-    run, loading, submitting, error, onboardingTopic, topicPlanDraft, preview, result, canRetry,
-    restoreRun, beginOnboarding, beginTopicPlan, beginAssessment, answer,
-    update, confirm, cancel, retry, selfReportMastery, revertMastery, clearRun,
-    openOnboarding, closeOnboarding, openTopicPlan, closeTopicPlan,
+    run,
+    loading,
+    submitting,
+    error,
+    onboardingTopic,
+    topicPlanDraft,
+    preview,
+    result,
+    canRetry,
+    restoreRun,
+    beginOnboarding,
+    beginTopicPlan,
+    beginAssessment,
+    answer,
+    update,
+    confirm,
+    cancel,
+    retry,
+    selfReportMastery,
+    revertMastery,
+    clearRun,
+    openOnboarding,
+    closeOnboarding,
+    openTopicPlan,
+    closeTopicPlan,
   }
 })

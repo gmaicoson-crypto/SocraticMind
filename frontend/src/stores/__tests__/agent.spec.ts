@@ -60,7 +60,9 @@ describe('agent store', () => {
   it('uses the server response as state and blocks duplicate submissions', async () => {
     let resolveRequest: (value: AgentRun) => void = () => undefined
     vi.mocked(agentApi.startOnboarding).mockReturnValue(
-      new Promise(resolve => { resolveRequest = resolve }),
+      new Promise((resolve) => {
+        resolveRequest = resolve
+      }),
     )
     const store = useAgentStore()
 
@@ -108,21 +110,62 @@ describe('agent store', () => {
     await store.beginOnboarding(input)
 
     expect(store.error).toEqual({
-      code: 'AI_TIMEOUT', message: '稍后重试', retryable: true, status: 503,
+      code: 'AI_TIMEOUT',
+      message: '稍后重试',
+      retryable: true,
+      status: 503,
     })
   })
 
   it('surfaces a persisted failed run returned with HTTP success', async () => {
-    vi.mocked(agentApi.startOnboarding).mockResolvedValue(run({
-      status: 'failed',
-      step: null,
-      error: { code: 'AI_SCHEMA_INVALID', retryable: true },
-    }))
+    vi.mocked(agentApi.startOnboarding).mockResolvedValue(
+      run({
+        status: 'failed',
+        step: null,
+        error: { code: 'AI_SCHEMA_INVALID', retryable: true },
+      }),
+    )
     const store = useAgentStore()
 
     await store.beginOnboarding(input)
 
     expect(store.error?.code).toBe('AI_SCHEMA_INVALID')
     expect(store.canRetry).toBe(true)
+  })
+
+  it('ignores a run response that belongs to a session left while it was pending', async () => {
+    let resolveRequest: (value: AgentRun) => void = () => undefined
+    vi.mocked(agentApi.startOnboarding).mockReturnValue(
+      new Promise((resolve) => {
+        resolveRequest = resolve
+      }),
+    )
+    const store = useAgentStore()
+    const pending = store.beginOnboarding(input)
+
+    store.clearRun()
+    resolveRequest(run())
+
+    await pending
+    expect(store.run).toBeNull()
+    expect(store.submitting).toBe(false)
+  })
+
+  it('does not restore a stale session after the current session changes', async () => {
+    let resolveRequest: (value: AgentRun) => void = () => undefined
+    vi.mocked(agentApi.getAgentRun).mockReturnValue(
+      new Promise((resolve) => {
+        resolveRequest = resolve
+      }),
+    )
+    const store = useAgentStore()
+    const pending = store.restoreRun('run-1')
+
+    store.clearRun()
+    resolveRequest(run())
+
+    await pending
+    expect(store.run).toBeNull()
+    expect(store.loading).toBe(false)
   })
 })
