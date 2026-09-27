@@ -1,6 +1,5 @@
 <template>
   <div class="dialogue-wrap">
-
     <DialogueHistoryPanel
       :show="showHistory"
       :chat-mode="chatMode"
@@ -22,7 +21,10 @@
       <div class="dlg-header-left">
         <div class="ai-avatar" :class="{ thinking: isThinking }">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-            <path d="M12 2 L13.5 8.5 L20 10 L13.5 11.5 L12 18 L10.5 11.5 L4 10 L10.5 8.5 Z" fill="white"/>
+            <path
+              d="M12 2 L13.5 8.5 L20 10 L13.5 11.5 L12 18 L10.5 11.5 L4 10 L10.5 8.5 Z"
+              fill="white"
+            />
           </svg>
           <span v-if="isThinking" class="thinking-dot" />
         </div>
@@ -35,13 +37,30 @@
       </div>
       <div class="dlg-actions">
         <button class="hdr-btn" title="对话历史" @click="showHistory = !showHistory">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-            <path d="M12 8v4l3 3M3.05 11a9 9 0 1 0 .5-3"/><path d="M3 4v4h4"/>
+          <svg
+            width="13"
+            height="13"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+          >
+            <path d="M12 8v4l3 3M3.05 11a9 9 0 1 0 .5-3" />
+            <path d="M3 4v4h4" />
           </svg>
         </button>
         <button class="hdr-btn" title="新建对话" @click="newSession">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-            <path d="M12 5v14M5 12h14"/>
+          <svg
+            width="13"
+            height="13"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+          >
+            <path d="M12 5v14M5 12h14" />
           </svg>
         </button>
       </div>
@@ -93,7 +112,11 @@
           @cancel="cancelAgentFlow"
         />
         <PlanPreview
-          v-else-if="chatMode === 'socratic' && agentStore.run?.status === 'awaiting_confirmation' && agentStore.preview"
+          v-else-if="
+            chatMode === 'socratic' &&
+            agentStore.run?.status === 'awaiting_confirmation' &&
+            agentStore.preview
+          "
           :preview="agentStore.preview"
           :busy="agentStore.submitting"
           @update="updatePlanPreview"
@@ -115,7 +138,13 @@
           <strong>{{ agentStore.error?.message ?? '流程执行失败' }}</strong>
           <span>{{ agentStore.error?.code }}</span>
           <div>
-            <button v-if="agentStore.canRetry" :disabled="agentStore.submitting" @click="retryAgentFlow">重试</button>
+            <button
+              v-if="agentStore.canRetry"
+              :disabled="agentStore.submitting"
+              @click="retryAgentFlow"
+            >
+              重试
+            </button>
             <button :disabled="agentStore.submitting" @click="cancelAgentFlow">取消流程</button>
           </div>
         </div>
@@ -158,12 +187,18 @@
       :confirm-text="masteryConfirm === 'revert' ? '确认撤销' : '确认掌握'"
       :loading="agentStore.submitting"
       @close="masteryConfirm = null"
-      @update:model-value="value => { if (!value) masteryConfirm = null }"
+      @update:model-value="
+        (value) => {
+          if (!value) masteryConfirm = null
+        }
+      "
       @confirm="confirmMasteryAction"
     >
-      {{ masteryConfirm === 'revert'
-        ? '撤销后，未满足先修条件的后续节点会由服务端重新锁定，已有学习证据不会删除。'
-        : '自报掌握不会生成评估分数。如需可验证结果，请先选择“开始评估”。' }}
+      {{
+        masteryConfirm === 'revert'
+          ? '撤销后，未满足先修条件的后续节点会由服务端重新锁定，已有学习证据不会删除。'
+          : '自报掌握不会生成评估分数。如需可验证结果，请先选择“开始评估”。'
+      }}
     </ConfirmDialog>
   </div>
 </template>
@@ -175,7 +210,12 @@ import { useLearningStore } from '../stores/learning'
 import { useAgentStore } from '../stores/agent'
 import { usePlansStore } from '../stores/plans'
 import type { DialogueSession as Session, Message } from '../types'
-import type { AgentRun, AgentRunUpdate, AssessmentResult as AssessmentResultData, OnboardingInput } from '../types/learningAgent'
+import type {
+  AgentRun,
+  AgentRunUpdate,
+  AssessmentResult as AssessmentResultData,
+  OnboardingInput,
+} from '../types/learningAgent'
 import { chatStream, getSuggestions, deleteMessages, deleteChatSession } from '../api/chat'
 import { updateTopicTitle } from '../api/topic'
 import { now, nowDate, extractTopic, isNewTopicIntent } from '../utils/chat'
@@ -215,7 +255,9 @@ const {
 
 const messageListRef = ref<InstanceType<typeof MessageList> | null>(null)
 const inputBarRef = ref<InstanceType<typeof DialogueInputBar> | null>(null)
-let abortController: AbortController | null = null
+let streamEpoch = 0
+let activeStreamMessageIds: { user: number; ai: number } | null = null
+let activeStreamUserMessage: Message | null = null
 
 const input = ref('')
 const isThinking = ref(false)
@@ -228,8 +270,6 @@ const editingSessionId = ref<string | null>(null)
 const editingName = ref('')
 const masteryConfirm = ref<'self_report' | 'revert' | null>(null)
 const dismissedAssessmentNodeId = ref<number | null>(null)
-
-let pendingMsgIds: { user: number; ai: number } | null = null
 
 let isHydrated = false
 
@@ -250,33 +290,42 @@ const chips = ref<string[]>(loadCachedChips('socratic'))
 const chipsLoading = ref(false)
 
 const currentSessionId = computed(() =>
-  chatMode.value === 'socratic' ? socraticCurrentId.value : normalCurrentId.value
+  chatMode.value === 'socratic' ? socraticCurrentId.value : normalCurrentId.value,
 )
 
 const currentSessions = computed(() =>
-  chatMode.value === 'socratic' ? socraticSessions.value : normalSessions.value
+  chatMode.value === 'socratic' ? socraticSessions.value : normalSessions.value,
 )
 
-const currentSocraticSession = computed(() =>
-  socraticSessions.value.find(s => s.id === socraticCurrentId.value) ?? socraticSessions.value[0]
+const currentSocraticSession = computed(
+  () =>
+    socraticSessions.value.find((s) => s.id === socraticCurrentId.value) ??
+    socraticSessions.value[0],
 )
 
-const currentNormalSession = computed(() =>
-  normalSessions.value.find(s => s.id === normalCurrentId.value) ?? normalSessions.value[0]
+const currentNormalSession = computed(
+  () => normalSessions.value.find((s) => s.id === normalCurrentId.value) ?? normalSessions.value[0],
 )
 
 const currentSession = computed(() =>
-  chatMode.value === 'socratic' ? currentSocraticSession.value : currentNormalSession.value
+  chatMode.value === 'socratic' ? currentSocraticSession.value : currentNormalSession.value,
 )
 
 const currentSessionName = computed(() => currentSession.value?.name ?? '苏格拉底式对话')
-const activeAgentRun = computed(() => Boolean(
-  agentStore.run && !['completed', 'cancelled'].includes(agentStore.run.status),
-))
-const draftTopic = computed(() => agentStore.onboardingTopic ?? agentStore.topicPlanDraft?.title ?? null)
+const activeAgentRun = computed(() =>
+  Boolean(agentStore.run && !['completed', 'cancelled'].includes(agentStore.run.status)),
+)
+const draftTopic = computed(
+  () => agentStore.onboardingTopic ?? agentStore.topicPlanDraft?.title ?? null,
+)
 const assessmentResult = computed<AssessmentResultData | null>(() => {
   const run = agentStore.run
-  if (run?.type === 'assessment' && run.status === 'completed' && run.result && 'scores' in run.result) {
+  if (
+    run?.type === 'assessment' &&
+    run.status === 'completed' &&
+    run.result &&
+    'scores' in run.result
+  ) {
     const result = run.result as AssessmentResultData
     if (!store.activeNode?.dbId || result.node_id === store.activeNode.dbId) return result
   }
@@ -287,11 +336,12 @@ const assessmentResult = computed<AssessmentResultData | null>(() => {
 const socraticBadge = computed(() => Math.max(0, currentSocraticSession.value.messages.length - 1))
 const normalBadge = computed(() => Math.max(0, currentNormalSession.value.messages.length - 1))
 
-const placeholder = computed(() => chatMode.value === 'socratic'
-  ? agentStore.run?.step
-    ? `${agentStore.run.type === 'assessment' ? '回答评估' : '回答诊断'} ${agentStore.run.step.current}/${agentStore.run.step.total}`
-    : '回答问题，或问我一个反问…  (Enter 发送 · Shift+Enter 换行)'
-  : '随便问我什么…  (Enter 发送 · Shift+Enter 换行)'
+const placeholder = computed(() =>
+  chatMode.value === 'socratic'
+    ? agentStore.run?.step
+      ? `${agentStore.run.type === 'assessment' ? '回答评估' : '回答诊断'} ${agentStore.run.step.current}/${agentStore.run.step.total}`
+      : '回答问题，或问我一个反问…  (Enter 发送 · Shift+Enter 换行)'
+    : '随便问我什么…  (Enter 发送 · Shift+Enter 换行)',
 )
 
 const messages = computed({
@@ -306,10 +356,11 @@ const messages = computed({
 const currentStepInHistory = computed(() => {
   const run = agentStore.run
   if (!run?.step) return false
-  return messages.value.some(message =>
-    message.messageType === 'agent_step'
-    && message.metadata?.run_id === run.run_id
-    && message.metadata?.version === run.version,
+  return messages.value.some(
+    (message) =>
+      message.messageType === 'agent_step' &&
+      message.metadata?.run_id === run.run_id &&
+      message.metadata?.version === run.version,
   )
 })
 
@@ -438,7 +489,10 @@ async function submitChoiceAnswer(answer: string) {
   recordCurrentAgentStep()
   if (runId && stepId) {
     pushMessage({
-      role: 'user', text: answer, time: now(), messageType: 'agent_answer',
+      role: 'user',
+      text: answer,
+      time: now(),
+      messageType: 'agent_answer',
       metadata: { run_id: runId, step_id: stepId },
     })
   }
@@ -482,9 +536,7 @@ async function cancelAgentFlow() {
 }
 
 async function retryAgentFlow() {
-  await (agentStore.run?.type === 'assessment'
-    ? assessmentFlow.retry()
-    : onboardingFlow.retry())
+  await (agentStore.run?.type === 'assessment' ? assessmentFlow.retry() : onboardingFlow.retry())
   scrollToBottom()
 }
 
@@ -510,9 +562,10 @@ async function confirmMasteryAction() {
   const action = masteryConfirm.value
   const nodeId = store.activeNode?.dbId
   if (!action || !nodeId) return
-  const response = action === 'revert'
-    ? await assessmentFlow.revert(nodeId)
-    : await assessmentFlow.selfReport(nodeId)
+  const response =
+    action === 'revert'
+      ? await assessmentFlow.revert(nodeId)
+      : await assessmentFlow.selfReport(nodeId)
   if (response) {
     masteryConfirm.value = null
     if (action === 'revert') {
@@ -528,6 +581,8 @@ function scrollToBottom() {
 }
 
 function switchSession(id: string) {
+  if (id === currentSessionId.value) return
+  resetSessionInteraction()
   if (chatMode.value === 'socratic') socraticCurrentId.value = id
   else normalCurrentId.value = id
   showHistory.value = false
@@ -536,9 +591,11 @@ function switchSession(id: string) {
 }
 
 function newSession() {
-  const previous = currentSocraticSession.value?.topicId != null
-    ? currentSocraticSession.value
-    : socraticSessions.value.find(session => session.topicId != null)
+  resetSessionInteraction()
+  const previous =
+    currentSocraticSession.value?.topicId != null
+      ? currentSocraticSession.value
+      : socraticSessions.value.find((session) => session.topicId != null)
   const session = createDefaultSession(chatMode.value)
   if (chatMode.value === 'socratic') {
     prepareTopicChoice(session, previous)
@@ -553,6 +610,19 @@ function newSession() {
   scrollToBottom()
 }
 
+function resetSessionInteraction() {
+  streamEpoch += 1
+  streamControl.abortRequest()
+  activeStreamMessageIds = null
+  activeStreamUserMessage = null
+  streamingText.value = ''
+  streamingChoices.value = null
+  isThinking.value = false
+  agentStore.clearRun()
+  agentStore.closeOnboarding()
+  agentStore.closeTopicPlan()
+}
+
 onMounted(() => {
   const cached = loadCachedChips(chatMode.value)
   chips.value = cached.length > 0 ? cached : defaultChips[chatMode.value]
@@ -560,117 +630,137 @@ onMounted(() => {
   isHydrated = true
 })
 
-watch(() => store.topics.length, (len) => {
-  if (len > 0 && store.userInfo?.id) {
-    rebuildFromBackend()
-  }
-}, { immediate: true })
+watch(
+  () => store.topics.length,
+  (len) => {
+    if (len > 0 && store.userInfo?.id) {
+      rebuildFromBackend()
+    }
+  },
+  { immediate: true },
+)
 
-watch(chatMode, () => {
+watch(chatMode, (mode, previousMode) => {
+  if (mode !== previousMode) resetSessionInteraction()
 
   const cached = loadCachedChips(chatMode.value)
   chips.value = cached.length > 0 ? cached : defaultChips[chatMode.value]
   scrollToBottom()
 })
 
-watch(() => agentStore.onboardingTopic, (topic) => {
-  if (!topic) return
-  chatMode.value = 'socratic'
-  if (currentSocraticSession.value?.topicId != null) {
-    const session = createDefaultSession('socratic')
-    session.awaitingTopicChoice = false
-    socraticSessions.value.unshift(session)
-    socraticCurrentId.value = session.id
-    saveSessions()
-  }
-  nextTick(scrollToBottom)
-})
-
-watch(() => agentStore.topicPlanDraft, (draft) => {
-  if (!draft) return
-  chatMode.value = 'socratic'
-  const session = findOrCreateTopicSession(draft.topicId)
-  if (socraticCurrentId.value !== session.id) {
-    socraticCurrentId.value = session.id
-    showHistory.value = false
-    saveSessions()
-  }
-  nextTick(scrollToBottom)
-})
-
-watch([() => store.userInfo?.id, socraticCurrentId], async ([userId]) => {
-  if (!userId) return
-  agentStore.clearRun()
-  await onboardingFlow.restore()
-  scrollToBottom()
-}, { immediate: true })
-
-watch([() => store.activeTopicId, chatMode], async ([activeTopicId, mode], previous) => {
-  const previousTopicId = previous?.[0]
-  if (mode !== 'socratic') {
-    if (previousTopicId !== undefined && activeTopicId !== previousTopicId) {
-      chatMode.value = 'socratic'
+watch(
+  () => agentStore.onboardingTopic,
+  (topic) => {
+    if (!topic) return
+    chatMode.value = 'socratic'
+    if (currentSocraticSession.value?.topicId != null) {
+      const session = createDefaultSession('socratic')
+      session.awaitingTopicChoice = false
+      socraticSessions.value.unshift(session)
+      socraticCurrentId.value = session.id
+      saveSessions()
     }
-    return
-  }
-  const numId = Number(activeTopicId)
-  if (!numId) return
-  const session = findOrCreateTopicSession(numId)
-  if (socraticCurrentId.value !== session.id) {
-    socraticCurrentId.value = session.id
-    showHistory.value = false
-    saveSessions()
+    nextTick(scrollToBottom)
+  },
+)
+
+watch(
+  () => agentStore.topicPlanDraft,
+  (draft) => {
+    if (!draft) return
+    chatMode.value = 'socratic'
+    const session = findOrCreateTopicSession(draft.topicId)
+    if (socraticCurrentId.value !== session.id) {
+      socraticCurrentId.value = session.id
+      showHistory.value = false
+      saveSessions()
+    }
+    nextTick(scrollToBottom)
+  },
+)
+
+watch(
+  [() => store.userInfo?.id, socraticCurrentId],
+  async ([userId]) => {
+    if (!userId) return
+    resetSessionInteraction()
+    await onboardingFlow.restore()
     scrollToBottom()
-  }
+  },
+  { immediate: true },
+)
 
-  if (store.pendingTopicOverviewId === numId && isHydrated) {
-    const title = store.topics.find(t => Number(t.id) === numId)?.title
-    store.requestTopicOverview(null)
-    if (title) await streamOverview('topic', title)
-  }
-}, { immediate: true })
+watch(
+  [() => store.activeTopicId, chatMode],
+  async ([activeTopicId, mode], previous) => {
+    const previousTopicId = previous?.[0]
+    if (mode !== 'socratic') {
+      if (previousTopicId !== undefined && activeTopicId !== previousTopicId) {
+        chatMode.value = 'socratic'
+      }
+      return
+    }
+    const numId = Number(activeTopicId)
+    if (!numId) return
+    const session = findOrCreateTopicSession(numId)
+    if (socraticCurrentId.value !== session.id) {
+      socraticCurrentId.value = session.id
+      showHistory.value = false
+      saveSessions()
+      scrollToBottom()
+    }
 
-watch(() => store.topics, (topics) => {
-  const validIds = new Set(topics.map(t => Number(t.id)))
-  let mutated = false
-  const next: Session[] = []
-  for (const s of socraticSessions.value) {
-    if (s.topicId == null) {
+    if (store.pendingTopicOverviewId === numId && isHydrated) {
+      const title = store.topics.find((t) => Number(t.id) === numId)?.title
+      store.requestTopicOverview(null)
+      if (title) await streamOverview('topic', title)
+    }
+  },
+  { immediate: true },
+)
+
+watch(
+  () => store.topics,
+  (topics) => {
+    const validIds = new Set(topics.map((t) => Number(t.id)))
+    let mutated = false
+    const next: Session[] = []
+    for (const s of socraticSessions.value) {
+      if (s.topicId == null) {
+        next.push(s)
+        continue
+      }
+      if (!validIds.has(s.topicId)) {
+        mutated = true
+        continue
+      }
+      const t = topics.find((x) => Number(x.id) === s.topicId)
+      if (t && (s.topicTitle !== t.title || s.name !== t.title.slice(0, 12))) {
+        s.topicTitle = t.title
+        s.name = t.title.slice(0, 12)
+        mutated = true
+      }
       next.push(s)
-      continue
     }
-    if (!validIds.has(s.topicId)) {
 
-      mutated = true
-      continue
-    }
-    const t = topics.find(x => Number(x.id) === s.topicId)
-    if (t && (s.topicTitle !== t.title || s.name !== t.title.slice(0, 12))) {
-
-      s.topicTitle = t.title
-      s.name = t.title.slice(0, 12)
+    if (next.length === 0) {
+      next.push(createDefaultSession('socratic'))
       mutated = true
     }
-    next.push(s)
-  }
-
-  if (next.length === 0) {
-    next.push(createDefaultSession('socratic'))
-    mutated = true
-  }
-  if (mutated) {
-    socraticSessions.value = next
-    if (!next.find(s => s.id === socraticCurrentId.value)) {
-      socraticCurrentId.value = next[0].id
+    if (mutated) {
+      socraticSessions.value = next
+      if (!next.find((s) => s.id === socraticCurrentId.value)) {
+        socraticCurrentId.value = next[0].id
+      }
+      saveSessions()
     }
-    saveSessions()
-  }
-})
+  },
+)
 
 async function deleteSession(id: string) {
   if (deletingSessionIds.has(id)) return
   const sessions = chatMode.value === 'socratic' ? socraticSessions.value : normalSessions.value
-  const session = sessions.find(s => s.id === id)
+  const session = sessions.find((s) => s.id === id)
   if (!session) return
 
   deletingSessionIds.add(id)
@@ -684,12 +774,14 @@ async function deleteSession(id: string) {
     deletingSessionIds.delete(id)
   }
 
+  if (id === currentSessionId.value) resetSessionInteraction()
+
   if (chatMode.value === 'socratic') {
     if (socraticSessions.value.length <= 1) {
       socraticSessions.value[0] = createDefaultSession('socratic')
       socraticCurrentId.value = socraticSessions.value[0].id
     } else {
-      const idx = socraticSessions.value.findIndex(s => s.id === id)
+      const idx = socraticSessions.value.findIndex((s) => s.id === id)
       socraticSessions.value.splice(idx, 1)
       if (socraticCurrentId.value === id) {
         socraticCurrentId.value = socraticSessions.value[0].id
@@ -700,7 +792,7 @@ async function deleteSession(id: string) {
       normalSessions.value[0] = createDefaultSession('normal')
       normalCurrentId.value = normalSessions.value[0].id
     } else {
-      const idx = normalSessions.value.findIndex(s => s.id === id)
+      const idx = normalSessions.value.findIndex((s) => s.id === id)
       normalSessions.value.splice(idx, 1)
       if (normalCurrentId.value === id) {
         normalCurrentId.value = normalSessions.value[0].id
@@ -717,7 +809,7 @@ function startEdit(session: Session) {
 
 function saveSessionName(id: string) {
   const sessions = chatMode.value === 'socratic' ? socraticSessions.value : normalSessions.value
-  const session = sessions.find(s => s.id === id)
+  const session = sessions.find((s) => s.id === id)
   if (session && editingName.value.trim()) {
     session.name = editingName.value.trim()
     saveSessions()
@@ -726,14 +818,16 @@ function saveSessionName(id: string) {
 }
 
 function quoteMessage(msg: Message) {
-
-  quotedText.value = msg.text.replace(/[#*`>]/g, '').trim().slice(0, 200)
+  quotedText.value = msg.text
+    .replace(/[#*`>]/g, '')
+    .trim()
+    .slice(0, 200)
   nextTick(() => inputBarRef.value?.focus())
 }
 
 function deleteMessage(index: number) {
   if (!currentSession.value) return
-  if (index === 0) return  // 第一条欢迎消息不允许删除
+  if (index === 0) return // 第一条欢迎消息不允许删除
   const msg = currentSession.value.messages[index]
   const ids = [msg.db_id, msg.paired_db_id].filter((id): id is number => id !== undefined)
   if (ids.length > 0) deleteMessages(ids).catch(() => {})
@@ -741,18 +835,50 @@ function deleteMessage(index: number) {
   saveSessions()
 }
 
+interface StreamContext {
+  epoch: number
+  sessionId: string
+  controller: AbortController
+}
+
+function beginStream(sessionId: string): StreamContext {
+  const controller = streamControl.beginRequest()
+  const context = { epoch: ++streamEpoch, sessionId, controller }
+  activeStreamMessageIds = null
+  activeStreamUserMessage = null
+  return context
+}
+
+function isCurrentStream(context: StreamContext): boolean {
+  return (
+    context.epoch === streamEpoch &&
+    context.sessionId === currentSession.value?.id &&
+    !context.controller.signal.aborted
+  )
+}
+
 function abortChat() {
-  if (abortController) {
-    streamControl.abortRequest()
-    abortController = null
-  }
+  const messageIds = activeStreamMessageIds
+  const userMessage = activeStreamUserMessage
+  streamEpoch += 1
+  streamControl.abortRequest()
+  activeStreamMessageIds = null
+  activeStreamUserMessage = null
   const partial = streamingText.value.trim()
   streamingText.value = ''
   streamingChoices.value = null
   isThinking.value = false
   if (partial) {
     const { cleanText, choices } = parseChoices(partial)
-    pushMessage({ role: 'ai', text: cleanText, time: now(), choices: choices ?? undefined })
+    if (messageIds && userMessage) userMessage.db_id = messageIds.user
+    pushMessage({
+      role: 'ai',
+      text: cleanText,
+      time: now(),
+      choices: choices ?? undefined,
+      db_id: messageIds?.ai,
+      paired_db_id: messageIds?.user,
+    })
   }
   scrollToBottom()
 }
@@ -774,7 +900,10 @@ function startTopicEdit() {
 async function saveTopicName() {
   const newTitle = editingTopicInput.value.trim()
   const topicId = currentSession.value?.topicId
-  if (!newTitle || !topicId) { editingTopicName.value = false; return }
+  if (!newTitle || !topicId) {
+    editingTopicName.value = false
+    return
+  }
   try {
     await updateTopicTitle(topicId, newTitle)
     if (currentSession.value) {
@@ -820,9 +949,13 @@ function sendChoiceText(choiceText: string) {
 async function send() {
   const v = input.value.trim()
   if (
-    !v || isThinking.value || isGenerating.value || agentStore.submitting
-    || (chatMode.value === 'socratic' && agentStore.run?.status === 'awaiting_confirmation')
-  ) return
+    !v ||
+    isThinking.value ||
+    isGenerating.value ||
+    agentStore.submitting ||
+    (chatMode.value === 'socratic' && agentStore.run?.status === 'awaiting_confirmation')
+  )
+    return
 
   if (chatMode.value === 'socratic') {
     store.recordLearning()
@@ -834,7 +967,10 @@ async function send() {
     inputBarRef.value?.reset()
     recordCurrentAgentStep()
     pushMessage({
-      role: 'user', text: v, time: now(), messageType: 'agent_answer',
+      role: 'user',
+      text: v,
+      time: now(),
+      messageType: 'agent_answer',
       metadata: { run_id: runId, step_id: stepId },
     })
     input.value = ''
@@ -862,32 +998,62 @@ async function send() {
   scrollToBottom()
 
   if (chatMode.value === 'normal') {
-    abortController = streamControl.beginRequest()
+    const stream = beginStream(currentSession.value!.id)
     isThinking.value = true
     streamingText.value = ''
-    const history = messages.value.slice(-10).map(m => ({ role: m.role as 'ai' | 'user', content: m.text }))
+    const history = messages.value
+      .slice(-10)
+      .map((m) => ({ role: m.role as 'ai' | 'user', content: m.text }))
+    const userMsgRef = currentSession.value!.messages[currentSession.value!.messages.length - 1]
+    activeStreamUserMessage = userMsgRef
+    let aiMessageId: number | undefined
     chatStream(
-      'normal', 0, currentSession.value!.id, userInput, history, 'normal', '标准',
+      'normal',
+      0,
+      currentSession.value!.id,
+      userInput,
+      history,
+      'normal',
+      '标准',
       (chunk) => {
+        if (!isCurrentStream(stream)) return
         streamingText.value += chunk
         checkStreamingChoices()
         scrollToBottom()
       },
       () => {
+        if (!isCurrentStream(stream)) return
         const t = streamingText.value.trim()
-        streamingText.value = ''; streamingChoices.value = null; isThinking.value = false
+        streamingText.value = ''
+        streamingChoices.value = null
+        isThinking.value = false
         if (t) {
           const { cleanText, choices } = parseChoices(t)
-          pushMessage({ role: 'ai', text: cleanText, time: now(), choices: choices ?? undefined })
+          pushMessage({
+            role: 'ai',
+            text: cleanText,
+            time: now(),
+            choices: choices ?? undefined,
+            db_id: aiMessageId,
+          })
         }
         scrollToBottom()
       },
       (err) => {
+        if (!isCurrentStream(stream)) return
         if (err?.name === 'AbortError') return
         pushMessage({ role: 'ai', text: '抱歉，连接失败，请重试。', time: now() })
-        streamingText.value = ''; isThinking.value = false; scrollToBottom()
+        streamingText.value = ''
+        isThinking.value = false
+        scrollToBottom()
       },
-      abortController,
+      stream.controller,
+      (userMsgId, responseMessageId) => {
+        if (!isCurrentStream(stream)) return
+        userMsgRef.db_id = userMsgId
+        aiMessageId = responseMessageId
+        activeStreamMessageIds = { user: userMsgId, ai: responseMessageId }
+      },
     )
     return
   }
@@ -898,7 +1064,11 @@ async function send() {
   }
 
   if (currentSession.value?.topicId && isNewTopicIntent(v)) {
-    pushMessage({ role: 'ai', text: `本对话已绑定「**${currentSession.value.topicTitle}**」主题，每个学习对话只能学习一个主题。\n\n如需学习新主题，请点击右上角「＋」新建对话。`, time: now() })
+    pushMessage({
+      role: 'ai',
+      text: `本对话已绑定「**${currentSession.value.topicTitle}**」主题，每个学习对话只能学习一个主题。\n\n如需学习新主题，请点击右上角「＋」新建对话。`,
+      time: now(),
+    })
     scrollToBottom()
     return
   }
@@ -914,7 +1084,7 @@ async function send() {
 
   if (currentSession.value?.topicId == null && store.activeNode) {
     const topicId = currentTopicId.value
-    const topic = store.topics.find(t => Number(t.id) === topicId)
+    const topic = store.topics.find((t) => Number(t.id) === topicId)
     if (topicId && topic) {
       currentSession.value.topicId = topicId
       currentSession.value.topicTitle = topic.title
@@ -932,7 +1102,7 @@ async function send() {
     return
   }
 
-  if (currentSession.value?.topicId && !store.nodes.some(n => n.id === store.activeNode!.id)) {
+  if (currentSession.value?.topicId && !store.nodes.some((n) => n.id === store.activeNode!.id)) {
     pushMessage({
       role: 'ai',
       text: `当前对话绑定的是「**${currentSession.value.topicTitle}**」主题，请在该主题的图谱里选一个节点继续。`,
@@ -942,42 +1112,65 @@ async function send() {
     return
   }
 
-  abortController = streamControl.beginRequest()
+  const stream = beginStream(currentSession.value!.id)
   isThinking.value = true
   streamingText.value = ''
   scrollToBottom()
-  const history = messages.value.slice(-10).map(m => ({ role: m.role as 'ai' | 'user', content: m.text }))
+  const history = messages.value
+    .slice(-10)
+    .map((m) => ({ role: m.role as 'ai' | 'user', content: m.text }))
   const userMsgRef = currentSession.value!.messages[currentSession.value!.messages.length - 1]
+  activeStreamUserMessage = userMsgRef
+  let aiMessageId: number | undefined
 
   chatStream(
-    store.activeNode.id, currentTopicId.value, currentSession.value!.id, userInput, history, 'socratic', aiStyle.value,
+    store.activeNode.id,
+    currentTopicId.value,
+    currentSession.value!.id,
+    userInput,
+    history,
+    'socratic',
+    aiStyle.value,
     (chunk) => {
+      if (!isCurrentStream(stream)) return
       streamingText.value += chunk
       checkStreamingChoices()
       scrollToBottom()
     },
     () => {
+      if (!isCurrentStream(stream)) return
       const t = streamingText.value.trim()
-      streamingText.value = ''; streamingChoices.value = null; isThinking.value = false
+      streamingText.value = ''
+      streamingChoices.value = null
+      isThinking.value = false
       if (t) {
         const { cleanText, choices } = parseChoices(t)
-        const aiMsg: Message = { role: 'ai', text: cleanText, time: now(), choices: choices ?? undefined }
-        if (pendingMsgIds) {
-          userMsgRef.db_id = pendingMsgIds.user
-          aiMsg.db_id = pendingMsgIds.ai
-          pendingMsgIds = null
+        const aiMsg: Message = {
+          role: 'ai',
+          text: cleanText,
+          time: now(),
+          choices: choices ?? undefined,
         }
+        aiMsg.db_id = aiMessageId
         pushMessage(aiMsg)
       }
       scrollToBottom()
     },
     (err) => {
+      if (!isCurrentStream(stream)) return
       if (err?.name === 'AbortError') return
       pushMessage({ role: 'ai', text: '抱歉，连接失败，请重试。', time: now() })
-      streamingText.value = ''; isThinking.value = false; scrollToBottom()
+      streamingText.value = ''
+      isThinking.value = false
+      scrollToBottom()
     },
-    abortController,
-    (userMsgId, aiMsgId) => { pendingMsgIds = { user: userMsgId, ai: aiMsgId } },
+    stream.controller,
+    (userMsgId, responseMessageId) => {
+      if (!isCurrentStream(stream)) return
+      userMsgRef.db_id = userMsgId
+      aiMessageId = responseMessageId
+      activeStreamMessageIds = { user: userMsgId, ai: responseMessageId }
+    },
   )
 }
 
@@ -986,42 +1179,76 @@ async function retryAt(aiIndex: number) {
   const msgs = currentSession.value?.messages ?? []
   let userMsg: Message | null = null
   for (let i = aiIndex - 1; i >= 0; i--) {
-    if (msgs[i].role === 'user') { userMsg = msgs[i]; break }
+    if (msgs[i].role === 'user') {
+      userMsg = msgs[i]
+      break
+    }
   }
   if (!userMsg || !currentSession.value) return
 
   currentSession.value.messages = msgs.slice(0, aiIndex)
   saveSessions()
 
-  abortController = streamControl.beginRequest()
+  const stream = beginStream(currentSession.value.id)
   isThinking.value = true
   streamingText.value = ''
   scrollToBottom()
 
-  const history = msgs.slice(0, aiIndex).map(m => ({ role: m.role as 'ai' | 'user', content: m.text })).slice(-10)
+  const history = msgs
+    .slice(0, aiIndex)
+    .map((m) => ({ role: m.role as 'ai' | 'user', content: m.text }))
+    .slice(-10)
+  activeStreamUserMessage = userMsg
+  let aiMessageId: number | undefined
 
   chatStream(
-    store.activeNode?.id ?? 'normal', currentTopicId.value, currentSession.value.id, userMsg.text, history, chatMode.value, aiStyle.value,
+    store.activeNode?.id ?? 'normal',
+    currentTopicId.value,
+    currentSession.value.id,
+    userMsg.text,
+    history,
+    chatMode.value,
+    aiStyle.value,
     (chunk) => {
+      if (!isCurrentStream(stream)) return
       streamingText.value += chunk
       checkStreamingChoices()
       scrollToBottom()
     },
     () => {
+      if (!isCurrentStream(stream)) return
       const t = streamingText.value.trim()
-      streamingText.value = ''; streamingChoices.value = null; isThinking.value = false
+      streamingText.value = ''
+      streamingChoices.value = null
+      isThinking.value = false
       if (t) {
         const { cleanText, choices } = parseChoices(t)
-        pushMessage({ role: 'ai', text: cleanText, time: now(), choices: choices ?? undefined })
+        pushMessage({
+          role: 'ai',
+          text: cleanText,
+          time: now(),
+          choices: choices ?? undefined,
+          db_id: aiMessageId,
+        })
       }
       scrollToBottom()
     },
     (err) => {
+      if (!isCurrentStream(stream)) return
       if (err?.name === 'AbortError') return
       pushMessage({ role: 'ai', text: '抱歉，连接失败，请重试。', time: now() })
-      streamingText.value = ''; isThinking.value = false; scrollToBottom()
+      streamingText.value = ''
+      isThinking.value = false
+      scrollToBottom()
     },
-    abortController,
+    stream.controller,
+    (userMsgId, responseMessageId) => {
+      if (!isCurrentStream(stream)) return
+      if (userMsg.db_id == null) userMsg.db_id = userMsgId
+      else userMsg.paired_db_id = userMsgId
+      aiMessageId = responseMessageId
+      activeStreamMessageIds = { user: userMsgId, ai: responseMessageId }
+    },
   )
 }
 
@@ -1029,28 +1256,43 @@ function streamOverview(kind: 'topic' | 'node', identifier: string): Promise<voi
   return new Promise((resolve) => {
     isThinking.value = true
     streamingText.value = ''
-    abortController = streamControl.beginRequest()
+    const stream = beginStream(currentSession.value!.id)
     const apiKind = kind === 'topic' ? 'topic_overview' : 'node_overview'
+    let messageIds: { user: number; ai: number } | null = null
     chatStream(
-      identifier, currentTopicId.value, currentSession.value!.id, '',
+      identifier,
+      currentTopicId.value,
+      currentSession.value!.id,
+      '',
       [],
-      'socratic', aiStyle.value,
+      'socratic',
+      aiStyle.value,
       (chunk) => {
+        if (!isCurrentStream(stream)) return
         streamingText.value += chunk
         checkStreamingChoices()
         scrollToBottom()
       },
       () => {
+        if (!isCurrentStream(stream)) {
+          resolve()
+          return
+        }
         const t = streamingText.value.trim()
-        streamingText.value = ''; streamingChoices.value = null
+        streamingText.value = ''
+        streamingChoices.value = null
         isThinking.value = false
         if (t) {
           const { cleanText, choices } = parseChoices(t)
-          const aiMsg: Message = { role: 'ai', text: cleanText, time: now(), choices: choices ?? undefined }
-          if (pendingMsgIds) {
-            aiMsg.db_id = pendingMsgIds.ai
-            aiMsg.paired_db_id = pendingMsgIds.user
-            pendingMsgIds = null
+          const aiMsg: Message = {
+            role: 'ai',
+            text: cleanText,
+            time: now(),
+            choices: choices ?? undefined,
+          }
+          if (messageIds) {
+            aiMsg.db_id = messageIds.ai
+            aiMsg.paired_db_id = messageIds.user
           }
           pushMessage(aiMsg)
         }
@@ -1058,6 +1300,10 @@ function streamOverview(kind: 'topic' | 'node', identifier: string): Promise<voi
         resolve()
       },
       (err) => {
+        if (!isCurrentStream(stream)) {
+          resolve()
+          return
+        }
         if (err?.name !== 'AbortError') {
           pushMessage({ role: 'ai', text: '加载概览失败，但你仍可以正常学习。', time: now() })
         }
@@ -1066,66 +1312,91 @@ function streamOverview(kind: 'topic' | 'node', identifier: string): Promise<voi
         scrollToBottom()
         resolve()
       },
-      abortController,
-      (userMsgId, aiMsgId) => { pendingMsgIds = { user: userMsgId, ai: aiMsgId } },
+      stream.controller,
+      (userMsgId, aiMessageId) => {
+        if (!isCurrentStream(stream)) return
+        messageIds = { user: userMsgId, ai: aiMessageId }
+        activeStreamMessageIds = messageIds
+      },
       apiKind,
     )
   })
 }
 
-watch(() => store.activeNode?.id, async (id) => {
-  if (!id) return
-  if (chatMode.value !== 'socratic') return
-  const node = store.activeNode!
+watch(
+  () => store.activeNode?.id,
+  async (id) => {
+    if (!id) return
+    if (chatMode.value !== 'socratic') return
+    const node = store.activeNode!
 
-  if (node.state === 'mastered') {
-    isThinking.value = true
-    streamingText.value = ''
-    scrollToBottom()
+    if (node.state === 'mastered') {
+      isThinking.value = true
+      streamingText.value = ''
+      scrollToBottom()
 
-    const prompt = `用户想复习「${node.label}」（${node.sub}），请用苏格拉底式提问引导用户回顾这个知识点的核心内容。`
-    abortController = streamControl.beginRequest()
-    chatStream(
-      node.id, currentTopicId.value, currentSession.value!.id, prompt,
-      [],
-      'socratic', aiStyle.value,
-      (chunk) => {
-        streamingText.value += chunk
-        checkStreamingChoices()
-        scrollToBottom()
-      },
-      () => {
-        const t = streamingText.value.trim()
-        streamingText.value = ''; streamingChoices.value = null
-        isThinking.value = false
-        if (t) {
-          const { cleanText, choices } = parseChoices(t)
-          const aiMsg: Message = { role: 'ai', text: cleanText, time: now(), choices: choices ?? undefined }
-          if (pendingMsgIds) {
-            aiMsg.db_id = pendingMsgIds.ai
-            aiMsg.paired_db_id = pendingMsgIds.user
-            pendingMsgIds = null
+      const prompt = `用户想复习「${node.label}」（${node.sub}），请用苏格拉底式提问引导用户回顾这个知识点的核心内容。`
+      const stream = beginStream(currentSession.value!.id)
+      let messageIds: { user: number; ai: number } | null = null
+      chatStream(
+        node.id,
+        currentTopicId.value,
+        currentSession.value!.id,
+        prompt,
+        [],
+        'socratic',
+        aiStyle.value,
+        (chunk) => {
+          if (!isCurrentStream(stream)) return
+          streamingText.value += chunk
+          checkStreamingChoices()
+          scrollToBottom()
+        },
+        () => {
+          if (!isCurrentStream(stream)) return
+          const t = streamingText.value.trim()
+          streamingText.value = ''
+          streamingChoices.value = null
+          isThinking.value = false
+          if (t) {
+            const { cleanText, choices } = parseChoices(t)
+            const aiMsg: Message = {
+              role: 'ai',
+              text: cleanText,
+              time: now(),
+              choices: choices ?? undefined,
+            }
+            if (messageIds) {
+              aiMsg.db_id = messageIds.ai
+              aiMsg.paired_db_id = messageIds.user
+            }
+            pushMessage(aiMsg)
           }
-          pushMessage(aiMsg)
-        }
-        scrollToBottom()
-      },
-      (err) => {
-        if (err?.name === 'AbortError') return
-        streamingText.value = ''
-        isThinking.value = false
-      },
-      abortController,
-      (userMsgId, aiMsgId) => { pendingMsgIds = { user: userMsgId, ai: aiMsgId } },
-    )
-    return
-  }
+          scrollToBottom()
+        },
+        (err) => {
+          if (!isCurrentStream(stream)) return
+          if (err?.name === 'AbortError') return
+          streamingText.value = ''
+          isThinking.value = false
+        },
+        stream.controller,
+        (userMsgId, aiMessageId) => {
+          if (!isCurrentStream(stream)) return
+          messageIds = { user: userMsgId, ai: aiMessageId }
+          activeStreamMessageIds = messageIds
+        },
+      )
+      return
+    }
 
-  await streamOverview('node', node.id)
-})
+    await streamOverview('node', node.id)
+  },
+)
 
 onBeforeUnmount(() => {
   disposeSessionPersistence()
+  streamEpoch += 1
   streamControl.abortRequest()
 })
 </script>
@@ -1227,7 +1498,21 @@ onBeforeUnmount(() => {
   color: var(--ink);
   font-size: 12px;
 }
-.agent-error > span { color: var(--ink-3); font-family: var(--font-mono); overflow-wrap: anywhere; }
-.agent-error > div { display: flex; gap: 8px; }
-.agent-error button { padding: 6px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink-2); cursor: pointer; }
+.agent-error > span {
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  overflow-wrap: anywhere;
+}
+.agent-error > div {
+  display: flex;
+  gap: 8px;
+}
+.agent-error button {
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--ink-2);
+  cursor: pointer;
+}
 </style>

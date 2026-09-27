@@ -40,8 +40,23 @@ export function chatStream(
   const controller = controllers ?? new AbortController()
 
   const timeout = setTimeout(() => controller.abort(), 5 * 60 * 1000)
+  let terminalEventSent = false
 
   let reader: ReadableStreamDefaultReader<Uint8Array> | null = null
+
+  function notifyDone() {
+    if (terminalEventSent) return
+    terminalEventSent = true
+    clearTimeout(timeout)
+    onDone()
+  }
+
+  function notifyError(error: unknown) {
+    if (terminalEventSent) return
+    terminalEventSent = true
+    clearTimeout(timeout)
+    onError(error)
+  }
 
   const originalAbort = controller.abort.bind(controller)
   controller.abort = () => {
@@ -53,21 +68,21 @@ export function chatStream(
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
+      Authorization: `Bearer ${token}`,
     },
     body: JSON.stringify({
       node_key: nodeKey,
       topic_id: topicId,
       session_id: sessionId,
       user_input: userInput,
-      history: history.map(m => ({ role: m.role, content: m.content })),
+      history: history.map((m) => ({ role: m.role, content: m.content })),
       mode,
       ai_style: aiStyle,
       kind,
     }),
     signal: controller.signal,
   })
-    .then(res => {
+    .then((res) => {
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       reader = res.body!.getReader()
       const decoder = new TextDecoder('utf-8')
@@ -84,15 +99,14 @@ export function chatStream(
             const data = line.slice(5).trim()
             if (!data) continue
             if (data === '[DONE]') {
-              clearTimeout(timeout)
-              onDone()
+              notifyDone()
               return
             }
             try {
               const json = JSON.parse(data)
               if (json.text) onChunk(json.text)
               if (json.msg_ids) onMsgIds?.(json.msg_ids.user, json.msg_ids.ai)
-              if (json.error) onError(json.error)
+              if (json.error) notifyError(json.error)
             } catch (e) {
               console.warn('[SSE] JSON 解析失败，分片数据:', data.slice(0, 80), e)
             }
@@ -101,27 +115,27 @@ export function chatStream(
       }
 
       function read() {
-        reader!.read().then(({ done, value }) => {
-          if (done) {
-            if (buffer.trim()) processBuffer()
-            clearTimeout(timeout)
-            onDone()
-            return
-          }
-          buffer += decoder.decode(value, { stream: true })
-          processBuffer()
-          read()
-        }).catch(err => {
-          clearTimeout(timeout)
-          if (err?.name !== 'AbortError') onError(err)
-        })
+        reader!
+          .read()
+          .then(({ done, value }) => {
+            if (done) {
+              if (buffer.trim()) processBuffer()
+              notifyDone()
+              return
+            }
+            buffer += decoder.decode(value, { stream: true })
+            processBuffer()
+            read()
+          })
+          .catch((err) => {
+            if (err?.name !== 'AbortError') notifyError(err)
+          })
       }
 
       read()
     })
-    .catch(err => {
-      clearTimeout(timeout)
-      if (err?.name !== 'AbortError') onError(err)
+    .catch((err) => {
+      if (err?.name !== 'AbortError') notifyError(err)
     })
 }
 
