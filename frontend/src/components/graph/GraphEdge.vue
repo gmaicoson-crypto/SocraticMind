@@ -42,7 +42,7 @@ const stroke = computed(() => {
   return 'var(--blue-line)'
 })
 
-const strokeWidth = computed(() => edgeState.value === 'active' ? 1.6 : 1)
-const dashArray = computed(() => edgeState.value === 'locked' ? '3 4' : 'none')
-const opacity = computed(() => edgeState.value === 'locked' ? 0.5 : 0.85)
+const strokeWidth = computed(() => (edgeState.value === 'active' ? 1.6 : 1))
+const dashArray = computed(() => (edgeState.value === 'locked' ? '3 4' : 'none'))
+const opacity = computed(() => (edgeState.value === 'locked' ? 0.5 : 0.85))
 </script>

@@ -46,9 +46,7 @@ def client_with(*results):
             raise result
         return result
 
-    client = SimpleNamespace(
-        chat=SimpleNamespace(completions=SimpleNamespace(create=create))
-    )
+    client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
     return client, calls
 
 
@@ -72,12 +70,15 @@ def test_parses_json_and_tracks_tokens():
 def test_accepts_markdown_json_and_repairs_only_once():
     payload = json.dumps(questions_payload())
     markdown_client, _ = client_with(response(f"```json\n{payload}\n```"))
-    assert generate_structured(
-        DiagnosticQuestions,
-        [],
-        RunContext(run_id="run-2", call_type="diagnostic_questions"),
-        client=markdown_client,
-    ).attempts == 1
+    assert (
+        generate_structured(
+            DiagnosticQuestions,
+            [],
+            RunContext(run_id="run-2", call_type="diagnostic_questions"),
+            client=markdown_client,
+        ).attempts
+        == 1
+    )
 
     repair_client, calls = client_with(response("not json", 5), response(payload, 7))
     result = generate_structured(
@@ -145,8 +146,7 @@ def test_structured_schemas_enforce_question_count_and_score_total():
         DiagnosticQuestions.model_validate({"questions": questions_payload()["questions"][:2]})
 
     scores = [
-        QuestionScore(question_id=f"q{i}", score=4, rationale="Evidence")
-        for i in range(1, 4)
+        QuestionScore(question_id=f"q{i}", score=4, rationale="Evidence") for i in range(1, 4)
     ]
     with pytest.raises(ValidationError):
         AssessmentScore(

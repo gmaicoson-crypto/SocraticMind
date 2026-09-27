@@ -97,9 +97,7 @@ def answer_current(db_session, user_id, run, answer, generator):
     )
 
 
-def test_diagnostic_run_recovers_steps_rejects_stale_and_builds_preview(
-    db_session, auth_user
-):
+def test_diagnostic_run_recovers_steps_rejects_stale_and_builds_preview(db_session, auth_user):
     generator = FakeGenerator()
     run = start_onboarding(
         db_session, user_id=auth_user.id, request=onboarding_request(), generator=generator
@@ -148,12 +146,8 @@ def test_skip_diagnostic_confirms_atomically_and_is_idempotent(db_session, auth_
     assert run.status == "awaiting_confirmation"
     assert [call[0] for call in generator.calls] == [PersonalizedGraphDraft]
 
-    first = confirm_run(
-        db_session, user_id=auth_user.id, run_id=run.id, request_id="confirm-1"
-    )
-    second = confirm_run(
-        db_session, user_id=auth_user.id, run_id=run.id, request_id="confirm-1"
-    )
+    first = confirm_run(db_session, user_id=auth_user.id, run_id=run.id, request_id="confirm-1")
+    second = confirm_run(db_session, user_id=auth_user.id, run_id=run.id, request_id="confirm-1")
 
     assert first.result_json == second.result_json
     assert db_session.query(Topic).count() == 1
@@ -216,17 +210,13 @@ def test_retry_resumes_only_failed_model_stage(db_session, auth_user):
     assert failed.status == "failed"
     assert failed.error_code == "AI_TIMEOUT"
 
-    recovered = retry_run(
-        db_session, user_id=auth_user.id, run_id=failed.id, generator=flaky
-    )
+    recovered = retry_run(db_session, user_id=auth_user.id, run_id=failed.id, generator=flaky)
     assert recovered.status == "diagnosing"
     assert recovered.state_json["step_id"] == "diagnostic-question-1"
     assert calls == 2
 
 
-def test_model_calls_hold_no_transaction_and_graph_retry_does_not_rescore(
-    db_session, auth_user
-):
+def test_model_calls_hold_no_transaction_and_graph_retry_does_not_rescore(db_session, auth_user):
     good = FakeGenerator()
     called_schemas = []
     graph_failed = False
@@ -247,9 +237,7 @@ def test_model_calls_hold_no_transaction_and_graph_retry_does_not_rescore(
         generator=fail_graph_once,
     )
     for index in range(3):
-        run = answer_current(
-            db_session, auth_user.id, run, f"answer {index}", fail_graph_once
-        )
+        run = answer_current(db_session, auth_user.id, run, f"answer {index}", fail_graph_once)
     assert run.status == "failed"
     assert run.state_json["processing_stage"] == "graph_draft"
 

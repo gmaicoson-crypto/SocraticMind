@@ -111,9 +111,7 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["node_id"], ["nodes.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["plan_id"], ["study_plans.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint(
-            "plan_id", "node_id", "scheduled_date", name="uq_plan_node_date"
-        ),
+        sa.UniqueConstraint("plan_id", "node_id", "scheduled_date", name="uq_plan_node_date"),
     )
     op.create_index(
         "ix_plan_items_plan_date_status",
@@ -165,13 +163,9 @@ def upgrade() -> None:
         sa.Column("reverts_event_id", sa.Integer(), nullable=True),
         sa.Column("request_id", sa.String(length=100), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
-        sa.ForeignKeyConstraint(
-            ["assessment_id"], ["assessment_attempts.id"], ondelete="SET NULL"
-        ),
+        sa.ForeignKeyConstraint(["assessment_id"], ["assessment_attempts.id"], ondelete="SET NULL"),
         sa.ForeignKeyConstraint(["node_id"], ["nodes.id"], ondelete="CASCADE"),
-        sa.ForeignKeyConstraint(
-            ["reverts_event_id"], ["mastery_events.id"], ondelete="SET NULL"
-        ),
+        sa.ForeignKeyConstraint(["reverts_event_id"], ["mastery_events.id"], ondelete="SET NULL"),
         sa.ForeignKeyConstraint(["user_id"], ["users.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("user_id", "request_id", name="uq_mastery_user_request"),

@@ -12,7 +12,7 @@ function readIndex(userId: number): RecoveryIndex {
     if (!raw) return {}
     const parsed = JSON.parse(raw) as unknown
     return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
-      ? parsed as RecoveryIndex
+      ? (parsed as RecoveryIndex)
       : {}
   } catch {
     return {}

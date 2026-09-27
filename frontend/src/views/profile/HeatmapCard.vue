@@ -3,8 +3,16 @@
     <template #action>
       <div class="hm-controls">
         <button class="hm-nav-btn" :disabled="!canGoPrev" @click="onPrev">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-            <path d="M15 18l-6-6 6-6"/>
+          <svg
+            width="13"
+            height="13"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+          >
+            <path d="M15 18l-6-6 6-6" />
           </svg>
         </button>
         <select v-model="selectedYear" class="hm-select">
@@ -14,8 +22,16 @@
           <option v-for="(m, i) in monthNames" :key="i" :value="i + 1">{{ m }}</option>
         </select>
         <button class="hm-nav-btn" :disabled="!canGoNext" @click="onNext">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-            <path d="M9 18l6-6-6-6"/>
+          <svg
+            width="13"
+            height="13"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+          >
+            <path d="M9 18l6-6-6-6" />
           </svg>
         </button>
       </div>
@@ -23,7 +39,7 @@
     <div class="hm-month-wrap">
       <div class="hm-grid-wrap">
         <div class="hm-week-row">
-          <span v-for="d in ['日','一','二','三','四','五','六']" :key="d">{{ d }}</span>
+          <span v-for="d in ['日', '一', '二', '三', '四', '五', '六']" :key="d">{{ d }}</span>
         </div>
         <div class="hm-month-grid">
           <div v-for="n in startPad" :key="`pad-${n}`" class="hm-cell empty" />
@@ -53,9 +69,15 @@
 // HeatmapCard 页面组件，承载对应页面的主要交互。
 import { ref, computed } from 'vue'
 import {
-  heatColors, heatColor, monthNames,
-  monthStartPad, buildMonthDays,
-  prevMonth, nextMonth, canGoPrev as canGoPrevFn, canGoNext as canGoNextFn,
+  heatColors,
+  heatColor,
+  monthNames,
+  monthStartPad,
+  buildMonthDays,
+  prevMonth,
+  nextMonth,
+  canGoPrev as canGoPrevFn,
+  canGoNext as canGoNextFn,
 } from '../../utils/heatmap'
 import ProfileSectionCard from '../../components/profile/ProfileSectionCard.vue'
 
@@ -86,11 +108,11 @@ function onNext() {
 const startPad = computed(() => monthStartPad(selectedYear.value, selectedMonth.value))
 
 const heatmapByDate = computed(() =>
-  Object.fromEntries(props.heatmap.map(h => [h.date, h.count]))
+  Object.fromEntries(props.heatmap.map((h) => [h.date, h.count])),
 )
 
 const monthDays = computed(() =>
-  buildMonthDays(selectedYear.value, selectedMonth.value, heatmapByDate.value)
+  buildMonthDays(selectedYear.value, selectedMonth.value, heatmapByDate.value),
 )
 
 const monthChatCount = computed(() => monthDays.value.reduce((s, d) => s + d.count, 0))
@@ -119,7 +141,7 @@ const monthChatCount = computed(() => monthDays.value.reduce((s, d) => s + d.cou
   border-radius: 6px;
   color: var(--ink-2);
   cursor: pointer;
-  transition: all .15s;
+  transition: all 0.15s;
 }
 .hm-nav-btn:hover:not(:disabled) {
   background: var(--blue-tint);
@@ -180,7 +202,7 @@ const monthChatCount = computed(() => monthDays.value.reduce((s, d) => s + d.cou
   width: 20px;
   height: 20px;
   border-radius: 3px;
-  transition: transform .1s;
+  transition: transform 0.1s;
   cursor: default;
 }
 .hm-cell:hover {

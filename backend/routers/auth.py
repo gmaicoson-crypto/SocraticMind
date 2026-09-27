@@ -29,6 +29,7 @@ router = APIRouter(prefix="/api/auth", tags=["认证"])
 
 # ── 请求 / 响应模型 ──
 
+
 def _validate_password(v: str) -> str:
     """校验密码强度：至少 8 位，且必须同时包含字母和数字。"""
     if len(v) < 8:
@@ -142,6 +143,7 @@ class DeleteAccountRequest(BaseModel):
 
 # ── 内部工具函数 ──
 
+
 def _client_ip(request: Request) -> str:
     """获取真实客户端 IP：反向代理后取 X-Forwarded-For 首段，直连时退回 client.host。"""
     fwd = request.headers.get("x-forwarded-for")
@@ -189,29 +191,37 @@ def init_default_topic(db: Session, user_id: int):
     db.flush()
 
     default_nodes = [
-        ("py-basics",    "Python 基础", "Fundamentals",     300, 140, "available", ""),
-        ("vars",         "变量",        "Variables",        130, 260, "locked",    "py-basics"),
-        ("types",        "数据类型",    "Data Types",       300, 260, "locked",    "py-basics"),
-        ("operators",    "运算符",      "Operators",        470, 260, "locked",    "py-basics"),
-        ("conditionals", "条件语句",    "if · elif · else", 200, 400, "locked",    "vars,types"),
-        ("comparison",   "比较运算",    "== · != · >",      400, 400, "locked",    "operators,types"),
-        ("loops",        "循环",        "for · while",      130, 540, "locked",    "conditionals"),
-        ("functions",    "函数",        "def · return",     320, 540, "locked",    "conditionals,comparison"),
-        ("scope",        "作用域",      "Scope",            480, 540, "locked",    "operators,functions"),
-        ("data-struct",  "数据结构",    "list · dict",      220, 660, "locked",    "loops,functions"),
-        ("modules",      "模块",        "import",           410, 660, "locked",    "functions,scope"),
+        ("py-basics", "Python 基础", "Fundamentals", 300, 140, "available", ""),
+        ("vars", "变量", "Variables", 130, 260, "locked", "py-basics"),
+        ("types", "数据类型", "Data Types", 300, 260, "locked", "py-basics"),
+        ("operators", "运算符", "Operators", 470, 260, "locked", "py-basics"),
+        ("conditionals", "条件语句", "if · elif · else", 200, 400, "locked", "vars,types"),
+        ("comparison", "比较运算", "== · != · >", 400, 400, "locked", "operators,types"),
+        ("loops", "循环", "for · while", 130, 540, "locked", "conditionals"),
+        ("functions", "函数", "def · return", 320, 540, "locked", "conditionals,comparison"),
+        ("scope", "作用域", "Scope", 480, 540, "locked", "operators,functions"),
+        ("data-struct", "数据结构", "list · dict", 220, 660, "locked", "loops,functions"),
+        ("modules", "模块", "import", 410, 660, "locked", "functions,scope"),
     ]
 
     for key, label, sub, x, y, state, parents in default_nodes:
-        db.add(Node(
-            topic_id=topic.id,
-            node_key=key, label=label, sub=sub,
-            x=x, y=y, state=state, parent_keys=parents,
-        ))
+        db.add(
+            Node(
+                topic_id=topic.id,
+                node_key=key,
+                label=label,
+                sub=sub,
+                x=x,
+                y=y,
+                state=state,
+                parent_keys=parents,
+            )
+        )
     db.commit()
 
 
 # ── 验证码 ──
+
 
 @router.post("/send-code")
 def send_code(req: SendCodeRequest, request: Request, db: Session = Depends(get_db)):
@@ -251,6 +261,7 @@ def send_code(req: SendCodeRequest, request: Request, db: Session = Depends(get_
 
 # ── 注册 ──
 
+
 @router.post("/register", response_model=TokenResponse)
 def register(req: RegisterRequest, request: Request, db: Session = Depends(get_db)):
     email = req.email.lower().strip()
@@ -284,6 +295,7 @@ def register(req: RegisterRequest, request: Request, db: Session = Depends(get_d
 
 # ── 登录 ──
 
+
 @router.post("/login", response_model=TokenResponse)
 def login(
     request: Request,
@@ -295,7 +307,9 @@ def login(
     # 账号维度：连续失败超过阈值后锁定，阻止针对特定账号的暴力破解
     locked = rate_limit.is_login_locked(email)
     if locked:
-        raise HTTPException(status_code=429, detail=f"登录失败次数过多，请 {locked // 60 + 1} 分钟后再试")
+        raise HTTPException(
+            status_code=429, detail=f"登录失败次数过多，请 {locked // 60 + 1} 分钟后再试"
+        )
 
     # IP 维度：5 分钟内最多 20 次，防止单点扫密码
     ip = _client_ip(request)
@@ -313,6 +327,7 @@ def login(
 
 
 # ── 找回密码 ──
+
 
 @router.post("/reset-password")
 def reset_password(req: ResetPasswordRequest, request: Request, db: Session = Depends(get_db)):
@@ -453,7 +468,9 @@ def delete_account(
     # 显式删除 ChatMessage / LearningRecord / EmailCode：
     # 这些模型未在 User 侧声明 cascade，不能依赖 ORM 自动级联
     db.query(ChatMessage).filter(ChatMessage.user_id == user_id).delete(synchronize_session=False)
-    db.query(LearningRecord).filter(LearningRecord.user_id == user_id).delete(synchronize_session=False)
+    db.query(LearningRecord).filter(LearningRecord.user_id == user_id).delete(
+        synchronize_session=False
+    )
     db.query(EmailCode).filter(EmailCode.email == user_email).delete(synchronize_session=False)
 
     # 删用户本身；topics → nodes 走 ORM cascade（user.topics 配置了 cascade="all, delete"）

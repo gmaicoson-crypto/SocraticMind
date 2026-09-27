@@ -29,9 +29,7 @@ def _owned_node(db: Session, user_id: int, node_id: int) -> Node:
     return node
 
 
-def _idempotent_result(
-    db: Session, user_id: int, request_id: str
-) -> MasteryOperationResult | None:
+def _idempotent_result(db: Session, user_id: int, request_id: str) -> MasteryOperationResult | None:
     event = db.query(MasteryEvent).filter_by(user_id=user_id, request_id=request_id).first()
     if event is None:
         return None
@@ -45,11 +43,7 @@ def _idempotent_result(
 
 def _all_topic_nodes_for_update(db: Session, topic_id: int) -> list[Node]:
     return (
-        db.query(Node)
-        .filter(Node.topic_id == topic_id)
-        .order_by(Node.id)
-        .with_for_update()
-        .all()
+        db.query(Node).filter(Node.topic_id == topic_id).order_by(Node.id).with_for_update().all()
     )
 
 
@@ -107,11 +101,7 @@ def record_mastery(
                 )
                 .first()
             )
-        if (
-            attempt is None
-            or attempt.total_score is None
-            or attempt.evaluation_confidence is None
-        ):
+        if attempt is None or attempt.total_score is None or attempt.evaluation_confidence is None:
             raise ApiError(
                 status_code=409,
                 code="ASSESSMENT_EVIDENCE_REQUIRED",

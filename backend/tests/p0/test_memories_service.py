@@ -30,15 +30,15 @@ def test_memory_crud_and_deleted_memory_leaves_context(db_session, auth_user):
     )
     assert memory.topic_id is None
     assert memory.content == "Learn the advanced material"
-    assert [item.id for item in select_relevant_memories(db_session, user_id=auth_user.id)] == [memory.id]
+    assert [item.id for item in select_relevant_memories(db_session, user_id=auth_user.id)] == [
+        memory.id
+    ]
 
     delete_memory(db_session, user_id=auth_user.id, memory_id=memory.id)
     assert select_relevant_memories(db_session, user_id=auth_user.id) == []
 
 
-def test_context_prefers_topic_scope_and_respects_count_and_character_budget(
-    db_session, auth_user
-):
+def test_context_prefers_topic_scope_and_respects_count_and_character_budget(db_session, auth_user):
     topic = Topic(user_id=auth_user.id, title="Scoped")
     db_session.add(topic)
     db_session.flush()
@@ -64,9 +64,7 @@ def test_context_prefers_topic_scope_and_respects_count_and_character_budget(
         )
     db_session.commit()
 
-    selected = select_relevant_memories(
-        db_session, user_id=auth_user.id, topic_id=topic.id
-    )
+    selected = select_relevant_memories(db_session, user_id=auth_user.id, topic_id=topic.id)
 
     assert len(selected) <= 20
     assert sum(len(item.content) for item in selected) <= 3000

@@ -14,7 +14,9 @@ const today: TodayPlan = {
   date: '2026-09-07',
   effective_timezone: 'UTC',
   replan_suggested: false,
-  today: [], overdue: [], upcoming: [],
+  today: [],
+  overdue: [],
+  upcoming: [],
 }
 
 const plan: StudyPlan = {
@@ -52,7 +54,9 @@ describe('plans store', () => {
   it('locks duplicate replans and reuses one stable request id', async () => {
     let resolveRequest: (value: StudyPlan) => void = () => undefined
     vi.mocked(plansApi.replanStudyPlan).mockReturnValue(
-      new Promise(resolve => { resolveRequest = resolve }),
+      new Promise((resolve) => {
+        resolveRequest = resolve
+      }),
     )
     const store = usePlansStore()
 

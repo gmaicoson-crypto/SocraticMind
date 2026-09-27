@@ -10,14 +10,25 @@ const preview: PlanPreviewData = {
   domain: 'software',
   outcome_type: 'concept',
   diagnostic: null,
-  nodes: [{
-    key: 'root', label: 'A long node name that must remain readable', parent_keys: [],
-    estimated_minutes: 30, x: 0, y: 0,
-  }],
-  plan_items: [{
-    node_key: 'root', scheduled_date: '2026-09-07', day_order: 1,
-    estimated_minutes: 30, status: 'pending',
-  }],
+  nodes: [
+    {
+      key: 'root',
+      label: 'A long node name that must remain readable',
+      parent_keys: [],
+      estimated_minutes: 30,
+      x: 0,
+      y: 0,
+    },
+  ],
+  plan_items: [
+    {
+      node_key: 'root',
+      scheduled_date: '2026-09-07',
+      day_order: 1,
+      estimated_minutes: 30,
+      status: 'pending',
+    },
+  ],
   total_minutes: 30,
   daily_minutes: 30,
   start_date: '2026-09-07',

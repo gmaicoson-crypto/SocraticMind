@@ -1,18 +1,40 @@
 <template>
   <div class="canvas-wrap">
-
     <div class="canvas-toolbar">
       <div class="tool-group">
-
         <div class="tool-switch">
-          <button class="tool-btn" :class="{ active: tool === 'pen' }" title="画笔" @click="tool = 'pen'">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M3 21L9 19L20 8L16 4L5 15Z"/>
+          <button
+            class="tool-btn"
+            :class="{ active: tool === 'pen' }"
+            title="画笔"
+            @click="tool = 'pen'"
+          >
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path d="M3 21L9 19L20 8L16 4L5 15Z" />
             </svg>
           </button>
-          <button class="tool-btn" :class="{ active: tool === 'eraser' }" title="橡皮" @click="tool = 'eraser'">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M5 19L13 11L20 18L17 21L8 21ZM9 15L13 19"/>
+          <button
+            class="tool-btn"
+            :class="{ active: tool === 'eraser' }"
+            title="橡皮"
+            @click="tool = 'eraser'"
+          >
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path d="M5 19L13 11L20 18L17 21L8 21ZM9 15L13 19" />
             </svg>
           </button>
         </div>
@@ -26,38 +48,69 @@
               background: c,
               borderColor: activeColor === c && tool === 'pen' ? 'var(--ink)' : 'var(--surface)',
             }"
-            @click="() => { activeColor = c; tool = 'pen' }"
+            @click="
+              () => {
+                activeColor = c
+                tool = 'pen'
+              }
+            "
           />
         </div>
 
         <input
-          type="range" min="1" max="8" step="0.5"
+          type="range"
+          min="1"
+          max="8"
+          step="0.5"
           v-model.number="brushSize"
           class="size-slider"
         />
       </div>
 
       <div class="btn-group">
-
         <div class="zoom-btns">
           <button class="tool-btn" title="缩小" @click="zoomOut" :disabled="scaleVal <= MIN_SCALE">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-              <path d="M5 12h14"/>
+            <svg
+              width="13"
+              height="13"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+            >
+              <path d="M5 12h14" />
             </svg>
           </button>
           <span class="zoom-label" @click="resetScale" title="点击重置">
             {{ Math.round(scaleVal * 100) }}%
           </span>
           <button class="tool-btn" title="放大" @click="zoomIn" :disabled="scaleVal >= MAX_SCALE">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-              <path d="M12 5v14M5 12h14"/>
+            <svg
+              width="13"
+              height="13"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+            >
+              <path d="M12 5v14M5 12h14" />
             </svg>
           </button>
         </div>
 
         <button class="canvas-action-btn" @click="downloadCanvas" title="下载画布">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-            <path d="M12 5v14M5 19h14M19 14l-7 7-7-7"/>
+          <svg
+            width="12"
+            height="12"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+          >
+            <path d="M12 5v14M5 19h14M19 14l-7 7-7-7" />
           </svg>
           下载
         </button>
@@ -87,7 +140,6 @@
         />
       </div>
     </div>
-
   </div>
 </template>
 
@@ -286,7 +338,7 @@ function downloadCanvas() {
   border: none;
   border-radius: 6px;
   cursor: pointer;
-  transition: all .15s;
+  transition: all 0.15s;
 }
 .tool-btn.active {
   background: var(--surface);
@@ -314,7 +366,7 @@ function downloadCanvas() {
   border: 2px solid var(--surface);
   box-shadow: 0 0 0 1px var(--line);
   padding: 0;
-  transition: transform .15s;
+  transition: transform 0.15s;
 }
 .color-dot:hover {
   transform: scale(1.15);
@@ -350,7 +402,7 @@ function downloadCanvas() {
   cursor: pointer;
   padding: 2px 4px;
   border-radius: 4px;
-  transition: all .15s;
+  transition: all 0.15s;
   user-select: none;
 }
 .zoom-label:hover {
@@ -371,7 +423,7 @@ function downloadCanvas() {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  transition: background .15s;
+  transition: background 0.15s;
 }
 .canvas-action-btn:hover {
   background: var(--bg-3);
@@ -402,7 +454,7 @@ function downloadCanvas() {
   top: -100%;
   left: -100%;
   transform-origin: center center;
-  transition: transform .12s ease;
+  transition: transform 0.12s ease;
 }
 
 .sketch-canvas {

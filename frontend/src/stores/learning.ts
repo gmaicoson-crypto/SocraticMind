@@ -18,18 +18,44 @@ export const useLearningStore = defineStore('learning', () => {
 
   const { isDark } = storeToRefs(uiStore)
   const { userInfo } = storeToRefs(userStore)
-  const { nodes, edges, topics, activeTopicId, activeNode, lastMasteredId, recommendations, masteredCount, totalCount, availableCount } = storeToRefs(topicsStore)
+  const {
+    nodes,
+    edges,
+    topics,
+    activeTopicId,
+    activeNode,
+    lastMasteredId,
+    recommendations,
+    masteredCount,
+    totalCount,
+    availableCount,
+  } = storeToRefs(topicsStore)
   const { messages, pendingTopicOverviewId } = storeToRefs(dialogueStore)
   const { streakData } = storeToRefs(progressStore)
   const { run: agentRun, submitting: agentSubmitting, error: agentError } = storeToRefs(agentStore)
   const { todayPlan, replanning } = storeToRefs(plansStore)
 
   return {
-    isDark, userInfo,
-    nodes, edges, topics, activeTopicId, activeNode, lastMasteredId, recommendations,
-    messages, pendingTopicOverviewId, streakData,
-    masteredCount, totalCount, availableCount,
-    agentRun, agentSubmitting, agentError, todayPlan, replanning,
+    isDark,
+    userInfo,
+    nodes,
+    edges,
+    topics,
+    activeTopicId,
+    activeNode,
+    lastMasteredId,
+    recommendations,
+    messages,
+    pendingTopicOverviewId,
+    streakData,
+    masteredCount,
+    totalCount,
+    availableCount,
+    agentRun,
+    agentSubmitting,
+    agentError,
+    todayPlan,
+    replanning,
     toggleTheme: uiStore.toggleTheme,
     setUserInfo: userStore.setUserInfo,
     loadUserFromStorage: userStore.loadUserFromStorage,

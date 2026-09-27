@@ -2,21 +2,48 @@
   <ProfileSectionCard class="goal-card" title="今日目标">
     <template #action>
       <button class="goal-edit-btn" title="设置目标" @click="openModal">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-          <path d="M12 5v14M5 12h14"/>
+        <svg
+          width="12"
+          height="12"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+        >
+          <path d="M12 5v14M5 12h14" />
         </svg>
       </button>
     </template>
     <div class="ring-area">
       <svg width="100" height="100" viewBox="0 0 100 100">
-        <circle cx="50" cy="50" r="38" fill="none" stroke="var(--bg-3)" stroke-width="10"/>
+        <circle cx="50" cy="50" r="38" fill="none" stroke="var(--bg-3)" stroke-width="10" />
         <circle
-          cx="50" cy="50" r="38" fill="none" stroke="var(--blue-2)" stroke-width="10"
-          :stroke-dasharray="circumference" :stroke-dashoffset="dashOffset"
-          stroke-linecap="round" transform="rotate(-90 50 50)"
+          cx="50"
+          cy="50"
+          r="38"
+          fill="none"
+          stroke="var(--blue-2)"
+          stroke-width="10"
+          :stroke-dasharray="circumference"
+          :stroke-dashoffset="dashOffset"
+          stroke-linecap="round"
+          transform="rotate(-90 50 50)"
         />
-        <text x="50" y="47" text-anchor="middle" font-size="18" font-weight="700" fill="var(--ink)" font-family="monospace">{{ totalPct }}%</text>
-        <text x="50" y="61" text-anchor="middle" font-size="9" fill="var(--ink-3)">{{ doneCount }}/{{ enabledCount }} 目标</text>
+        <text
+          x="50"
+          y="47"
+          text-anchor="middle"
+          font-size="18"
+          font-weight="700"
+          fill="var(--ink)"
+          font-family="monospace"
+        >
+          {{ totalPct }}%
+        </text>
+        <text x="50" y="61" text-anchor="middle" font-size="9" fill="var(--ink-3)">
+          {{ doneCount }}/{{ enabledCount }} 目标
+        </text>
       </svg>
     </div>
     <div class="goal-list">
@@ -30,7 +57,10 @@
         <div class="goal-progress-bar">
           <div
             class="goal-progress-fill"
-            :style="{ width: Math.min(goal.pct, 100) + '%', background: goal.done ? 'var(--blue-2)' : 'var(--blue)' }"
+            :style="{
+              width: Math.min(goal.pct, 100) + '%',
+              background: goal.done ? 'var(--blue-2)' : 'var(--blue)',
+            }"
           />
         </div>
       </div>
@@ -57,7 +87,13 @@
                   </div>
                 </div>
                 <div class="goal-edit-right">
-                  <button class="goal-num-btn" :disabled="!item.enabled || item.target <= 1" @click="item.target--">−</button>
+                  <button
+                    class="goal-num-btn"
+                    :disabled="!item.enabled || item.target <= 1"
+                    @click="item.target--"
+                  >
+                    −
+                  </button>
                   <input
                     v-model.number="item.target"
                     class="goal-num-input"
@@ -67,7 +103,9 @@
                     @input="item.target = Math.max(1, item.target)"
                   />
                   <span class="goal-unit">{{ item.unit }}</span>
-                  <button class="goal-num-btn" :disabled="!item.enabled" @click="item.target++">＋</button>
+                  <button class="goal-num-btn" :disabled="!item.enabled" @click="item.target++">
+                    ＋
+                  </button>
                 </div>
               </div>
             </div>
@@ -86,7 +124,9 @@
 // GoalsCard 页面组件，承载对应页面的主要交互。
 import { ref, computed, reactive, watch, onMounted } from 'vue'
 import {
-  loadGoalConfig, saveGoalConfig, getDefaultGoal,
+  loadGoalConfig,
+  saveGoalConfig,
+  getDefaultGoal,
   type DailyGoalConfig,
 } from '../../utils/dailyGoal'
 import type { Topic } from '../../types'
@@ -109,12 +149,15 @@ onMounted(() => {
   if (props.userId) goalConfig.value = loadGoalConfig(props.userId)
 })
 
-watch(() => props.userId, (id) => {
-  if (id) goalConfig.value = loadGoalConfig(id)
-})
+watch(
+  () => props.userId,
+  (id) => {
+    if (id) goalConfig.value = loadGoalConfig(id)
+  },
+)
 
-const completedTopics = computed(() =>
-  props.topics.filter(t => t.nodes > 0 && t.mastered === t.nodes).length
+const completedTopics = computed(
+  () => props.topics.filter((t) => t.nodes > 0 && t.mastered === t.nodes).length,
 )
 
 const goalItems = computed(() => {
@@ -123,52 +166,105 @@ const goalItems = computed(() => {
   const add = (key: string, enabled: boolean, current: number, target: number, label: string) => {
     if (!enabled) return
     items.push({
-      key, label,
+      key,
+      label,
       val: `${current}/${target}`,
       done: current >= target,
-      pct: Math.min(current / target * 100, 100),
+      pct: Math.min((current / target) * 100, 100),
     })
   }
-  add('chat_count', cfg.chat_count.enabled, props.todayChatCount, cfg.chat_count.target,
-      `完成对话 ${cfg.chat_count.target} 轮`)
-  add('mastered_nodes', cfg.mastered_nodes.enabled, props.masteredCount, cfg.mastered_nodes.target,
-      `掌握 ${cfg.mastered_nodes.target} 个节点`)
-  add('completed_topics', cfg.completed_topics.enabled, completedTopics.value, cfg.completed_topics.target,
-      `完成 ${cfg.completed_topics.target} 个主题`)
-  add('study_minutes', cfg.study_minutes.enabled, props.todayStudyMinutes, cfg.study_minutes.target,
-      `学习 ${cfg.study_minutes.target} 分钟`)
+  add(
+    'chat_count',
+    cfg.chat_count.enabled,
+    props.todayChatCount,
+    cfg.chat_count.target,
+    `完成对话 ${cfg.chat_count.target} 轮`,
+  )
+  add(
+    'mastered_nodes',
+    cfg.mastered_nodes.enabled,
+    props.masteredCount,
+    cfg.mastered_nodes.target,
+    `掌握 ${cfg.mastered_nodes.target} 个节点`,
+  )
+  add(
+    'completed_topics',
+    cfg.completed_topics.enabled,
+    completedTopics.value,
+    cfg.completed_topics.target,
+    `完成 ${cfg.completed_topics.target} 个主题`,
+  )
+  add(
+    'study_minutes',
+    cfg.study_minutes.enabled,
+    props.todayStudyMinutes,
+    cfg.study_minutes.target,
+    `学习 ${cfg.study_minutes.target} 分钟`,
+  )
   return items
 })
 
 const enabledCount = computed(() => goalItems.value.length)
-const doneCount = computed(() => goalItems.value.filter(g => g.done).length)
+const doneCount = computed(() => goalItems.value.filter((g) => g.done).length)
 const totalPct = computed(() =>
-  enabledCount.value === 0 ? 0 : Math.round(doneCount.value / enabledCount.value * 100)
+  enabledCount.value === 0 ? 0 : Math.round((doneCount.value / enabledCount.value) * 100),
 )
 const dashOffset = computed(() => circumference - (totalPct.value / 100) * circumference)
 
 const editItems = reactive([
-  { key: 'chat_count',       label: '学习对话次数', sub: '完成苏格拉底式对话的轮次',     unit: '轮',    enabled: true,  target: 5  },
-  { key: 'mastered_nodes',   label: '掌握节点数',   sub: '今日标记为已掌握的知识节点',   unit: '个',    enabled: true,  target: 2  },
-  { key: 'completed_topics', label: '完成主题数',   sub: '今日全部节点已掌握的主题',     unit: '个',    enabled: false, target: 1  },
-  { key: 'study_minutes',    label: '学习时长',     sub: '在学习页面停留的时间',         unit: '分钟',  enabled: true,  target: 30 },
+  {
+    key: 'chat_count',
+    label: '学习对话次数',
+    sub: '完成苏格拉底式对话的轮次',
+    unit: '轮',
+    enabled: true,
+    target: 5,
+  },
+  {
+    key: 'mastered_nodes',
+    label: '掌握节点数',
+    sub: '今日标记为已掌握的知识节点',
+    unit: '个',
+    enabled: true,
+    target: 2,
+  },
+  {
+    key: 'completed_topics',
+    label: '完成主题数',
+    sub: '今日全部节点已掌握的主题',
+    unit: '个',
+    enabled: false,
+    target: 1,
+  },
+  {
+    key: 'study_minutes',
+    label: '学习时长',
+    sub: '在学习页面停留的时间',
+    unit: '分钟',
+    enabled: true,
+    target: 30,
+  },
 ])
 
 function openModal() {
   const cfg = goalConfig.value
-  editItems[0].enabled = cfg.chat_count.enabled;       editItems[0].target = cfg.chat_count.target
-  editItems[1].enabled = cfg.mastered_nodes.enabled;   editItems[1].target = cfg.mastered_nodes.target
-  editItems[2].enabled = cfg.completed_topics.enabled; editItems[2].target = cfg.completed_topics.target
-  editItems[3].enabled = cfg.study_minutes.enabled;    editItems[3].target = cfg.study_minutes.target
+  editItems[0].enabled = cfg.chat_count.enabled
+  editItems[0].target = cfg.chat_count.target
+  editItems[1].enabled = cfg.mastered_nodes.enabled
+  editItems[1].target = cfg.mastered_nodes.target
+  editItems[2].enabled = cfg.completed_topics.enabled
+  editItems[2].target = cfg.completed_topics.target
+  editItems[3].enabled = cfg.study_minutes.enabled
+  editItems[3].target = cfg.study_minutes.target
   showModal.value = true
 }
 
 function save() {
   const newConfig: DailyGoalConfig = {
-    chat_count:       { enabled: editItems[0].enabled, target: editItems[0].target },
-    mastered_nodes:   { enabled: editItems[1].enabled, target: editItems[1].target },
+    chat_count: { enabled: editItems[0].enabled, target: editItems[0].target },
+    mastered_nodes: { enabled: editItems[1].enabled, target: editItems[1].target },
     completed_topics: { enabled: editItems[2].enabled, target: editItems[2].target },
-    study_minutes:    { enabled: editItems[3].enabled, target: editItems[3].target },
+    study_minutes: { enabled: editItems[3].enabled, target: editItems[3].target },
   }
   goalConfig.value = newConfig
   if (props.userId) saveGoalConfig(props.userId, newConfig)
@@ -177,10 +273,14 @@ function save() {
 
 function resetToDefault() {
   const def = getDefaultGoal()
-  editItems[0].enabled = def.chat_count.enabled;       editItems[0].target = def.chat_count.target
-  editItems[1].enabled = def.mastered_nodes.enabled;   editItems[1].target = def.mastered_nodes.target
-  editItems[2].enabled = def.completed_topics.enabled; editItems[2].target = def.completed_topics.target
-  editItems[3].enabled = def.study_minutes.enabled;    editItems[3].target = def.study_minutes.target
+  editItems[0].enabled = def.chat_count.enabled
+  editItems[0].target = def.chat_count.target
+  editItems[1].enabled = def.mastered_nodes.enabled
+  editItems[1].target = def.mastered_nodes.target
+  editItems[2].enabled = def.completed_topics.enabled
+  editItems[2].target = def.completed_topics.target
+  editItems[3].enabled = def.study_minutes.enabled
+  editItems[3].target = def.study_minutes.target
 }
 </script>
 
@@ -201,7 +301,7 @@ function resetToDefault() {
   border-radius: 6px;
   color: var(--ink-3);
   cursor: pointer;
-  transition: all .15s;
+  transition: all 0.15s;
 }
 .goal-edit-btn:hover {
   background: var(--blue-tint);
@@ -253,14 +353,14 @@ function resetToDefault() {
 .goal-progress-fill {
   height: 100%;
   border-radius: 99px;
-  transition: width .4s ease;
+  transition: width 0.4s ease;
 }
 
 .goal-modal-overlay {
   position: fixed;
   inset: 0;
   z-index: 300;
-  background: rgba(0,0,0,0.3);
+  background: rgba(0, 0, 0, 0.3);
   backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
@@ -271,7 +371,7 @@ function resetToDefault() {
   border: 1px solid var(--line);
   border-radius: 16px;
   width: 380px;
-  box-shadow: 0 8px 40px rgba(0,0,0,0.15);
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.15);
   display: flex;
   flex-direction: column;
 }
@@ -337,7 +437,7 @@ function resetToDefault() {
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all .15s;
+  transition: all 0.15s;
 }
 .goal-num-btn:hover:not(:disabled) {
   background: var(--blue-tint);
@@ -361,7 +461,7 @@ function resetToDefault() {
   border-radius: 6px;
   outline: none;
   padding: 0 4px;
-  transition: border-color .15s;
+  transition: border-color 0.15s;
 }
 .goal-num-input:focus {
   border-color: var(--blue);
@@ -374,7 +474,7 @@ function resetToDefault() {
 .goal-num-input::-webkit-inner-spin-button {
   -webkit-appearance: none;
 }
-.goal-num-input[type=number] {
+.goal-num-input[type='number'] {
   -moz-appearance: textfield;
 }
 .goal-unit {
@@ -400,7 +500,7 @@ function resetToDefault() {
   background: var(--bg-3);
   border-radius: 99px;
   cursor: pointer;
-  transition: .2s;
+  transition: 0.2s;
   border: 1px solid var(--line);
 }
 .goal-toggle-slider::before {
@@ -412,8 +512,8 @@ function resetToDefault() {
   top: 2px;
   background: white;
   border-radius: 50%;
-  transition: .2s;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+  transition: 0.2s;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
 }
 .goal-toggle input:checked + .goal-toggle-slider {
   background: var(--blue-2);
@@ -450,16 +550,18 @@ function resetToDefault() {
   font-weight: 600;
   cursor: pointer;
   font-family: var(--font-sans);
-  transition: opacity .15s;
+  transition: opacity 0.15s;
 }
 .goal-save-btn:hover {
   opacity: 0.88;
 }
 
-.fade-enter-active, .fade-leave-active {
-  transition: opacity .2s ease;
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.2s ease;
 }
-.fade-enter-from, .fade-leave-to {
+.fade-enter-from,
+.fade-leave-to {
   opacity: 0;
 }
 </style>

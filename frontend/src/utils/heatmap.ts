@@ -16,8 +16,18 @@ export function heatColor(count: number): string {
 }
 
 export const monthNames = [
-  '1月', '2月', '3月', '4月', '5月', '6月',
-  '7月', '8月', '9月', '10月', '11月', '12月',
+  '1月',
+  '2月',
+  '3月',
+  '4月',
+  '5月',
+  '6月',
+  '7月',
+  '8月',
+  '9月',
+  '10月',
+  '11月',
+  '12月',
 ] as const
 
 export function pad2(n: number): string {

@@ -1,9 +1,10 @@
 <template>
-
   <div v-if="quotedText" class="quote-preview">
     <div class="quote-preview-content">
       <span class="quote-preview-bar" />
-      <span class="quote-preview-text">{{ quotedText.slice(0, 80) }}{{ quotedText.length > 80 ? '…' : '' }}</span>
+      <span class="quote-preview-text"
+        >{{ quotedText.slice(0, 80) }}{{ quotedText.length > 80 ? '…' : '' }}</span
+      >
     </div>
     <button class="quote-clear" title="取消引用" @click="$emit('clearQuote')">✕</button>
   </div>
@@ -15,16 +16,21 @@
       </div>
     </template>
     <template v-else>
-      <button
-        v-for="chip in chips"
-        :key="chip"
-        class="chip"
-        @click="$emit('update:input', chip)"
-      >{{ chip }}</button>
+      <button v-for="chip in chips" :key="chip" class="chip" @click="$emit('update:input', chip)">
+        {{ chip }}
+      </button>
       <button class="chip-refresh" title="换一批" @click="$emit('refreshChips')">
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-          <path d="M1 4v6h6M23 20v-6h-6"/>
-          <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/>
+        <svg
+          width="11"
+          height="11"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+        >
+          <path d="M1 4v6h6M23 20v-6h-6" />
+          <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15" />
         </svg>
       </button>
     </template>
@@ -33,16 +39,42 @@
   <div class="input-wrap">
     <div class="input-toolbar">
       <div class="mode-switch">
-        <button class="mode-btn" :class="{ active: chatMode === 'socratic' }" title="学习模式" @click="$emit('update:chatMode', 'socratic')">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-            <path d="M12 2L13.5 8.5L20 10L13.5 11.5L12 18L10.5 11.5L4 10L10.5 8.5Z"/>
+        <button
+          class="mode-btn"
+          :class="{ active: chatMode === 'socratic' }"
+          title="学习模式"
+          @click="$emit('update:chatMode', 'socratic')"
+        >
+          <svg
+            width="13"
+            height="13"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+          >
+            <path d="M12 2L13.5 8.5L20 10L13.5 11.5L12 18L10.5 11.5L4 10L10.5 8.5Z" />
           </svg>
           学习
           <span v-if="socraticBadge > 0" class="mode-badge">{{ socraticBadge }}</span>
         </button>
-        <button class="mode-btn" :class="{ active: chatMode === 'normal' }" title="普通对话" @click="$emit('update:chatMode', 'normal')">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+        <button
+          class="mode-btn"
+          :class="{ active: chatMode === 'normal' }"
+          title="普通对话"
+          @click="$emit('update:chatMode', 'normal')"
+        >
+          <svg
+            width="13"
+            height="13"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+          >
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
           </svg>
           对话
           <span v-if="normalBadge > 0" class="mode-badge">{{ normalBadge }}</span>
@@ -56,7 +88,9 @@
             class="style-btn"
             :class="{ active: aiStyle === s }"
             @click="$emit('update:aiStyle', s)"
-          >{{ s }}</button>
+          >
+            {{ s }}
+          </button>
         </div>
       </Transition>
     </div>
@@ -72,16 +106,29 @@
       />
       <button v-if="isThinking" class="abort-btn" title="中断回答" @click="$emit('abort')">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-          <rect x="4" y="4" width="16" height="16" rx="2"/>
+          <rect x="4" y="4" width="16" height="16" rx="2" />
         </svg>
         中断
       </button>
-      <button v-else class="send-btn" :disabled="!input.trim() || isGenerating || sendDisabled" @click="requestSend">
+      <button
+        v-else
+        class="send-btn"
+        :disabled="!input.trim() || isGenerating || sendDisabled"
+        @click="requestSend"
+      >
         <span v-if="isGenerating">处理中…</span>
         <template v-else>
           发送
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
-            <path d="M5 12 L19 12 M13 6 L19 12 L13 18"/>
+          <svg
+            width="13"
+            height="13"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.5"
+            stroke-linecap="round"
+          >
+            <path d="M5 12 L19 12 M13 6 L19 12 L13 18" />
           </svg>
         </template>
       </button>
@@ -93,25 +140,28 @@
 // DialogueInputBar 组件，封装局部界面和交互逻辑。
 import { ref } from 'vue'
 
-const props = withDefaults(defineProps<{
-  input: string
-  chatMode: 'socratic' | 'normal'
-  aiStyle: string
-  aiStyleOptions: readonly string[]
-  chips: string[]
-  chipsLoading: boolean
-  quotedText: string
-  isThinking: boolean
-  isGenerating: boolean
-  socraticBadge: number
-  normalBadge: number
-  placeholder: string
-  sendDisabled?: boolean
-  showChips?: boolean
-}>(), {
-  sendDisabled: false,
-  showChips: true,
-})
+const props = withDefaults(
+  defineProps<{
+    input: string
+    chatMode: 'socratic' | 'normal'
+    aiStyle: string
+    aiStyleOptions: readonly string[]
+    chips: string[]
+    chipsLoading: boolean
+    quotedText: string
+    isThinking: boolean
+    isGenerating: boolean
+    socraticBadge: number
+    normalBadge: number
+    placeholder: string
+    sendDisabled?: boolean
+    showChips?: boolean
+  }>(),
+  {
+    sendDisabled: false,
+    showChips: true,
+  },
+)
 
 const emit = defineEmits<{
   (e: 'update:input', val: string): void
@@ -215,7 +265,7 @@ defineExpose({ reset, focus })
   color: var(--ink-2);
   cursor: pointer;
   font-family: var(--font-sans);
-  transition: all .15s;
+  transition: all 0.15s;
 }
 .chip:hover {
   background: var(--blue-tint);
@@ -233,7 +283,7 @@ defineExpose({ reset, focus })
   border-radius: 999px;
   color: var(--ink-3);
   cursor: pointer;
-  transition: all .15s;
+  transition: all 0.15s;
 }
 .chip-refresh:hover {
   background: var(--bg-3);
@@ -296,7 +346,7 @@ defineExpose({ reset, focus })
   font-weight: 500;
   cursor: pointer;
   font-family: var(--font-sans);
-  transition: all .15s;
+  transition: all 0.15s;
   position: relative;
 }
 .mode-btn:hover:not(.active) {
@@ -305,7 +355,7 @@ defineExpose({ reset, focus })
 .mode-btn.active {
   background: var(--surface);
   color: var(--blue-2);
-  box-shadow: 0 1px 2px rgba(0,0,0,.06);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
 }
 .mode-badge {
   display: inline-flex;
@@ -340,7 +390,7 @@ defineExpose({ reset, focus })
   font-weight: 500;
   cursor: pointer;
   font-family: var(--font-sans);
-  transition: all .15s;
+  transition: all 0.15s;
 }
 .style-btn:hover:not(.active) {
   color: var(--ink);
@@ -348,13 +398,17 @@ defineExpose({ reset, focus })
 .style-btn.active {
   background: var(--surface);
   color: var(--blue-2);
-  box-shadow: 0 1px 2px rgba(0,0,0,.06);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
 }
 
-.fade-slide-enter-active, .fade-slide-leave-active {
-  transition: opacity .2s, transform .2s;
+.fade-slide-enter-active,
+.fade-slide-leave-active {
+  transition:
+    opacity 0.2s,
+    transform 0.2s;
 }
-.fade-slide-enter-from, .fade-slide-leave-to {
+.fade-slide-enter-from,
+.fade-slide-leave-to {
   opacity: 0;
   transform: translateX(8px);
 }
@@ -367,7 +421,9 @@ defineExpose({ reset, focus })
   background: var(--bg-2);
   border: 1px solid var(--line);
   border-radius: 12px;
-  transition: border-color .15s, box-shadow .15s;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
 }
 .input-box:focus-within {
   border-color: var(--blue);
@@ -390,7 +446,8 @@ defineExpose({ reset, focus })
   color: var(--ink-3);
 }
 
-.send-btn, .abort-btn {
+.send-btn,
+.abort-btn {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -403,7 +460,7 @@ defineExpose({ reset, focus })
   font-weight: 500;
   cursor: pointer;
   font-family: var(--font-sans);
-  transition: background .15s;
+  transition: background 0.15s;
   flex-shrink: 0;
 }
 .send-btn:hover:not(:disabled) {

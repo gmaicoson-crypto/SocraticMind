@@ -1,6 +1,5 @@
 <template>
   <div class="md-wrap">
-
     <div class="md-toolbar">
       <div class="view-switch">
         <button
@@ -9,25 +8,40 @@
           class="view-btn"
           :class="{ active: viewMode === v.key }"
           @click="viewMode = v.key"
-        >{{ v.label }}</button>
+        >
+          {{ v.label }}
+        </button>
       </div>
       <div class="md-meta">
-        <button
-          class="help-btn"
-          title="Markdown 语法说明"
-          @click="showHelp = true"
-        >
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="10"/>
-            <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
-            <line x1="12" y1="17" x2="12.01" y2="17"/>
+        <button class="help-btn" title="Markdown 语法说明" @click="showHelp = true">
+          <svg
+            width="13"
+            height="13"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <circle cx="12" cy="12" r="10" />
+            <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+            <line x1="12" y1="17" x2="12.01" y2="17" />
           </svg>
         </button>
         <span>{{ content.length }} 字符</span>
         <span>·</span>
         <button class="download-btn" title="下载 Markdown 文件" @click="handleDownload">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-            <path d="M12 5v14M5 19h14M19 14l-7 7-7-7"/>
+          <svg
+            width="12"
+            height="12"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+          >
+            <path d="M12 5v14M5 19h14M19 14l-7 7-7-7" />
           </svg>
           下载
         </button>
@@ -43,11 +57,7 @@
         spellcheck="false"
         @input="saveContent"
       />
-      <div
-        v-if="viewMode !== 'edit'"
-        class="md-preview"
-        v-html="renderedHtml"
-      />
+      <div v-if="viewMode !== 'edit'" class="md-preview" v-html="renderedHtml" />
     </div>
 
     <MarkdownHelpModal :show="showHelp" @close="showHelp = false" />
@@ -83,8 +93,8 @@ const viewMode = ref<'edit' | 'split' | 'preview'>('split')
 const showHelp = ref(false)
 
 const views = [
-  { key: 'edit' as const,    label: '编辑' },
-  { key: 'split' as const,   label: '并排' },
+  { key: 'edit' as const, label: '编辑' },
+  { key: 'split' as const, label: '并排' },
   { key: 'preview' as const, label: '预览' },
 ]
 
@@ -173,12 +183,14 @@ function handleDownload() {
   border-radius: 6px;
   cursor: pointer;
   font-family: var(--font-sans);
-  transition: all .15s;
+  transition: all 0.15s;
 }
 .view-btn.active {
   background: var(--surface);
   color: var(--ink);
-  box-shadow: 0 1px 0 var(--line), 0 1px 2px oklch(0.7 0.014 78 / 0.06);
+  box-shadow:
+    0 1px 0 var(--line),
+    0 1px 2px oklch(0.7 0.014 78 / 0.06);
 }
 
 .md-meta {
@@ -201,7 +213,7 @@ function handleDownload() {
   border-radius: 50%;
   color: var(--ink-3);
   cursor: pointer;
-  transition: all .15s;
+  transition: all 0.15s;
 }
 .help-btn:hover {
   color: var(--blue-2);
@@ -221,7 +233,7 @@ function handleDownload() {
   border: 1px solid var(--line);
   border-radius: 5px;
   cursor: pointer;
-  transition: all .15s;
+  transition: all 0.15s;
 }
 .download-btn:hover {
   color: var(--blue-2);
@@ -238,7 +250,8 @@ function handleDownload() {
 .md-body.split {
   grid-template-columns: 1fr 1fr;
 }
-.md-body.edit, .md-body.preview {
+.md-body.edit,
+.md-body.preview {
   grid-template-columns: 1fr;
 }
 
@@ -255,7 +268,9 @@ function handleDownload() {
   outline: none;
   width: 100%;
   height: 100%;
-  transition: border-color .15s, box-shadow .15s;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
 }
 .md-editor:focus {
   border-color: var(--blue);
@@ -328,7 +343,7 @@ function handleDownload() {
   color: var(--ink-3);
 }
 .md-preview :deep(mark) {
-  background: oklch(0.94 0.10 90);
+  background: oklch(0.94 0.1 90);
   padding: 0 3px;
   border-radius: 2px;
 }
@@ -354,7 +369,7 @@ function handleDownload() {
   justify-content: flex-end;
   padding: 4px 12px;
   background: #2a2a3e;
-  border-bottom: 1px solid rgba(255,255,255,0.08);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   min-height: 16px;
 }
 .md-preview :deep(.md-code-lang) {
@@ -393,11 +408,11 @@ function handleDownload() {
   margin: 4px 0;
 }
 
-.md-preview :deep(li:has(> input[type=checkbox])) {
+.md-preview :deep(li:has(> input[type='checkbox'])) {
   list-style: none;
   margin-left: -18px;
 }
-.md-preview :deep(li > input[type=checkbox]) {
+.md-preview :deep(li > input[type='checkbox']) {
   margin-right: 6px;
   vertical-align: middle;
   accent-color: var(--blue-2);

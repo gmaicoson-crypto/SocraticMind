@@ -8,13 +8,7 @@ export type AgentRunStatus =
   | 'completed'
   | 'failed'
   | 'cancelled'
-export type OutcomeType =
-  | 'concept'
-  | 'procedure'
-  | 'analysis'
-  | 'expression'
-  | 'creation'
-  | 'mixed'
+export type OutcomeType = 'concept' | 'procedure' | 'analysis' | 'expression' | 'creation' | 'mixed'
 export type Familiarity = 'new' | 'beginner' | 'intermediate' | 'advanced'
 
 export interface AgentStep {

@@ -14,9 +14,7 @@ def test_memory_api_crud_and_filters(client, db_session, auth_user):
     memory = created.json()
     assert memory["source"] == "user"
 
-    listed = client.get(
-        "/api/agent/memories", params={"topic_id": topic.id, "kind": "goal"}
-    )
+    listed = client.get("/api/agent/memories", params={"topic_id": topic.id, "kind": "goal"})
     assert [item["id"] for item in listed.json()] == [memory["id"]]
 
     updated = client.patch(
@@ -46,9 +44,7 @@ def test_memory_api_rejects_long_content_and_foreign_scope(client, db_session):
     db_session.add(private_memory)
     db_session.commit()
 
-    too_long = client.post(
-        "/api/agent/memories", json={"kind": "goal", "content": "x" * 301}
-    )
+    too_long = client.post("/api/agent/memories", json={"kind": "goal", "content": "x" * 301})
     foreign_topic = client.post(
         "/api/agent/memories",
         json={"kind": "goal", "content": "No access", "topic_id": topic.id},

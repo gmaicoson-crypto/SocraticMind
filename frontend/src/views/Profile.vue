@@ -2,7 +2,6 @@
   <div class="profile-page">
     <TopBar />
     <div class="profile-body">
-
       <ProfileHero
         :user-info="store.userInfo"
         :user-name="userName"
@@ -47,14 +46,14 @@
               <div
                 class="tc-fill"
                 :style="{
-                  width: (topic.nodes ? topic.mastered / topic.nodes * 100 : 0) + '%',
+                  width: (topic.nodes ? (topic.mastered / topic.nodes) * 100 : 0) + '%',
                   background: topicColor(idx),
                 }"
               />
             </div>
             <div class="tc-footer">
               <span>{{ topic.mastered }} / {{ topic.nodes }} 已掌握</span>
-              <span>{{ Math.round(topic.mastered / topic.nodes * 100) || 0 }}%</span>
+              <span>{{ Math.round((topic.mastered / topic.nodes) * 100) || 0 }}%</span>
             </div>
           </div>
         </div>
@@ -81,7 +80,10 @@
       <div class="card ui-card">
         <div class="card-title">最近记录</div>
         <div class="timeline">
-          <div v-if="stats.timeline.length === 0" style="color: var(--ink-3); font-size: 13px; padding: 12px 0;">
+          <div
+            v-if="stats.timeline.length === 0"
+            style="color: var(--ink-3); font-size: 13px; padding: 12px 0"
+          >
             还没有学习记录，开始学习吧！
           </div>
           <div v-for="r in stats.timeline" :key="r.title + r.time" class="tl-item">
@@ -94,7 +96,6 @@
           </div>
         </div>
       </div>
-
     </div>
   </div>
   <EditProfileModal v-if="showEditModal" @close="showEditModal = false" />
@@ -107,8 +108,12 @@ import { useRouter } from 'vue-router'
 import { useLearningStore } from '../stores/learning'
 import TopBar from '../components/TopBar.vue'
 
-const EditProfileModal = defineAsyncComponent(() => import('../components/profile/EditProfileModal.vue'))
-const AgentMemorySection = defineAsyncComponent(() => import('../components/profile/AgentMemorySection.vue'))
+const EditProfileModal = defineAsyncComponent(
+  () => import('../components/profile/EditProfileModal.vue'),
+)
+const AgentMemorySection = defineAsyncComponent(
+  () => import('../components/profile/AgentMemorySection.vue'),
+)
 import { getProfileStats, recordToday } from '../api/progress'
 import { loadTodayProgress } from '../utils/dailyGoal'
 import type { ProfileStats } from '../api/progress'
@@ -162,7 +167,7 @@ const userBio = computed(() => store.userInfo?.bio ?? '每一个问题都是通�
 const todayStr = new Date().toISOString().slice(0, 10)
 
 const todayChatCount = computed(() => {
-  const cell = stats.value.heatmap.find(h => h.date === todayStr)
+  const cell = stats.value.heatmap.find((h) => h.date === todayStr)
   return cell?.count ?? 0
 })
 
@@ -239,7 +244,9 @@ function topicColor(index: number) {
   border-radius: 12px;
   padding: 16px 18px;
   cursor: pointer;
-  transition: border-color .15s, box-shadow .15s;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
 }
 .topic-card:hover {
   border-color: var(--blue-line);
@@ -283,7 +290,7 @@ function topicColor(index: number) {
 .tc-fill {
   height: 100%;
   border-radius: 99px;
-  transition: width .4s;
+  transition: width 0.4s;
 }
 .tc-footer {
   display: flex;
@@ -306,7 +313,7 @@ function topicColor(index: number) {
   padding: 12px 8px;
   border-radius: 10px;
   cursor: pointer;
-  transition: transform .15s;
+  transition: transform 0.15s;
 }
 .badge:hover {
   transform: translateY(-2px);
@@ -371,10 +378,10 @@ function topicColor(index: number) {
   background: var(--blue-2);
 }
 .tl-dot.chat {
-  background: #1D9E75;
+  background: #1d9e75;
 }
 .tl-dot.start {
-  background: #EF9F27;
+  background: #ef9f27;
 }
 .tl-content {
   flex: 1;

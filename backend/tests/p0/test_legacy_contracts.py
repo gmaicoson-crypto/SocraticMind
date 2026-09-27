@@ -77,9 +77,7 @@ def test_chat_stream_treats_mastered_marker_as_plain_text(
     )
     db_session.add(node)
     db_session.commit()
-    monkeypatch.setattr(
-        "routers.chat.chat_stream", lambda **_: iter(["Good work ", "[MASTERED]"])
-    )
+    monkeypatch.setattr("routers.chat.chat_stream", lambda **_: iter(["Good work ", "[MASTERED]"]))
 
     response = client.post(
         "/api/chat/stream",

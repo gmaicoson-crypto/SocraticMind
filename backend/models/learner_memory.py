@@ -21,6 +21,4 @@ class LearnerMemory(Base):
     user = relationship("User", back_populates="memories")
     topic = relationship("Topic", back_populates="memories")
 
-    __table_args__ = (
-        Index("ix_learner_memories_user_topic_kind", "user_id", "topic_id", "kind"),
-    )
+    __table_args__ = (Index("ix_learner_memories_user_topic_kind", "user_id", "topic_id", "kind"),)

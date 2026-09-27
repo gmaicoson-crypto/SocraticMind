@@ -51,12 +51,8 @@ def test_assessment_api_and_answer_protocol(app, client, db_session, auth_user):
 def test_self_report_and_revert_are_idempotent(app, client, db_session, auth_user):
     node, _item = create_assessable_node(db_session, auth_user)
 
-    first = client.post(
-        f"/api/nodes/{node.id}/mastery", json={"request_id": "self-master"}
-    )
-    second = client.post(
-        f"/api/nodes/{node.id}/mastery", json={"request_id": "self-master"}
-    )
+    first = client.post(f"/api/nodes/{node.id}/mastery", json={"request_id": "self-master"})
+    second = client.post(f"/api/nodes/{node.id}/mastery", json={"request_id": "self-master"})
     assert first.status_code == second.status_code == 200
     assert first.json()["event_id"] == second.json()["event_id"]
 
@@ -76,8 +72,6 @@ def test_mastery_api_hides_other_users_node(client, db_session):
     db_session.commit()
     node, _item = create_assessable_node(db_session, owner)
 
-    response = client.post(
-        f"/api/nodes/{node.id}/mastery", json={"request_id": "cross-master"}
-    )
+    response = client.post(f"/api/nodes/{node.id}/mastery", json={"request_id": "cross-master"})
     assert response.status_code == 404
     assert response.json()["code"] == "NODE_NOT_FOUND"

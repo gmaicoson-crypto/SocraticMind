@@ -2,7 +2,6 @@
   <BaseModal :model-value="true" @close="emit('close')">
     <div class="overlay" @click.self="emit('close')">
       <div class="modal">
-
         <div class="modal-header">
           <div>
             <div class="modal-title">编辑个人资料</div>
@@ -12,7 +11,6 @@
         </div>
 
         <div class="modal-body">
-
           <div>
             <div class="section-label">基本信息</div>
             <div class="avatar-row">
@@ -21,11 +19,23 @@
                 :style="hasImage ? {} : { background: form.avatarGrad }"
                 @click="triggerUpload"
               >
-                <img v-if="hasImage" :src="avatarPreview" alt="avatar" class="avatar-img ui-avatar-image" decoding="async" />
-                <template v-else>{{ form.name.slice(0,1) || '李' }}</template>
+                <img
+                  v-if="hasImage"
+                  :src="avatarPreview"
+                  alt="avatar"
+                  class="avatar-img ui-avatar-image"
+                  decoding="async"
+                />
+                <template v-else>{{ form.name.slice(0, 1) || '李' }}</template>
                 <div class="avatar-edit">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round">
-                    <path d="M12 20h9M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4 12.5-12.5z"/>
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="white"
+                    stroke-width="2.5"
+                    stroke-linecap="round"
+                  >
+                    <path d="M12 20h9M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4 12.5-12.5z" />
                   </svg>
                 </div>
               </div>
@@ -33,7 +43,7 @@
                 ref="fileInput"
                 type="file"
                 accept="image/png,image/jpeg,image/gif,image/webp"
-                style="display:none"
+                style="display: none"
                 @change="onFileChange"
               />
               <div class="avatar-colors">
@@ -64,11 +74,19 @@
             </div>
 
             <div class="fields">
-            <div class="field ui-field">
+              <div class="field ui-field">
                 <label>用户名</label>
                 <div class="field-input" :class="{ focused: focusField === 'name' }">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13">
-                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    width="13"
+                    height="13"
+                  >
+                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                    <circle cx="12" cy="7" r="4" />
                   </svg>
                   <input
                     v-model="form.name"
@@ -81,11 +99,18 @@
                 <div class="char-count">{{ form.name.length }} / 20</div>
               </div>
 
-            <div class="field ui-field">
+              <div class="field ui-field">
                 <label>个性签名</label>
                 <div class="field-input" :class="{ focused: focusField === 'bio' }">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13">
-                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    width="13"
+                    height="13"
+                  >
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
                   </svg>
                   <input
                     v-model="form.bio"
@@ -97,12 +122,21 @@
                 </div>
               </div>
 
-            <div class="field ui-field">
+              <div class="field ui-field">
                 <label>邮箱地址</label>
                 <div class="field-input readonly">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13">
-                    <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
-                    <polyline points="22,6 12,13 2,6"/>
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    width="13"
+                    height="13"
+                  >
+                    <path
+                      d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"
+                    />
+                    <polyline points="22,6 12,13 2,6" />
                   </svg>
                   <input type="email" :value="form.email" disabled />
                 </div>
@@ -135,16 +169,28 @@
                 <div class="field ui-field">
                   <label>新密码</label>
                   <div class="field-input">
-                    <input v-model="pwdForm.next" type="password" autocomplete="new-password" minlength="6" />
+                    <input
+                      v-model="pwdForm.next"
+                      type="password"
+                      autocomplete="new-password"
+                      minlength="6"
+                    />
                   </div>
                 </div>
                 <div class="field ui-field">
                   <label>确认新密码</label>
                   <div class="field-input">
-                    <input v-model="pwdForm.confirm" type="password" autocomplete="new-password" minlength="6" />
+                    <input
+                      v-model="pwdForm.confirm"
+                      type="password"
+                      autocomplete="new-password"
+                      minlength="6"
+                    />
                   </div>
                 </div>
-                <div v-if="pwdMsg" class="pwd-msg" :class="{ ok: pwdMsgType === 'ok' }">{{ pwdMsg }}</div>
+                <div v-if="pwdMsg" class="pwd-msg" :class="{ ok: pwdMsgType === 'ok' }">
+                  {{ pwdMsg }}
+                </div>
                 <div class="pwd-actions">
                   <button class="cancel-btn" @click="cancelPwd">取消</button>
                   <button class="save-btn" :disabled="pwdSaving" @click="submitPassword">
@@ -169,7 +215,6 @@
               </div>
             </div>
           </div>
-
         </div>
 
         <DeleteAccountModal
@@ -189,17 +234,34 @@
             @click="handleSave"
           >
             <div v-if="saving" class="spinner" />
-            <svg v-else-if="savedDone" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round">
-              <path d="M20 6L9 17l-5-5"/>
+            <svg
+              v-else-if="savedDone"
+              width="13"
+              height="13"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="white"
+              stroke-width="2.5"
+              stroke-linecap="round"
+            >
+              <path d="M20 6L9 17l-5-5" />
             </svg>
-            <svg v-else width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round">
-              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
-              <path d="M17 21v-8H7v8M7 3v5h8"/>
+            <svg
+              v-else
+              width="13"
+              height="13"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="white"
+              stroke-width="2.5"
+              stroke-linecap="round"
+            >
+              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+              <path d="M17 21v-8H7v8M7 3v5h8" />
             </svg>
             {{ saving ? '保存中…' : savedDone ? '已保存' : '保存更改' }}
           </button>
         </div>
-
       </div>
     </div>
   </BaseModal>
@@ -249,7 +311,9 @@ async function onFileChange(e: Event) {
   }
 
   const reader = new FileReader()
-  reader.onload = () => { localPreview.value = String(reader.result) }
+  reader.onload = () => {
+    localPreview.value = String(reader.result)
+  }
   reader.readAsDataURL(file)
 
   uploading.value = true
@@ -322,7 +386,10 @@ async function submitPassword() {
     pwdForm.old = ''
     pwdForm.next = ''
     pwdForm.confirm = ''
-    pwdHideTimer = setTimeout(() => { showPwdPanel.value = false; pwdMsg.value = '' }, 1200)
+    pwdHideTimer = setTimeout(() => {
+      showPwdPanel.value = false
+      pwdMsg.value = ''
+    }, 1200)
   } catch (err: any) {
     pwdMsg.value = err?.response?.data?.detail ?? '修改失败'
     pwdMsgType.value = 'err'
@@ -384,11 +451,13 @@ const deleting = ref(false)
 const deleteError = ref('')
 
 function clearAllUserScopedStorage() {
-
   const sessionKeys = [
-    'sm_socratic_sessions', 'sm_normal_sessions',
-    'sm_socratic_cur', 'sm_normal_cur',
-    'sm_chips_socratic', 'sm_chips_normal',
+    'sm_socratic_sessions',
+    'sm_normal_sessions',
+    'sm_socratic_cur',
+    'sm_normal_cur',
+    'sm_chips_socratic',
+    'sm_chips_normal',
   ]
   for (const s of [localStorage, sessionStorage]) {
     for (const k of sessionKeys) s.removeItem(k)
@@ -427,7 +496,7 @@ async function handleDeleteAccount(payload: { password: string; confirm: string 
 .overlay {
   position: fixed;
   inset: 0;
-  background: rgba(30,28,26,0.5);
+  background: rgba(30, 28, 26, 0.5);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -444,7 +513,7 @@ async function handleDeleteAccount(payload: { password: string; confirm: string 
   border: 1px solid var(--line);
   border-radius: 18px;
   overflow: hidden;
-  box-shadow: 0 24px 60px rgba(0,0,0,0.18);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.18);
   max-height: 90vh;
   display: flex;
   flex-direction: column;
@@ -485,7 +554,7 @@ async function handleDeleteAccount(payload: { password: string; confirm: string 
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all .15s;
+  transition: all 0.15s;
   font-family: var(--font-sans);
 }
 .close-btn:hover {
@@ -531,7 +600,7 @@ async function handleDeleteAccount(payload: { password: string; confirm: string 
   justify-content: center;
   position: relative;
   cursor: pointer;
-  transition: filter .15s;
+  transition: filter 0.15s;
 }
 .big-avatar:hover {
   filter: brightness(0.9);
@@ -554,7 +623,7 @@ async function handleDeleteAccount(payload: { password: string; confirm: string 
   border: none;
   cursor: pointer;
   font-family: var(--font-sans);
-  transition: opacity .15s;
+  transition: opacity 0.15s;
 }
 .avatar-action-btn:hover:not(:disabled) {
   opacity: 0.85;
@@ -585,10 +654,10 @@ async function handleDeleteAccount(payload: { password: string; confirm: string 
 }
 .pwd-msg {
   font-size: 11.5px;
-  color: #E24B4A;
+  color: #e24b4a;
 }
 .pwd-msg.ok {
-  color: #1D9E75;
+  color: #1d9e75;
 }
 .pwd-actions {
   display: flex;
@@ -631,7 +700,7 @@ async function handleDeleteAccount(payload: { password: string; confirm: string 
   border-radius: 6px;
   cursor: pointer;
   border: 2px solid transparent;
-  transition: transform .1s;
+  transition: transform 0.1s;
 }
 .swatch:hover {
   transform: scale(1.1);
@@ -648,7 +717,7 @@ async function handleDeleteAccount(payload: { password: string; confirm: string 
 
 .field-input {
   height: 40px;
-  transition: all .15s;
+  transition: all 0.15s;
 }
 .field-input.readonly {
   background: var(--bg-3);
@@ -701,13 +770,13 @@ async function handleDeleteAccount(payload: { password: string; confirm: string 
   border-radius: 7px;
   color: var(--ink-3);
   cursor: pointer;
-  transition: all .15s;
+  transition: all 0.15s;
   font-family: var(--font-sans);
 }
 .seg-btn.active {
   background: var(--surface);
   color: var(--ink);
-  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
 }
 
 .toggle-list {
@@ -744,7 +813,7 @@ async function handleDeleteAccount(payload: { password: string; confirm: string 
   border: 1px solid var(--line);
   position: relative;
   cursor: pointer;
-  transition: background .2s;
+  transition: background 0.2s;
   flex-shrink: 0;
 }
 .toggle.on {
@@ -759,8 +828,8 @@ async function handleDeleteAccount(payload: { password: string; confirm: string 
   height: 14px;
   border-radius: 50%;
   background: white;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.15);
-  transition: left .2s;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+  transition: left 0.2s;
 }
 .toggle.on .toggle-thumb {
   left: 18px;
@@ -805,7 +874,7 @@ async function handleDeleteAccount(payload: { password: string; confirm: string 
   font-weight: 500;
   cursor: pointer;
   font-family: var(--font-sans);
-  transition: all .15s;
+  transition: all 0.15s;
 }
 .danger-btn.outline {
   background: transparent;
@@ -816,12 +885,12 @@ async function handleDeleteAccount(payload: { password: string; confirm: string 
   background: var(--bg-2);
 }
 .danger-btn.red {
-  background: #FCEBEB;
-  border: 1px solid #F7C1C1;
-  color: #E24B4A;
+  background: #fcebeb;
+  border: 1px solid #f7c1c1;
+  color: #e24b4a;
 }
 .danger-btn.red:hover {
-  background: #F7C1C1;
+  background: #f7c1c1;
 }
 
 .modal-footer {
@@ -845,7 +914,7 @@ async function handleDeleteAccount(payload: { password: string; confirm: string 
   color: var(--ink-2);
   cursor: pointer;
   font-family: var(--font-sans);
-  transition: background .15s;
+  transition: background 0.15s;
 }
 .cancel-btn:hover {
   background: var(--bg-2);
@@ -864,7 +933,7 @@ async function handleDeleteAccount(payload: { password: string; confirm: string 
   display: flex;
   align-items: center;
   gap: 6px;
-  transition: opacity .15s;
+  transition: opacity 0.15s;
 }
 .save-btn:hover:not(:disabled) {
   opacity: 0.88;
@@ -874,16 +943,20 @@ async function handleDeleteAccount(payload: { password: string; confirm: string 
   cursor: not-allowed;
 }
 .save-btn.saved {
-  background: linear-gradient(135deg, #1D9E75, #0F6E56);
+  background: linear-gradient(135deg, #1d9e75, #0f6e56);
 }
 
 .spinner {
   width: 13px;
   height: 13px;
   border-radius: 50%;
-  border: 2px solid rgba(255,255,255,0.4);
+  border: 2px solid rgba(255, 255, 255, 0.4);
   border-top-color: white;
-  animation: spin .7s linear infinite;
+  animation: spin 0.7s linear infinite;
 }
-@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
 </style>

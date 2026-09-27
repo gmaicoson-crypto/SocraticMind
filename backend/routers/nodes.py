@@ -144,10 +144,14 @@ def get_nodes(
     db: Session = Depends(get_db),
 ):
     """获取指定主题下的所有节点，先校验主题归属确保不越权访问。"""
-    topic = db.query(Topic).filter(
-        Topic.id == topic_id,
-        Topic.user_id == current_user.id,
-    ).first()
+    topic = (
+        db.query(Topic)
+        .filter(
+            Topic.id == topic_id,
+            Topic.user_id == current_user.id,
+        )
+        .first()
+    )
     if not topic:
         raise HTTPException(status_code=404, detail="主题不存在")
     nodes = db.query(Node).filter(Node.topic_id == topic_id).all()
@@ -206,10 +210,14 @@ def create_node(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    topic = db.query(Topic).filter(
-        Topic.id == req.topic_id,
-        Topic.user_id == current_user.id,
-    ).first()
+    topic = (
+        db.query(Topic)
+        .filter(
+            Topic.id == req.topic_id,
+            Topic.user_id == current_user.id,
+        )
+        .first()
+    )
     if not topic:
         raise HTTPException(status_code=404, detail="主题不存在")
 

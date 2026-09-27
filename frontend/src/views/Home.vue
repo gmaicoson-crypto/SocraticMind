@@ -4,16 +4,13 @@
     <div class="app-body">
       <Sidebar />
       <main class="app-main" ref="mainRef">
-
         <div class="mobile-pane-tabs" aria-label="移动端主视图">
-          <button
-            :class="{ active: mobilePane === 'dialogue' }"
-            @click="mobilePane = 'dialogue'"
-          >对话</button>
-          <button
-            :class="{ active: mobilePane === 'workspace' }"
-            @click="mobilePane = 'workspace'"
-          >学习工具</button>
+          <button :class="{ active: mobilePane === 'dialogue' }" @click="mobilePane = 'dialogue'">
+            对话
+          </button>
+          <button :class="{ active: mobilePane === 'workspace' }" @click="mobilePane = 'workspace'">
+            学习工具
+          </button>
         </div>
 
         <div
@@ -24,14 +21,8 @@
           <SocraticDialogue />
         </div>
 
-        <div
-          class="divider"
-          :class="{ dragging }"
-          @mousedown="startDrag"
-        >
-          <div class="divider-handle">
-            <span /><span /><span />
-          </div>
+        <div class="divider" :class="{ dragging }" @mousedown="startDrag">
+          <div class="divider-handle"><span /><span /><span /></div>
         </div>
 
         <div class="right-col" :class="{ 'mobile-hidden': mobilePane !== 'workspace' }">
@@ -41,9 +32,19 @@
               :class="{ active: rightPanel === 'graph' }"
               @click="setRightPanel('graph')"
             >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-                <circle cx="12" cy="5" r="2"/><circle cx="5" cy="19" r="2"/><circle cx="19" cy="19" r="2"/>
-                <path d="M12 7v4M12 11L5 17M12 11L19 17"/>
+              <svg
+                width="13"
+                height="13"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+              >
+                <circle cx="12" cy="5" r="2" />
+                <circle cx="5" cy="19" r="2" />
+                <circle cx="19" cy="19" r="2" />
+                <path d="M12 7v4M12 11L5 17M12 11L19 17" />
               </svg>
               知识图谱
             </button>
@@ -52,8 +53,16 @@
               :class="{ active: rightPanel === 'notes' }"
               @click="setRightPanel('notes')"
             >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-                <path d="M4 6H20M4 12H20M4 18H14"/>
+              <svg
+                width="13"
+                height="13"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+              >
+                <path d="M4 6H20M4 12H20M4 18H14" />
               </svg>
               笔记与画布
             </button>
@@ -62,9 +71,17 @@
               :class="{ active: rightPanel === 'plan' }"
               @click="setRightPanel('plan')"
             >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-                <path d="M8 2v4M16 2v4M3 9h18M5 4h14a2 2 0 0 1 2 2v14H3V6a2 2 0 0 1 2-2Z"/>
-                <path d="m8 15 2 2 5-5"/>
+              <svg
+                width="13"
+                height="13"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+              >
+                <path d="M8 2v4M16 2v4M3 9h18M5 4h14a2 2 0 0 1 2 2v14H3V6a2 2 0 0 1 2-2Z" />
+                <path d="m8 15 2 2 5-5" />
               </svg>
               今日计划
             </button>
@@ -78,7 +95,6 @@
             </KeepAlive>
           </div>
         </div>
-
       </main>
     </div>
   </div>
@@ -156,7 +172,7 @@ useStudyTimer(() => store.userInfo?.id)
   cursor: col-resize;
   margin: 0 4px;
   border-radius: 4px;
-  transition: background .15s;
+  transition: background 0.15s;
   user-select: none;
 }
 .divider:hover,
@@ -175,7 +191,7 @@ useStudyTimer(() => store.userInfo?.id)
   height: 16px;
   background: var(--line-2);
   border-radius: 2px;
-  transition: background .15s;
+  transition: background 0.15s;
 }
 .divider:hover .divider-handle span,
 .divider.dragging .divider-handle span {
@@ -214,7 +230,7 @@ useStudyTimer(() => store.userInfo?.id)
   border-radius: 7px;
   cursor: pointer;
   font-family: var(--font-sans);
-  transition: all .15s;
+  transition: all 0.15s;
   min-width: 0;
   white-space: nowrap;
 }
@@ -225,7 +241,9 @@ useStudyTimer(() => store.userInfo?.id)
 .right-tab.active {
   background: var(--surface);
   color: var(--blue-2);
-  box-shadow: 0 1px 0 var(--line), 0 1px 3px oklch(0.5 0.04 235 / 0.08);
+  box-shadow:
+    0 1px 0 var(--line),
+    0 1px 3px oklch(0.5 0.04 235 / 0.08);
 }
 .right-panel {
   flex: 1;
@@ -239,8 +257,13 @@ useStudyTimer(() => store.userInfo?.id)
   height: 100%;
 }
 @media (max-width: 900px) {
-  .right-tab { padding-inline: 7px; font-size: 11.5px; }
-  .right-tab svg { display: none; }
+  .right-tab {
+    padding-inline: 7px;
+    font-size: 11.5px;
+  }
+  .right-tab svg {
+    display: none;
+  }
 }
 @media (max-width: 760px) {
   .app-body {

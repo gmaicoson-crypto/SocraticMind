@@ -24,9 +24,7 @@ def read_memories(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    return list_memories(
-        db, user_id=current_user.id, topic_id=topic_id, kind=kind
-    )
+    return list_memories(db, user_id=current_user.id, topic_id=topic_id, kind=kind)
 
 
 @router.post("", response_model=MemoryResponse, status_code=status.HTTP_201_CREATED)

@@ -40,14 +40,16 @@ describe('memories store', () => {
     await store.editMemory(1, { content: 'Updated' })
     await store.removeMemory(2)
 
-    expect(store.memories.map(item => item.id)).toEqual([1])
+    expect(store.memories.map((item) => item.id)).toEqual([1])
     expect(store.memories[0].content).toBe('Updated')
   })
 
   it('blocks a second mutation while one is active', async () => {
     let resolveRequest: (value: Memory) => void = () => undefined
     vi.mocked(memoriesApi.createMemory).mockReturnValue(
-      new Promise(resolve => { resolveRequest = resolve }),
+      new Promise((resolve) => {
+        resolveRequest = resolve
+      }),
     )
     const store = useMemoriesStore()
     const payload = { kind: 'goal' as const, content: 'Learn', topic_id: null }

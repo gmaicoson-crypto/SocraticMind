@@ -1,7 +1,15 @@
 <template>
   <div class="topic-bar">
-    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-      <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+    <svg
+      width="11"
+      height="11"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2"
+      stroke-linecap="round"
+    >
+      <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
     </svg>
     <template v-if="editing">
       <input
@@ -18,9 +26,17 @@
     <template v-else>
       <span class="topic-bar-name">{{ topicTitle }}</span>
       <button class="topic-edit-btn" title="修改主题名称" @click="$emit('startEdit')">
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+        <svg
+          width="11"
+          height="11"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+        >
+          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
         </svg>
       </button>
     </template>
@@ -46,9 +62,12 @@ defineEmits<{
 
 const inputRef = ref<HTMLInputElement | null>(null)
 
-watch(() => props.editing, (val) => {
-  if (val) nextTick(() => inputRef.value?.focus())
-})
+watch(
+  () => props.editing,
+  (val) => {
+    if (val) nextTick(() => inputRef.value?.focus())
+  },
+)
 </script>
 
 <style scoped>

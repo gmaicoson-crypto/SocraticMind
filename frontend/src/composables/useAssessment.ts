@@ -28,7 +28,7 @@ export function useAssessment(options: AssessmentOptions) {
       topicId ? topics.fetchNodes(topicId) : Promise.resolve(),
       plans.fetchToday(),
     ])
-    const selected = topics.nodes.find(node => node.dbId === nodeId) ?? null
+    const selected = topics.nodes.find((node) => node.dbId === nodeId) ?? null
     topics.setActiveNode(selected)
     if (celebrate && selected?.state === 'mastered') topics.notifyMastery(selected.id)
   }
@@ -41,11 +41,13 @@ export function useAssessment(options: AssessmentOptions) {
       else index.rememberRun(options.sessionId(), response.run_id)
     }
     if (response.status === 'completed') {
-      const resultNodeId = Number(response.result && 'node_id' in response.result
-        ? response.result.node_id
-        : fallbackNodeId)
+      const resultNodeId = Number(
+        response.result && 'node_id' in response.result ? response.result.node_id : fallbackNodeId,
+      )
       if (resultNodeId) {
-        const passed = Boolean(response.result && 'passed' in response.result && response.result.passed)
+        const passed = Boolean(
+          response.result && 'passed' in response.result && response.result.passed,
+        )
         await refreshNodeState(resultNodeId, passed)
       }
     }
@@ -53,19 +55,21 @@ export function useAssessment(options: AssessmentOptions) {
   }
 
   function start(nodeId: number) {
-    return agent.beginAssessment(nodeId, options.sessionId()).then(response => accept(response, nodeId))
+    return agent
+      .beginAssessment(nodeId, options.sessionId())
+      .then((response) => accept(response, nodeId))
   }
 
   function answer(value: string) {
-    return agent.answer(value).then(response => accept(response))
+    return agent.answer(value).then((response) => accept(response))
   }
 
   function retry() {
-    return agent.retry().then(response => accept(response))
+    return agent.retry().then((response) => accept(response))
   }
 
   function cancel() {
-    return agent.cancel().then(response => accept(response))
+    return agent.cancel().then((response) => accept(response))
   }
 
   async function selfReport(nodeId: number) {

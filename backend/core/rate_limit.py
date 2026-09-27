@@ -10,7 +10,7 @@ _global_lock = Lock()  # 保护 _locks 字典本身的并发写入
 # 登录失败记录：email -> (累计失败次数, 锁定截止时间戳)
 _login_fail: dict[str, tuple[int, float]] = {}
 
-LOGIN_MAX_FAILS = 5          # 连续失败超过此次数后触发账号锁定
+LOGIN_MAX_FAILS = 5  # 连续失败超过此次数后触发账号锁定
 LOGIN_LOCK_SECONDS = 15 * 60  # 锁定时长：15 分钟
 
 

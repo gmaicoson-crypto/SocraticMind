@@ -52,9 +52,7 @@ def serialize_plan(plan: StudyPlan) -> dict:
         "estimated_end_date": plan.estimated_end_date,
         "status": plan.status,
         "version": plan.version,
-        "will_miss_target": bool(
-            plan.target_date and plan.estimated_end_date > plan.target_date
-        ),
+        "will_miss_target": bool(plan.target_date and plan.estimated_end_date > plan.target_date),
         "total_minutes": sum(item.estimated_minutes for item in items),
         "completed_minutes": sum(
             item.estimated_minutes
@@ -78,9 +76,7 @@ def serialize_plan(plan: StudyPlan) -> dict:
     }
 
 
-def get_today_plan(
-    db: Session, *, user_id: int, timezone_name: str | None
-) -> dict:
+def get_today_plan(db: Session, *, user_id: int, timezone_name: str | None) -> dict:
     current_date, effective_timezone = today_in_timezone(timezone_name)
     rows = (
         db.query(StudyPlanItem, StudyPlan, Topic, Node)
@@ -130,8 +126,7 @@ def get_today_plan(
             aggregate["status"] = PlanItemStatus.PENDING.value
 
     result = {
-        section: list(grouped[section].values())
-        for section in ("today", "overdue", "upcoming")
+        section: list(grouped[section].values()) for section in ("today", "overdue", "upcoming")
     }
     result.update(
         {
@@ -186,9 +181,7 @@ def replan(
         {
             "key": node.node_key,
             "parent_keys": [
-                key.strip()
-                for key in (node.parent_keys or "").split(",")
-                if key.strip()
+                key.strip() for key in (node.parent_keys or "").split(",") if key.strip()
             ],
             "estimated_minutes": node.estimated_minutes,
         }

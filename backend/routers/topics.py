@@ -89,17 +89,25 @@ def delete_topic(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    topic = db.query(Topic).filter(
-        Topic.id == topic_id,
-        Topic.user_id == current_user.id,
-    ).first()
+    topic = (
+        db.query(Topic)
+        .filter(
+            Topic.id == topic_id,
+            Topic.user_id == current_user.id,
+        )
+        .first()
+    )
     if not topic:
         raise HTTPException(status_code=404, detail="主题不存在")
 
-    deleted_messages = db.query(ChatMessage).filter(
-        ChatMessage.user_id == current_user.id,
-        ChatMessage.topic_id == topic.id,
-    ).delete(synchronize_session=False)
+    deleted_messages = (
+        db.query(ChatMessage)
+        .filter(
+            ChatMessage.user_id == current_user.id,
+            ChatMessage.topic_id == topic.id,
+        )
+        .delete(synchronize_session=False)
+    )
     db.delete(topic)
     db.commit()
     return {"message": "删除成功", "deleted_messages": deleted_messages}
@@ -116,10 +124,14 @@ def update_topic_title(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    topic = db.query(Topic).filter(
-        Topic.id == topic_id,
-        Topic.user_id == current_user.id,
-    ).first()
+    topic = (
+        db.query(Topic)
+        .filter(
+            Topic.id == topic_id,
+            Topic.user_id == current_user.id,
+        )
+        .first()
+    )
     if not topic:
         raise HTTPException(status_code=404, detail="主题不存在")
     topic.title = req.title

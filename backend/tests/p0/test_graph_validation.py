@@ -29,10 +29,16 @@ def test_valid_graph_uses_stable_topological_order_and_existing_layout(valid_gra
         (lambda graph: graph[:5], "GRAPH_NODE_COUNT"),
         (lambda graph: [*graph, {**graph[-1], "label": "Duplicate"}], "GRAPH_DUPLICATE_KEY"),
         (
-            lambda graph: [*graph, {"key": "other-root", "label": "Other", "parent_keys": [], "estimated_minutes": 20}],
+            lambda graph: [
+                *graph,
+                {"key": "other-root", "label": "Other", "parent_keys": [], "estimated_minutes": 20},
+            ],
             "GRAPH_ROOT_COUNT",
         ),
-        (lambda graph: [{**graph[1], "parent_keys": ["missing"]}, *graph[2:], graph[0]], "GRAPH_PARENT_MISSING"),
+        (
+            lambda graph: [{**graph[1], "parent_keys": ["missing"]}, *graph[2:], graph[0]],
+            "GRAPH_PARENT_MISSING",
+        ),
         (lambda graph: [{**graph[0], "parent_keys": ["root"]}, *graph[1:]], "GRAPH_SELF_REFERENCE"),
         (lambda graph: [graph[0], {**graph[1], "parent_keys": ["e"]}, *graph[2:]], "GRAPH_CYCLE"),
         (lambda graph: [{**graph[0], "estimated_minutes": 9}, *graph[1:]], "GRAPH_DURATION"),

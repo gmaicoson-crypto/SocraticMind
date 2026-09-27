@@ -1,5 +1,4 @@
 <template>
-
   <Transition name="scroll-btn">
     <button
       v-if="showScrollBtn"
@@ -7,18 +6,35 @@
       title="滚动到底部"
       @click="scrollToBottom"
     >
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-        <polyline points="6 9 12 15 18 9"/>
+      <svg
+        width="16"
+        height="16"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2.5"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <polyline points="6 9 12 15 18 9" />
       </svg>
     </button>
   </Transition>
 
   <div ref="scrollRef" class="dlg-messages" @scroll="onMessagesScroll">
-
+    <!-- Vue v-memo codegen needs the parentheses around this key. -->
+    <!-- prettier-ignore-attribute :key -->
     <MessageItem
       v-for="(msg, i) in messages"
       :key="(msg.db_id ?? `${msg.role}-${msg.time}-${i}`)"
-      v-memo="[msg.text, msg.quote, msg.time, msg.selected_choice, isThinking, i === messages.length - 1]"
+      v-memo="[
+        msg.text,
+        msg.quote,
+        msg.time,
+        msg.selected_choice,
+        isThinking,
+        i === messages.length - 1,
+      ]"
       :message="msg"
       :index="i"
       :is-last="i === messages.length - 1"
@@ -37,7 +53,10 @@
     <div v-if="streamingText" class="msg-row ai">
       <div class="ai-avatar sm">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-          <path d="M12 2 L13.5 8.5 L20 10 L13.5 11.5 L12 18 L10.5 11.5 L4 10 L10.5 8.5 Z" fill="white"/>
+          <path
+            d="M12 2 L13.5 8.5 L20 10 L13.5 11.5 L12 18 L10.5 11.5 L4 10 L10.5 8.5 Z"
+            fill="white"
+          />
         </svg>
       </div>
       <div class="msg-content ai">
@@ -61,13 +80,19 @@
     <div v-if="isThinking && !streamingText" class="msg-row ai">
       <div class="ai-avatar sm">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-          <path d="M12 2 L13.5 8.5 L20 10 L13.5 11.5 L12 18 L10.5 11.5 L4 10 L10.5 8.5 Z" fill="white"/>
+          <path
+            d="M12 2 L13.5 8.5 L20 10 L13.5 11.5 L12 18 L10.5 11.5 L4 10 L10.5 8.5 Z"
+            fill="white"
+          />
         </svg>
       </div>
-      <div class="bubble ai" style="display:flex; gap:4px; align-items:center; padding: 12px 14px;">
-        <span class="dot" style="animation-delay:0ms" />
-        <span class="dot" style="animation-delay:150ms" />
-        <span class="dot" style="animation-delay:300ms" />
+      <div
+        class="bubble ai"
+        style="display: flex; gap: 4px; align-items: center; padding: 12px 14px"
+      >
+        <span class="dot" style="animation-delay: 0ms" />
+        <span class="dot" style="animation-delay: 150ms" />
+        <span class="dot" style="animation-delay: 300ms" />
       </div>
     </div>
   </div>
@@ -155,7 +180,9 @@ defineExpose({ scrollToBottom })
 }
 
 @keyframes dot {
-  0%, 80%, 100% {
+  0%,
+  80%,
+  100% {
     opacity: 0.3;
     transform: scale(0.8);
   }
@@ -181,7 +208,10 @@ defineExpose({ scrollToBottom })
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
   color: var(--ink-2);
   cursor: pointer;
-  transition: background var(--transition-fast), color var(--transition-fast), box-shadow var(--transition-fast);
+  transition:
+    background var(--transition-fast),
+    color var(--transition-fast),
+    box-shadow var(--transition-fast);
 }
 
 .scroll-to-bottom:hover {
@@ -192,7 +222,9 @@ defineExpose({ scrollToBottom })
 
 .scroll-btn-enter-active,
 .scroll-btn-leave-active {
-  transition: opacity 0.2s, transform 0.2s;
+  transition:
+    opacity 0.2s,
+    transform 0.2s;
 }
 
 .scroll-btn-enter-from,

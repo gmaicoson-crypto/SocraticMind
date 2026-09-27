@@ -31,14 +31,10 @@ def upgrade() -> None:
         .values(avatar_grad="linear-gradient(135deg,#e8c87a,#d4974a)")
     )
     op.execute(
-        users.update()
-        .where(users.c.bio.is_(None))
-        .values(bio="每一个问题都是通往掌握的一步")
+        users.update().where(users.c.bio.is_(None)).values(bio="每一个问题都是通往掌握的一步")
     )
     op.execute(users.update().where(users.c.daily_goal.is_(None)).values(daily_goal=5))
-    op.execute(
-        users.update().where(users.c.ai_style.is_(None)).values(ai_style="标准")
-    )
+    op.execute(users.update().where(users.c.ai_style.is_(None)).values(ai_style="标准"))
     op.create_index(
         "ix_chat_user_session_type_id",
         "chat_messages",

@@ -52,11 +52,7 @@ export async function retryAgentRun(runId: string) {
   return response.data as AgentRun
 }
 
-export async function startAssessment(
-  nodeId: number,
-  requestId: string,
-  sessionId?: string,
-) {
+export async function startAssessment(nodeId: number, requestId: string, sessionId?: string) {
   const response = await api.post('/api/agent/assessments', {
     node_id: nodeId,
     request_id: requestId,

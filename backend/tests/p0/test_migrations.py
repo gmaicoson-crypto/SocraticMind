@@ -61,9 +61,7 @@ def test_legacy_data_is_preserved_and_backfilled(tmp_path):
                 "VALUES (1, 'legacy', 'legacy@example.com', 'hash', 1)"
             )
         )
-        connection.execute(
-            text("INSERT INTO topics (id, user_id, title) VALUES (1, 1, 'Legacy')")
-        )
+        connection.execute(text("INSERT INTO topics (id, user_id, title) VALUES (1, 1, 'Legacy')"))
         connection.execute(
             text(
                 "INSERT INTO nodes "
@@ -86,16 +84,12 @@ def test_legacy_data_is_preserved_and_backfilled(tmp_path):
         assert connection.scalar(text("SELECT count(*) FROM topics")) == 1
         assert connection.scalar(text("SELECT count(*) FROM nodes")) == 1
         assert connection.scalar(text("SELECT count(*) FROM chat_messages")) == 1
-        assert connection.scalar(
-            text("SELECT mastery_source FROM nodes WHERE id = 1")
-        ) == "legacy"
-        assert connection.scalar(
-            text("SELECT message_type FROM chat_messages WHERE id = 1")
-        ) == "chat"
+        assert connection.scalar(text("SELECT mastery_source FROM nodes WHERE id = 1")) == "legacy"
+        assert (
+            connection.scalar(text("SELECT message_type FROM chat_messages WHERE id = 1")) == "chat"
+        )
         profile = connection.execute(
-            text(
-                "SELECT avatar_grad, bio, daily_goal, ai_style FROM users WHERE id = 1"
-            )
+            text("SELECT avatar_grad, bio, daily_goal, ai_style FROM users WHERE id = 1")
         ).one()
         assert all(value is not None for value in profile)
 
@@ -113,9 +107,7 @@ def test_p0_downgrade_keeps_legacy_tables(tmp_path):
     assert "agent_runs" not in tables
     assert "study_plans" not in tables
     assert "mastery_events" not in tables
-    assert "estimated_minutes" not in {
-        column["name"] for column in inspector.get_columns("nodes")
-    }
+    assert "estimated_minutes" not in {column["name"] for column in inspector.get_columns("nodes")}
 
 
 def test_application_guard_rejects_legacy_revision_and_accepts_head(tmp_path):

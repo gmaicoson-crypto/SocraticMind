@@ -89,7 +89,15 @@ export const usePlansStore = defineStore('plans', () => {
   }
 
   return {
-    todayPlan, topicPlan, loading, replanning, error,
-    fetchToday, fetchTopicPlan, replan, replanOverdue, clearPlans,
+    todayPlan,
+    topicPlan,
+    loading,
+    replanning,
+    error,
+    fetchToday,
+    fetchTopicPlan,
+    replan,
+    replanOverdue,
+    clearPlans,
   }
 })

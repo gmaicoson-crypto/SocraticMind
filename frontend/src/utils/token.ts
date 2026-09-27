@@ -35,9 +35,12 @@ export function clearAuth() {
   }
 
   const sessionKeys = [
-    'sm_socratic_sessions', 'sm_normal_sessions',
-    'sm_socratic_cur', 'sm_normal_cur',
-    'sm_chips_socratic', 'sm_chips_normal',
+    'sm_socratic_sessions',
+    'sm_normal_sessions',
+    'sm_socratic_cur',
+    'sm_normal_cur',
+    'sm_chips_socratic',
+    'sm_chips_normal',
   ]
   for (const k of sessionKeys) {
     localStorage.removeItem(k)
@@ -45,11 +48,10 @@ export function clearAuth() {
   }
 
   for (const storage of [localStorage, sessionStorage]) {
-    const recoveryKeys = Array.from(
-      { length: storage.length },
-      (_, index) => storage.key(index),
+    const recoveryKeys = Array.from({ length: storage.length }, (_, index) =>
+      storage.key(index),
     ).filter((key): key is string => Boolean(key?.startsWith('sm_agent_runs_')))
-    recoveryKeys.forEach(key => storage.removeItem(key))
+    recoveryKeys.forEach((key) => storage.removeItem(key))
   }
 }
 

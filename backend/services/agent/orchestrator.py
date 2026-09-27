@@ -55,9 +55,7 @@ def _snapshot(run: AgentRun) -> RunSnapshot:
     )
 
 
-def _load_owned(
-    db: Session, user_id: int, run_id: str, *, for_update: bool = False
-) -> AgentRun:
+def _load_owned(db: Session, user_id: int, run_id: str, *, for_update: bool = False) -> AgentRun:
     query = (
         db.query(AgentRun)
         .populate_existing()
@@ -222,13 +220,9 @@ def _generate_questions(
         {"role": "user", "content": json.dumps(params, ensure_ascii=False)},
     ]
     try:
-        result = _invoke(
-            generator, DiagnosticQuestions, messages, snapshot, "diagnostic_questions"
-        )
+        result = _invoke(generator, DiagnosticQuestions, messages, snapshot, "diagnostic_questions")
     except StructuredAIError as error:
-        return _mark_failed(
-            db, snapshot, code=error.code, retryable=error.retryable
-        )
+        return _mark_failed(db, snapshot, code=error.code, retryable=error.retryable)
 
     state = deepcopy(snapshot.state)
     state.update(
@@ -338,9 +332,7 @@ def _existing_topic_preview(state: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _generate_preview(
-    db: Session, snapshot: RunSnapshot, generator: Generator | None
-) -> AgentRun:
+def _generate_preview(db: Session, snapshot: RunSnapshot, generator: Generator | None) -> AgentRun:
     current = snapshot
     state = deepcopy(current.state)
     if state.get("answers") and not state.get("diagnostic_result"):
@@ -353,9 +345,7 @@ def _generate_preview(
                 "diagnostic_score",
             )
         except StructuredAIError as error:
-            return _mark_failed(
-                db, current, code=error.code, retryable=error.retryable
-            )
+            return _mark_failed(db, current, code=error.code, retryable=error.retryable)
         state["diagnostic_result"] = score.value.model_dump(mode="json")
         state["processing_stage"] = "graph_draft"
         current = _conditional_save(
@@ -392,9 +382,7 @@ def _generate_preview(
         )
         graph = prepare_graph(graph_result.value.model_dump(mode="json")["nodes"])
     except StructuredAIError as error:
-        return _mark_failed(
-            db, current, code=error.code, retryable=error.retryable
-        )
+        return _mark_failed(db, current, code=error.code, retryable=error.retryable)
     except GraphValidationError:
         return _mark_failed(db, current, code="GRAPH_INVALID", retryable=True)
 
@@ -502,9 +490,7 @@ def _serialize_node_snapshot(node: Node) -> dict[str, Any]:
         "state": node.state,
         "x": node.x,
         "y": node.y,
-        "parent_keys": [
-            key.strip() for key in (node.parent_keys or "").split(",") if key.strip()
-        ],
+        "parent_keys": [key.strip() for key in (node.parent_keys or "").split(",") if key.strip()],
         "estimated_minutes": node.estimated_minutes,
     }
 
@@ -517,11 +503,7 @@ def start_topic_plan(
     request: TopicPlanRequest,
     generator: Generator | None = None,
 ) -> AgentRun:
-    topic = (
-        db.query(Topic)
-        .filter(Topic.id == topic_id, Topic.user_id == user_id)
-        .first()
-    )
+    topic = db.query(Topic).filter(Topic.id == topic_id, Topic.user_id == user_id).first()
     if topic is None:
         raise ApiError(status_code=404, code="TOPIC_NOT_FOUND", message="主题不存在")
     if db.query(StudyPlan.id).filter(StudyPlan.topic_id == topic.id).first():
@@ -636,7 +618,10 @@ def submit_answer(
 
     questions = state["questions"]
     index = state["current_index"]
-    answers = [*state.get("answers", []), {"question_id": questions[index]["question_id"], "answer": answer}]
+    answers = [
+        *state.get("answers", []),
+        {"question_id": questions[index]["question_id"], "answer": answer},
+    ]
     state["answers"] = answers
     state["current_index"] = index + 1
     run.version += 1
@@ -690,9 +675,7 @@ def retry_run(
     state = deepcopy(run.state_json or {})
     stage = state.get("processing_stage")
     target = (
-        AgentRunStatus.DIAGNOSING
-        if stage == "diagnostic_questions"
-        else AgentRunStatus.DRAFTING
+        AgentRunStatus.DIAGNOSING if stage == "diagnostic_questions" else AgentRunStatus.DRAFTING
     )
     run.status = transition(run.status, target).value
     state["processing"] = True
@@ -802,9 +785,7 @@ def confirm_run(
         timezone=preview["effective_timezone"],
         start_date=date.fromisoformat(preview["start_date"]),
         target_date=(
-            date.fromisoformat(preview["target_date"])
-            if preview.get("target_date")
-            else None
+            date.fromisoformat(preview["target_date"]) if preview.get("target_date") else None
         ),
         estimated_end_date=date.fromisoformat(preview["estimated_end_date"]),
         status="active",

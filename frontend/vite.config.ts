@@ -23,7 +23,7 @@ export default defineConfig({
       output: {
         manualChunks(id) {
           for (const [chunkName, packages] of Object.entries(vendorChunks)) {
-            if (packages.some(pkg => id.includes(`node_modules/${pkg}`))) return chunkName
+            if (packages.some((pkg) => id.includes(`node_modules/${pkg}`))) return chunkName
           }
         },
       },

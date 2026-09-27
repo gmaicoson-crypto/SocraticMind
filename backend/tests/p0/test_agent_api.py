@@ -86,14 +86,10 @@ def test_onboarding_api_exposes_recoverable_run_protocol(app, client, db_session
     assert answer.json()["preview"]["total_minutes"] == 120
     assert answer.json()["preview"]["daily_minutes"] == 30
 
-    confirmed = client.post(
-        f"/api/agent/runs/{run_id}/confirm", json={"request_id": "api-confirm"}
-    )
+    confirmed = client.post(f"/api/agent/runs/{run_id}/confirm", json={"request_id": "api-confirm"})
     assert confirmed.status_code == 200
     assert confirmed.json()["result"]["topic_id"] > 0
-    repeated = client.post(
-        f"/api/agent/runs/{run_id}/confirm", json={"request_id": "api-confirm"}
-    )
+    repeated = client.post(f"/api/agent/runs/{run_id}/confirm", json={"request_id": "api-confirm"})
     assert repeated.json() == confirmed.json()
     messages = (
         db_session.query(ChatMessage)

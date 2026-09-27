@@ -5,20 +5,39 @@ import type { AgentRun, OnboardingInput } from '../../types/learningAgent'
 import { useOnboardingFlow } from '../useOnboardingFlow'
 
 vi.mock('../../api/agent', () => ({
-  answerAgentRun: vi.fn(), cancelAgentRun: vi.fn(), confirmAgentRun: vi.fn(),
-  getAgentRun: vi.fn(), retryAgentRun: vi.fn(), startAssessment: vi.fn(),
-  startOnboarding: vi.fn(), startTopicPlan: vi.fn(), updateAgentRun: vi.fn(),
-  selfReportMastery: vi.fn(), revertMastery: vi.fn(),
+  answerAgentRun: vi.fn(),
+  cancelAgentRun: vi.fn(),
+  confirmAgentRun: vi.fn(),
+  getAgentRun: vi.fn(),
+  retryAgentRun: vi.fn(),
+  startAssessment: vi.fn(),
+  startOnboarding: vi.fn(),
+  startTopicPlan: vi.fn(),
+  updateAgentRun: vi.fn(),
+  selfReportMastery: vi.fn(),
+  revertMastery: vi.fn(),
 }))
 
 const input: OnboardingInput = {
-  topic: 'Rust', goal: 'Learn', domain: 'software', outcome_type: 'concept',
-  familiarity: 'new', daily_minutes: 30, timezone: 'UTC', use_diagnostic: false,
+  topic: 'Rust',
+  goal: 'Learn',
+  domain: 'software',
+  outcome_type: 'concept',
+  familiarity: 'new',
+  daily_minutes: 30,
+  timezone: 'UTC',
+  use_diagnostic: false,
   session_id: 'session-1',
 }
 const active: AgentRun = {
-  run_id: 'run-1', type: 'onboarding', status: 'awaiting_confirmation', version: 2,
-  step: null, preview: null, result: null, error: null,
+  run_id: 'run-1',
+  type: 'onboarding',
+  status: 'awaiting_confirmation',
+  version: 2,
+  step: null,
+  preview: null,
+  result: null,
+  error: null,
 }
 
 describe('useOnboardingFlow', () => {
@@ -30,7 +49,10 @@ describe('useOnboardingFlow', () => {
 
   it('indexes active runs and clears the index after confirmation', async () => {
     const completed = {
-      ...active, status: 'completed' as const, version: 3, result: { topic_id: 9, plan_id: 4 },
+      ...active,
+      status: 'completed' as const,
+      version: 3,
+      result: { topic_id: 9, plan_id: 4 },
     }
     vi.mocked(agentApi.startOnboarding).mockResolvedValue(active)
     vi.mocked(agentApi.confirmAgentRun).mockResolvedValue(completed)
@@ -54,8 +76,12 @@ describe('useOnboardingFlow', () => {
       status: 'diagnosing' as const,
       version: 4,
       step: {
-        step_id: 'diagnostic-question-2', prompt: 'Second?', input_type: 'text',
-        choices: [], current: 2, total: 3,
+        step_id: 'diagnostic-question-2',
+        prompt: 'Second?',
+        input_type: 'text',
+        choices: [],
+        current: 2,
+        total: 3,
       },
     }
     localStorage.setItem('sm_agent_runs_5', JSON.stringify({ 'session-1': 'run-1' }))

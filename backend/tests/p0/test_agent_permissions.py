@@ -23,12 +23,49 @@ def test_existing_topic_plan_does_not_change_nodes(app, client, db_session, auth
     db_session.add(topic)
     db_session.flush()
     nodes = [
-        Node(topic_id=topic.id, node_key="root", label="Root", state="mastered", estimated_minutes=20),
-        Node(topic_id=topic.id, node_key="a", label="A", state="available", parent_keys="root", estimated_minutes=20),
-        Node(topic_id=topic.id, node_key="b", label="B", state="available", parent_keys="root", estimated_minutes=20),
-        Node(topic_id=topic.id, node_key="c", label="C", state="locked", parent_keys="a,b", estimated_minutes=20),
-        Node(topic_id=topic.id, node_key="d", label="D", state="locked", parent_keys="c", estimated_minutes=20),
-        Node(topic_id=topic.id, node_key="e", label="E", state="locked", parent_keys="d", estimated_minutes=20),
+        Node(
+            topic_id=topic.id, node_key="root", label="Root", state="mastered", estimated_minutes=20
+        ),
+        Node(
+            topic_id=topic.id,
+            node_key="a",
+            label="A",
+            state="available",
+            parent_keys="root",
+            estimated_minutes=20,
+        ),
+        Node(
+            topic_id=topic.id,
+            node_key="b",
+            label="B",
+            state="available",
+            parent_keys="root",
+            estimated_minutes=20,
+        ),
+        Node(
+            topic_id=topic.id,
+            node_key="c",
+            label="C",
+            state="locked",
+            parent_keys="a,b",
+            estimated_minutes=20,
+        ),
+        Node(
+            topic_id=topic.id,
+            node_key="d",
+            label="D",
+            state="locked",
+            parent_keys="c",
+            estimated_minutes=20,
+        ),
+        Node(
+            topic_id=topic.id,
+            node_key="e",
+            label="E",
+            state="locked",
+            parent_keys="d",
+            estimated_minutes=20,
+        ),
     ]
     db_session.add_all(nodes)
     db_session.commit()
@@ -39,9 +76,7 @@ def test_existing_topic_plan_does_not_change_nodes(app, client, db_session, auth
     started = client.post(f"/api/agent/topics/{topic.id}/plan-runs", json=payload)
     assert started.status_code == 201
     assert len(started.json()["preview"]["plan_items"]) > 0
-    assert all(
-        item["node_key"] != "root" for item in started.json()["preview"]["plan_items"]
-    )
+    assert all(item["node_key"] != "root" for item in started.json()["preview"]["plan_items"])
     confirmed = client.post(
         f"/api/agent/runs/{started.json()['run_id']}/confirm",
         json={"request_id": "existing-confirm"},

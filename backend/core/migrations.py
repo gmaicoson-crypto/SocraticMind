@@ -23,8 +23,7 @@ def assert_database_at_head(engine: Engine) -> None:
                 "for an empty database, or verify and stamp a legacy database first."
             )
         current = {
-            row[0]
-            for row in connection.execute(text("SELECT version_num FROM alembic_version"))
+            row[0] for row in connection.execute(text("SELECT version_num FROM alembic_version"))
         }
     required = required_revisions()
     if current != required:

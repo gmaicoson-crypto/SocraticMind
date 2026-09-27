@@ -9,23 +9,38 @@ import type { TodayPlan, TodayPlanItem } from '../../../types/learningAgent'
 
 vi.mock('../../../api/plans', () => ({
   getTodayPlan: vi.fn().mockResolvedValue({
-    date: '2026-09-07', effective_timezone: 'UTC', replan_suggested: false,
-    today: [], overdue: [], upcoming: [],
+    date: '2026-09-07',
+    effective_timezone: 'UTC',
+    replan_suggested: false,
+    today: [],
+    overdue: [],
+    upcoming: [],
   }),
   getTopicPlan: vi.fn(),
   replanStudyPlan: vi.fn(),
 }))
 
 const task = (overrides: Partial<TodayPlanItem> = {}): TodayPlanItem => ({
-  plan_id: 4, topic_id: 2, topic_title: '数据结构', topic_emoji: 'D',
-  node_id: 20, node_key: 'arrays', node_label: '数组', scheduled_date: '2026-09-07',
-  estimated_minutes: 20, status: 'pending', item_ids: [1], day_order: 1,
+  plan_id: 4,
+  topic_id: 2,
+  topic_title: '数据结构',
+  topic_emoji: 'D',
+  node_id: 20,
+  node_key: 'arrays',
+  node_label: '数组',
+  scheduled_date: '2026-09-07',
+  estimated_minutes: 20,
+  status: 'pending',
+  item_ids: [1],
+  day_order: 1,
   ...overrides,
 })
 
 function groupedPlan(): TodayPlan {
   return {
-    date: '2026-09-07', effective_timezone: 'UTC', replan_suggested: true,
+    date: '2026-09-07',
+    effective_timezone: 'UTC',
+    replan_suggested: true,
     overdue: [task({ scheduled_date: '2026-09-06' })],
     today: [task()],
     upcoming: [task({ node_id: 21, node_label: '链表', scheduled_date: '2026-09-08' })],
@@ -52,7 +67,9 @@ describe('TodayPlanPanel', () => {
     expect(wrapper.text()).toContain('过期')
     expect(wrapper.text()).toContain('今日')
     expect(wrapper.text()).toContain('后续')
-    const button = wrapper.findAll('button').find(candidate => candidate.text().includes('重新规划'))
+    const button = wrapper
+      .findAll('button')
+      .find((candidate) => candidate.text().includes('重新规划'))
     expect(button).toBeTruthy()
     await button!.trigger('click')
     expect(replan).toHaveBeenCalledWith([4], 'UTC')
@@ -65,7 +82,9 @@ describe('TodayPlanPanel', () => {
     const learning = useLearningStore()
     const select = vi.spyOn(learning, 'setActiveNode')
     vi.spyOn(learning, 'setActiveTopic').mockImplementation(async () => {
-      learning.nodes = [{ id: 'arrays', label: '数组', sub: '', x: 0, y: 0, state: 'available', dbId: 20 }]
+      learning.nodes = [
+        { id: 'arrays', label: '数组', sub: '', x: 0, y: 0, state: 'available', dbId: 20 },
+      ]
     })
 
     const wrapper = mount(TodayPlanPanel)
@@ -80,8 +99,12 @@ describe('TodayPlanPanel', () => {
   it('starts an existing-topic plan draft from the empty state', async () => {
     const plans = usePlansStore()
     plans.todayPlan = {
-      date: '2026-09-07', effective_timezone: 'UTC', replan_suggested: false,
-      today: [], overdue: [], upcoming: [],
+      date: '2026-09-07',
+      effective_timezone: 'UTC',
+      replan_suggested: false,
+      today: [],
+      overdue: [],
+      upcoming: [],
     }
     vi.spyOn(plans, 'fetchToday').mockResolvedValue(plans.todayPlan)
     const learning = useLearningStore()

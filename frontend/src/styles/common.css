@@ -151,7 +151,6 @@ body,
   color: var(--ink);
 }
 
-
 .md-inline .inline-code,
 .md-preview .md-inline-code,
 .md-preview code {
@@ -224,8 +223,6 @@ body,
 .md-preview .hljs-property {
   color: var(--code-property);
 }
-
-
 
 .dlg-messages .msg-row {
   display: flex;

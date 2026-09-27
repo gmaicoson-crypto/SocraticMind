@@ -15,7 +15,7 @@ class ChatMessage(Base):
     # session_id 用于重建和精确删除单个会话。
     session_id = Column(String(100), nullable=False, index=True)
     node_key = Column(String(100), nullable=False)
-    role = Column(String(10), nullable=False)   # "user" 或 "ai"
+    role = Column(String(10), nullable=False)  # "user" 或 "ai"
     content = Column(Text, nullable=False)
     mode = Column(String(50), default="socratic")  # socratic / normal
     message_type = Column(String(30), default="chat", nullable=False)
@@ -44,10 +44,8 @@ class LearningRecord(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
-    date = Column(String(10), nullable=False)   # 格式 "YYYY-MM-DD"
+    date = Column(String(10), nullable=False)  # 格式 "YYYY-MM-DD"
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     # unique=True 保证同一用户同一天只有一条记录，防止并发重复插入
-    __table_args__ = (
-        Index("ix_lr_user_date", "user_id", "date", unique=True),
-    )
+    __table_args__ = (Index("ix_lr_user_date", "user_id", "date", unique=True),)

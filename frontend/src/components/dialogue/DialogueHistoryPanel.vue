@@ -2,7 +2,9 @@
   <Transition name="slide-left">
     <div v-if="show" class="history-panel">
       <div class="history-header">
-        <span class="history-title">{{ chatMode === 'socratic' ? '学习对话历史' : '普通对话历史' }}</span>
+        <span class="history-title">{{
+          chatMode === 'socratic' ? '学习对话历史' : '普通对话历史'
+        }}</span>
         <button class="history-close" @click="$emit('close')">✕</button>
       </div>
       <div class="history-list">
@@ -24,7 +26,9 @@
                 @keydown.escape="$emit('cancelEdit')"
                 @click.stop
               />
-              <button class="history-save-btn" @click.stop="$emit('saveName', session.id)">✓</button>
+              <button class="history-save-btn" @click.stop="$emit('saveName', session.id)">
+                ✓
+              </button>
               <button class="history-cancel-btn" @click.stop="$emit('cancelEdit')">✕</button>
             </div>
             <div v-else class="history-name-wrap">
@@ -34,23 +38,55 @@
             <div class="history-time">{{ session.updatedAt }}</div>
           </div>
           <div v-if="editingSessionId !== session.id" class="history-item-actions" @click.stop>
-            <button class="history-action-btn" title="重命名" @click.stop="$emit('startEdit', session)">
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+            <button
+              class="history-action-btn"
+              title="重命名"
+              @click.stop="$emit('startEdit', session)"
+            >
+              <svg
+                width="11"
+                height="11"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+              >
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
               </svg>
             </button>
-            <button class="history-action-btn delete" title="删除" @click.stop="$emit('delete', session.id)">
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-                <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/>
+            <button
+              class="history-action-btn delete"
+              title="删除"
+              @click.stop="$emit('delete', session.id)"
+            >
+              <svg
+                width="11"
+                height="11"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+              >
+                <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" />
               </svg>
             </button>
           </div>
         </div>
       </div>
       <button class="history-new-btn" @click="$emit('newSession')">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-          <path d="M12 5v14M5 12h14"/>
+        <svg
+          width="13"
+          height="13"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+        >
+          <path d="M12 5v14M5 12h14" />
         </svg>
         新建对话
       </button>
@@ -94,9 +130,12 @@ defineEmits<{
 
 const editInputRef = ref<HTMLInputElement | null>(null)
 
-watch(() => props.editingSessionId, (id) => {
-  if (id) nextTick(() => editInputRef.value?.focus())
-})
+watch(
+  () => props.editingSessionId,
+  (id) => {
+    if (id) nextTick(() => editInputRef.value?.focus())
+  },
+)
 </script>
 
 <style scoped>
@@ -155,7 +194,7 @@ watch(() => props.editingSessionId, (id) => {
   padding: 8px 10px;
   border-radius: 8px;
   cursor: pointer;
-  transition: background .15s;
+  transition: background 0.15s;
   min-height: 48px;
 }
 .history-item:hover {
@@ -212,7 +251,8 @@ watch(() => props.editingSessionId, (id) => {
   color: var(--ink);
   font-family: var(--font-sans);
 }
-.history-save-btn, .history-cancel-btn {
+.history-save-btn,
+.history-cancel-btn {
   width: 22px;
   height: 22px;
   border: 1px solid var(--line);
@@ -245,7 +285,7 @@ watch(() => props.editingSessionId, (id) => {
   gap: 2px;
   flex-shrink: 0;
   opacity: 0;
-  transition: opacity .15s;
+  transition: opacity 0.15s;
 }
 .history-item:hover .history-item-actions {
   opacity: 1;
@@ -285,17 +325,21 @@ watch(() => props.editingSessionId, (id) => {
   font-weight: 500;
   cursor: pointer;
   font-family: var(--font-sans);
-  transition: background .15s;
+  transition: background 0.15s;
   flex-shrink: 0;
 }
 .history-new-btn:hover {
   background: var(--blue);
 }
 
-.slide-left-enter-active, .slide-left-leave-active {
-  transition: transform .2s ease, opacity .2s ease;
+.slide-left-enter-active,
+.slide-left-leave-active {
+  transition:
+    transform 0.2s ease,
+    opacity 0.2s ease;
 }
-.slide-left-enter-from, .slide-left-leave-to {
+.slide-left-enter-from,
+.slide-left-leave-to {
   transform: translateX(-100%);
   opacity: 0;
 }

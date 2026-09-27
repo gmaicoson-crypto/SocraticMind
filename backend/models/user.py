@@ -13,11 +13,13 @@ class User(Base):
     username = Column(String(50), unique=True, index=True, nullable=False)
     email = Column(String(255), unique=True, index=True, nullable=False)
     hashed_password = Column(String(255), nullable=False)
-    avatar_grad = Column(String(255), default="linear-gradient(135deg,#e8c87a,#d4974a)")  # 渐变色头像
-    avatar_url = Column(String(500), nullable=True)   # 上传自定义头像后的文件路径
+    avatar_grad = Column(
+        String(255), default="linear-gradient(135deg,#e8c87a,#d4974a)"
+    )  # 渐变色头像
+    avatar_url = Column(String(500), nullable=True)  # 上传自定义头像后的文件路径
     bio = Column(String(500), default="每一个问题都是通往掌握的一步")
-    daily_goal = Column(Integer, default=5)           # 每日目标对话数
-    ai_style = Column(String(50), default="标准")     # AI 教学风格：温和 / 标准 / 严格
+    daily_goal = Column(Integer, default=5)  # 每日目标对话数
+    ai_style = Column(String(50), default="标准")  # AI 教学风格：温和 / 标准 / 严格
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
@@ -29,4 +31,6 @@ class User(Base):
     assessment_attempts = relationship(
         "AssessmentAttempt", back_populates="user", cascade="all, delete-orphan"
     )
-    mastery_events = relationship("MasteryEvent", back_populates="user", cascade="all, delete-orphan")
+    mastery_events = relationship(
+        "MasteryEvent", back_populates="user", cascade="all, delete-orphan"
+    )

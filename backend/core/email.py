@@ -51,7 +51,9 @@ def send_verification_email(to: str, code: str, purpose: str) -> None:
     smtp_host 为空时退化为控制台打印，方便本地开发调试。
     """
     if not settings.smtp_host:
-        log.warning("[DEV] 验证码 to=%s code=%s purpose=%s（SMTP 未配置，仅打印不发送）", to, code, purpose)
+        log.warning(
+            "[DEV] 验证码 to=%s code=%s purpose=%s（SMTP 未配置，仅打印不发送）", to, code, purpose
+        )
         return
 
     msg = _build_message(to, code, purpose)

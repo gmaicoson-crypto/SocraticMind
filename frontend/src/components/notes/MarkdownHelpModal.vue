@@ -1,44 +1,55 @@
 <template>
   <BaseModal :model-value="show" @close="$emit('close')">
-      <div class="md-help-overlay" @click.self="$emit('close')">
-        <div class="md-help-modal">
-          <div class="md-help-header">
-            <div class="md-help-title">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="12" cy="12" r="10"/>
-                <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
-                <line x1="12" y1="17" x2="12.01" y2="17"/>
-              </svg>
-              Markdown 语法速查
-            </div>
-            <button class="md-help-close ui-modal-close" @click="$emit('close')">✕</button>
+    <div class="md-help-overlay" @click.self="$emit('close')">
+      <div class="md-help-modal">
+        <div class="md-help-header">
+          <div class="md-help-title">
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <circle cx="12" cy="12" r="10" />
+              <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+              <line x1="12" y1="17" x2="12.01" y2="17" />
+            </svg>
+            Markdown 语法速查
           </div>
+          <button class="md-help-close ui-modal-close" @click="$emit('close')">✕</button>
+        </div>
 
-          <div class="md-help-body">
-            <nav class="md-help-nav">
-              <button
-                v-for="g in groups"
-                :key="g.id"
-                class="md-help-nav-item"
-                :class="{ active: activeGroup === g.id }"
-                @click="activeGroup = g.id"
-              >{{ g.label }}</button>
-            </nav>
-            <div class="md-help-content">
-              <div v-for="g in groups" :key="g.id" v-show="activeGroup === g.id">
-                <div v-for="(rule, i) in g.rules" :key="i" class="md-rule">
-                  <div class="md-rule-title">{{ rule.title }}</div>
-                  <div v-if="rule.note" class="md-rule-note">{{ rule.note }}</div>
-                  <div class="md-rule-grid">
-                    <pre class="md-rule-src">{{ rule.src }}</pre>
-                    <div class="md-rule-preview" v-html="rule.html" />
-                  </div>
+        <div class="md-help-body">
+          <nav class="md-help-nav">
+            <button
+              v-for="g in groups"
+              :key="g.id"
+              class="md-help-nav-item"
+              :class="{ active: activeGroup === g.id }"
+              @click="activeGroup = g.id"
+            >
+              {{ g.label }}
+            </button>
+          </nav>
+          <div class="md-help-content">
+            <div v-for="g in groups" :key="g.id" v-show="activeGroup === g.id">
+              <div v-for="(rule, i) in g.rules" :key="i" class="md-rule">
+                <div class="md-rule-title">{{ rule.title }}</div>
+                <div v-if="rule.note" class="md-rule-note">{{ rule.note }}</div>
+                <div class="md-rule-grid">
+                  <pre class="md-rule-src">{{ rule.src }}</pre>
+                  <div class="md-rule-preview" v-html="rule.html" />
                 </div>
               </div>
             </div>
           </div>
         </div>
       </div>
+    </div>
   </BaseModal>
 </template>
 
@@ -70,9 +81,7 @@ const rawGroups: { id: string; label: string; rules: Rule[] }[] = [
   {
     id: 'heading',
     label: '标题',
-    rules: [
-      { title: '标题 1-6 级', src: '# H1\n## H2\n### H3\n#### H4\n##### H5\n###### H6' },
-    ],
+    rules: [{ title: '标题 1-6 级', src: '# H1\n## H2\n### H3\n#### H4\n##### H5\n###### H6' }],
   },
   {
     id: 'emphasis',
@@ -90,7 +99,10 @@ const rawGroups: { id: string; label: string; rules: Rule[] }[] = [
     rules: [
       { title: '无序列表', src: '- 苹果\n- 香蕉\n  - 嵌套项\n  - 嵌套项\n- 樱桃' },
       { title: '有序列表', src: '1. 第一项\n2. 第二项\n3. 第三项' },
-      { title: '任务列表（GFM）', src: '- [x] 已完成\n- [ ] 待办\n- [ ] 也可以嵌套\n  - [x] 子任务' },
+      {
+        title: '任务列表（GFM）',
+        src: '- [x] 已完成\n- [ ] 待办\n- [ ] 也可以嵌套\n  - [x] 子任务',
+      },
     ],
   },
   {
@@ -142,16 +154,19 @@ const rawGroups: { id: string; label: string; rules: Rule[] }[] = [
         src: '<details>\n<summary>点击展开</summary>\n隐藏内容\n</details>',
         note: '支持原生 HTML 标签，如 details / sup / sub / kbd',
       },
-      { title: '上下标 / 键盘键', src: 'X<sup>2</sup> + Y<sub>n</sub>，按 <kbd>Ctrl</kbd>+<kbd>S</kbd>' },
+      {
+        title: '上下标 / 键盘键',
+        src: 'X<sup>2</sup> + Y<sub>n</sub>，按 <kbd>Ctrl</kbd>+<kbd>S</kbd>',
+      },
     ],
   },
 ]
 
 const groups = computed<Group[]>(() =>
-  rawGroups.map(g => ({
+  rawGroups.map((g) => ({
     ...g,
-    rules: g.rules.map(r => ({ ...r, html: render(r.src) })),
-  }))
+    rules: g.rules.map((r) => ({ ...r, html: render(r.src) })),
+  })),
 )
 
 const activeGroup = ref(rawGroups[0].id)
@@ -162,7 +177,7 @@ const activeGroup = ref(rawGroups[0].id)
   position: fixed;
   inset: 0;
   z-index: 320;
-  background: rgba(0,0,0,0.32);
+  background: rgba(0, 0, 0, 0.32);
   backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
@@ -177,7 +192,7 @@ const activeGroup = ref(rawGroups[0].id)
   height: min(640px, 100%);
   display: flex;
   flex-direction: column;
-  box-shadow: 0 12px 48px rgba(0,0,0,0.18);
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.18);
   overflow: hidden;
 }
 .md-help-header {
@@ -224,7 +239,7 @@ const activeGroup = ref(rawGroups[0].id)
   border-radius: 6px;
   color: var(--ink-2);
   cursor: pointer;
-  transition: all .15s;
+  transition: all 0.15s;
 }
 .md-help-nav-item:hover {
   background: var(--bg-3);
@@ -404,10 +419,12 @@ const activeGroup = ref(rawGroups[0].id)
   box-shadow: inset 0 -1px 0 var(--line-2);
 }
 
-.fade-enter-active, .fade-leave-active {
-  transition: opacity .2s ease;
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.2s ease;
 }
-.fade-enter-from, .fade-leave-to {
+.fade-enter-from,
+.fade-leave-to {
   opacity: 0;
 }
 </style>

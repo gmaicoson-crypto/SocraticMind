@@ -1,15 +1,22 @@
 <template>
   <div class="login-page">
     <div class="login-shell">
-
       <div class="brand">
         <div class="brand-logo">
           <div class="brand-icon">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round">
-              <circle cx="12" cy="6" r="2.5" fill="white" stroke="none"/>
-              <circle cx="6" cy="16" r="2" fill="white" stroke="none"/>
-              <circle cx="18" cy="16" r="2" fill="white" stroke="none"/>
-              <path d="M12 8L6 14M12 8L18 14M8 16H16"/>
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="white"
+              stroke-width="2"
+              stroke-linecap="round"
+            >
+              <circle cx="12" cy="6" r="2.5" fill="white" stroke="none" />
+              <circle cx="6" cy="16" r="2" fill="white" stroke="none" />
+              <circle cx="18" cy="16" r="2" fill="white" stroke="none" />
+              <path d="M12 8L6 14M12 8L18 14M8 16H16" />
             </svg>
           </div>
           <div>
@@ -19,9 +26,7 @@
         </div>
 
         <div class="brand-hero">
-          <div class="brand-headline">
-            不给答案，<br/>只给你<em>思考的路</em>
-          </div>
+          <div class="brand-headline">不给答案，<br />只给你<em>思考的路</em></div>
           <div class="brand-desc">
             通过苏格拉底式引导，AI 帮你主动发现知识，而不是被动接受。每一个问题都是通往掌握的一步。
           </div>
@@ -43,32 +48,36 @@
       </div>
 
       <div class="form-area">
-
         <div class="form-tabs">
-          <button
-            class="ftab"
-            :class="{ active: mode === 'login' }"
-            @click="mode = 'login'"
-          >登录</button>
-          <button
-            class="ftab"
-            :class="{ active: mode === 'register' }"
-            @click="mode = 'register'"
-          >注册</button>
+          <button class="ftab" :class="{ active: mode === 'login' }" @click="mode = 'login'">
+            登录
+          </button>
+          <button class="ftab" :class="{ active: mode === 'register' }" @click="mode = 'register'">
+            注册
+          </button>
         </div>
 
         <div class="form-header">
           <div class="form-title">{{ mode === 'login' ? '欢迎回来' : '创建账号' }}</div>
-          <div class="form-sub">{{ mode === 'login' ? '继续你的学习旅程 ✦' : '开始你的苏格拉底式学习之旅' }}</div>
+          <div class="form-sub">
+            {{ mode === 'login' ? '继续你的学习旅程 ✦' : '开始你的苏格拉底式学习之旅' }}
+          </div>
         </div>
 
         <div class="form-body">
-
           <div v-if="mode === 'register'" class="field ui-field">
             <label>用户名</label>
             <div class="field-input" :class="{ focused: focusField === 'name' }">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                <circle cx="12" cy="7" r="4" />
               </svg>
               <input
                 v-model="form.name"
@@ -83,9 +92,18 @@
           <div class="field ui-field">
             <label>邮箱地址</label>
             <div class="field-input" :class="{ focused: focusField === 'email' }">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
-                <polyline points="22,6 12,13 2,6"/>
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <path
+                  d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"
+                />
+                <polyline points="22,6 12,13 2,6" />
               </svg>
               <input
                 v-model="form.email"
@@ -101,8 +119,15 @@
             <label>邮箱验证码</label>
             <div class="code-row">
               <div class="field-input" :class="{ focused: focusField === 'code' }">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M12 1l3 6 6 .9-4.5 4.4 1 6.7L12 16l-5.5 3 1-6.7L3 7.9 9 7z"/>
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                >
+                  <path d="M12 1l3 6 6 .9-4.5 4.4 1 6.7L12 16l-5.5 3 1-6.7L3 7.9 9 7z" />
                 </svg>
                 <input
                   v-model="form.code"
@@ -130,8 +155,16 @@
           <div class="field ui-field">
             <label>密码</label>
             <div class="field-input" :class="{ focused: focusField === 'password' }">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <rect x="3" y="11" width="18" height="11" rx="2" />
+                <path d="M7 11V7a5 5 0 0 1 10 0v4" />
               </svg>
               <input
                 v-model="form.password"
@@ -141,28 +174,60 @@
                 @blur="focusField = ''"
               />
               <button class="pwd-toggle" @click="showPwd = !showPwd">
-                <svg v-if="!showPwd" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+                <svg
+                  v-if="!showPwd"
+                  width="13"
+                  height="13"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                >
+                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                  <circle cx="12" cy="12" r="3" />
                 </svg>
-                <svg v-else width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
-                  <line x1="1" y1="1" x2="23" y2="23"/>
+                <svg
+                  v-else
+                  width="13"
+                  height="13"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                >
+                  <path
+                    d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"
+                  />
+                  <line x1="1" y1="1" x2="23" y2="23" />
                 </svg>
               </button>
             </div>
             <div v-if="mode === 'register'" class="strength-wrap">
               <div class="strength-bar">
-                <div class="strength-fill" :style="{ width: strengthPct + '%', background: strengthColor }" />
+                <div
+                  class="strength-fill"
+                  :style="{ width: strengthPct + '%', background: strengthColor }"
+                />
               </div>
-              <span class="strength-label" :style="{ color: strengthColor }">{{ strengthLabel }}</span>
+              <span class="strength-label" :style="{ color: strengthColor }">{{
+                strengthLabel
+              }}</span>
             </div>
           </div>
 
           <div v-if="mode === 'register'" class="field ui-field">
             <label>确认密码</label>
             <div class="field-input" :class="{ focused: focusField === 'confirm' }">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <rect x="3" y="11" width="18" height="11" rx="2" />
+                <path d="M7 11V7a5 5 0 0 1 10 0v4" />
               </svg>
               <input
                 v-model="form.confirm"
@@ -199,19 +264,45 @@
           <button class="submit-btn" :disabled="submitting" @click="handleSubmit">
             <span v-if="submitting" class="spinner" />
             <template v-else>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round">
-                <path v-if="mode === 'login'" d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M15 12H3"/>
-                <path v-else d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle v-if="mode === 'register'" cx="9" cy="7" r="4"/><line v-if="mode === 'register'" x1="19" y1="8" x2="19" y2="14"/><line v-if="mode === 'register'" x1="22" y1="11" x2="16" y2="11"/>
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="white"
+                stroke-width="2.5"
+                stroke-linecap="round"
+              >
+                <path
+                  v-if="mode === 'login'"
+                  d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M15 12H3"
+                />
+                <path v-else d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+                <circle v-if="mode === 'register'" cx="9" cy="7" r="4" />
+                <line v-if="mode === 'register'" x1="19" y1="8" x2="19" y2="14" />
+                <line v-if="mode === 'register'" x1="22" y1="11" x2="16" y2="11" />
               </svg>
               {{ mode === 'login' ? '登录' : '创建账号' }}
             </template>
           </button>
 
           <div class="security-hint">
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            <svg
+              width="11"
+              height="11"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+            >
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
             </svg>
-            <span>{{ mode === 'register' ? '注册需邮箱验证码，10 分钟内有效' : '连续 5 次登录失败将临时锁定账号' }}</span>
+            <span>{{
+              mode === 'register'
+                ? '注册需邮箱验证码，10 分钟内有效'
+                : '连续 5 次登录失败将临时锁定账号'
+            }}</span>
           </div>
         </div>
 
@@ -219,11 +310,8 @@
           <template v-if="mode === 'login'">
             还没有账号？<a @click="mode = 'register'">立即注册</a>
           </template>
-          <template v-else>
-            已有账号？<a @click="mode = 'login'">立即登录</a>
-          </template>
+          <template v-else> 已有账号？<a @click="mode = 'login'">立即登录</a> </template>
         </div>
-
       </div>
     </div>
 
@@ -241,7 +329,9 @@ import { parseApiError } from '../api'
 import { useLearningStore } from '../stores/learning'
 import { setAuth } from '../utils/token'
 
-const ForgotPasswordModal = defineAsyncComponent(() => import('../components/auth/ForgotPasswordModal.vue'))
+const ForgotPasswordModal = defineAsyncComponent(
+  () => import('../components/auth/ForgotPasswordModal.vue'),
+)
 const LegalModal = defineAsyncComponent(() => import('../components/auth/LegalModal.vue'))
 
 const router = useRouter()
@@ -284,9 +374,11 @@ function openLegal(kind: 'terms' | 'privacy') {
 }
 
 const emailValid = computed(() =>
-  /^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$/.test(form.value.email.trim())
+  /^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$/.test(form.value.email.trim()),
 )
-const canSendCode = computed(() => emailValid.value && codeCooldown.value === 0 && !sendingCode.value)
+const canSendCode = computed(
+  () => emailValid.value && codeCooldown.value === 0 && !sendingCode.value,
+)
 
 function startCooldown() {
   codeCooldown.value = 60
@@ -302,7 +394,10 @@ function startCooldown() {
 async function onSendCode() {
   errorMsg.value = ''
   codeMsg.value = ''
-  if (!emailValid.value) { errorMsg.value = '请先填写正确的邮箱'; return }
+  if (!emailValid.value) {
+    errorMsg.value = '请先填写正确的邮箱'
+    return
+  }
   sendingCode.value = true
   try {
     await sendVerificationCode(form.value.email.trim().toLowerCase(), 'register')
@@ -353,23 +448,40 @@ async function handleSubmit() {
   }
 
   if (mode.value === 'register') {
-    if (!form.value.name) { errorMsg.value = '请填写用户名'; return }
-    if (form.value.password.length < 8) { errorMsg.value = '密码至少 8 位'; return }
+    if (!form.value.name) {
+      errorMsg.value = '请填写用户名'
+      return
+    }
+    if (form.value.password.length < 8) {
+      errorMsg.value = '密码至少 8 位'
+      return
+    }
     if (!/[A-Za-z]/.test(form.value.password) || !/\d/.test(form.value.password)) {
-      errorMsg.value = '密码必须同时包含字母和数字'; return
+      errorMsg.value = '密码必须同时包含字母和数字'
+      return
     }
-    if (form.value.password !== form.value.confirm) { errorMsg.value = '两次密码不一致'; return }
+    if (form.value.password !== form.value.confirm) {
+      errorMsg.value = '两次密码不一致'
+      return
+    }
     if (!form.value.code || form.value.code.trim().length !== 6) {
-      errorMsg.value = '请填写 6 位邮箱验证码'; return
+      errorMsg.value = '请填写 6 位邮箱验证码'
+      return
     }
-    if (!form.value.agreed) { errorMsg.value = '请阅读并同意服务条款与隐私政策'; return }
+    if (!form.value.agreed) {
+      errorMsg.value = '请阅读并同意服务条款与隐私政策'
+      return
+    }
   }
 
   submitting.value = true
   try {
     let result
     if (mode.value === 'login') {
-      result = await login({ email: form.value.email.trim().toLowerCase(), password: form.value.password })
+      result = await login({
+        email: form.value.email.trim().toLowerCase(),
+        password: form.value.password,
+      })
     } else {
       result = await register({
         username: form.value.name,
@@ -394,26 +506,65 @@ const features = [
   {
     title: '苏格拉底式 AI 对话',
     desc: '引导提问，不直接给答案，激发真正的理解',
-    icon: () => h('svg', { width: 15, height: 15, viewBox: '0 0 24 24', fill: 'none', stroke: '#2E7FBB', 'stroke-width': 2 }, [
-      h('path', { d: 'M12 2L13.5 8.5L20 10L13.5 11.5L12 18L10.5 11.5L4 10L10.5 8.5Z', fill: '#EBF4FD' })
-    ]),
+    icon: () =>
+      h(
+        'svg',
+        {
+          width: 15,
+          height: 15,
+          viewBox: '0 0 24 24',
+          fill: 'none',
+          stroke: '#2E7FBB',
+          'stroke-width': 2,
+        },
+        [
+          h('path', {
+            d: 'M12 2L13.5 8.5L20 10L13.5 11.5L12 18L10.5 11.5L4 10L10.5 8.5Z',
+            fill: '#EBF4FD',
+          }),
+        ],
+      ),
   },
   {
     title: '动态知识图谱',
     desc: '可视化学习路径，节点状态实时联动',
-    icon: () => h('svg', { width: 15, height: 15, viewBox: '0 0 24 24', fill: 'none', stroke: '#2E7FBB', 'stroke-width': 2, 'stroke-linecap': 'round' }, [
-      h('circle', { cx: 12, cy: 5, r: 2 }),
-      h('circle', { cx: 5, cy: 19, r: 2 }),
-      h('circle', { cx: 19, cy: 19, r: 2 }),
-      h('path', { d: 'M12 7v4M12 11L5 17M12 11L19 17' }),
-    ]),
+    icon: () =>
+      h(
+        'svg',
+        {
+          width: 15,
+          height: 15,
+          viewBox: '0 0 24 24',
+          fill: 'none',
+          stroke: '#2E7FBB',
+          'stroke-width': 2,
+          'stroke-linecap': 'round',
+        },
+        [
+          h('circle', { cx: 12, cy: 5, r: 2 }),
+          h('circle', { cx: 5, cy: 19, r: 2 }),
+          h('circle', { cx: 19, cy: 19, r: 2 }),
+          h('path', { d: 'M12 7v4M12 11L5 17M12 11L19 17' }),
+        ],
+      ),
   },
   {
     title: '笔记与画布',
     desc: 'Markdown 笔记 + 手绘画板，随时记录灵感',
-    icon: () => h('svg', { width: 15, height: 15, viewBox: '0 0 24 24', fill: 'none', stroke: '#2E7FBB', 'stroke-width': 2, 'stroke-linecap': 'round' }, [
-      h('path', { d: 'M4 6H20M4 12H20M4 18H14' })
-    ]),
+    icon: () =>
+      h(
+        'svg',
+        {
+          width: 15,
+          height: 15,
+          viewBox: '0 0 24 24',
+          fill: 'none',
+          stroke: '#2E7FBB',
+          'stroke-width': 2,
+          'stroke-linecap': 'round',
+        },
+        [h('path', { d: 'M4 6H20M4 12H20M4 18H14' })],
+      ),
   },
 ]
 </script>
@@ -584,16 +735,17 @@ const features = [
   cursor: pointer;
   color: var(--ink-2);
   font-family: var(--font-sans);
-  transition: all .15s;
+  transition: all 0.15s;
 }
 
 .ftab.active {
   background: var(--surface);
   color: var(--ink);
-  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
 }
 
-.form-header { }
+.form-header {
+}
 
 .form-title {
   font-size: 20px;
@@ -616,7 +768,7 @@ const features = [
 
 .field-input {
   height: 42px;
-  transition: all .15s;
+  transition: all 0.15s;
 }
 
 .field-input input::placeholder {
@@ -654,7 +806,9 @@ const features = [
 .strength-fill {
   height: 100%;
   border-radius: 2px;
-  transition: width .3s, background .3s;
+  transition:
+    width 0.3s,
+    background 0.3s;
 }
 
 .strength-label {
@@ -710,7 +864,7 @@ const features = [
 
 .field-error {
   font-size: 11px;
-  color: #E24B4A;
+  color: #e24b4a;
   font-family: var(--font-mono);
 }
 
@@ -728,7 +882,7 @@ const features = [
   justify-content: center;
   gap: 6px;
   font-family: var(--font-sans);
-  transition: opacity .15s;
+  transition: opacity 0.15s;
 }
 
 .submit-btn:hover:not(:disabled) {
@@ -742,13 +896,17 @@ const features = [
 .spinner {
   width: 16px;
   height: 16px;
-  border: 2px solid rgba(255,255,255,0.4);
+  border: 2px solid rgba(255, 255, 255, 0.4);
   border-top-color: white;
   border-radius: 50%;
-  animation: spin .7s linear infinite;
+  animation: spin 0.7s linear infinite;
 }
 
-@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
 
 .divider-row {
   display: flex;
@@ -787,7 +945,7 @@ const features = [
   cursor: pointer;
   font-family: var(--font-sans);
   white-space: nowrap;
-  transition: all .15s;
+  transition: all 0.15s;
 }
 .code-send-btn:hover:not(:disabled) {
   background: var(--blue-tint);
@@ -799,7 +957,7 @@ const features = [
 
 .field-success {
   font-size: 11px;
-  color: #1F6F4A;
+  color: #1f6f4a;
   font-family: var(--font-mono);
 }
 
@@ -840,7 +998,7 @@ const features = [
   color: var(--ink-2);
   cursor: pointer;
   font-family: var(--font-sans);
-  transition: background .15s;
+  transition: background 0.15s;
 }
 .social-btn:hover {
   background: var(--bg-2);

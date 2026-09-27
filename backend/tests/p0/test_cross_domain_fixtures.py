@@ -36,38 +36,93 @@ class DomainGenerator:
         params = payload.get("params", payload)
         assert params["domain"] == self.domain
         if schema is DiagnosticQuestions:
-            value = schema.model_validate({"questions": [
-                {"question_id": "q1", "dimension": "prior_knowledge", "prompt": f"{self.domain} prior", "input_type": self.input_type},
-                {"question_id": "q2", "dimension": "application", "prompt": f"{self.domain} application", "input_type": self.input_type},
-                {"question_id": "q3", "dimension": "limits", "prompt": f"{self.domain} limits", "input_type": self.input_type},
-            ]})
-        elif schema is DiagnosticScore:
-            value = schema.model_validate({
-                "score": 60, "level": "foundation", "domain": self.domain,
-                "outcome_type": params["outcome_type"], "strengths": [],
-                "weaknesses": [f"{self.domain} boundary"], "graph_guidance": [],
-            })
-        elif schema is PersonalizedGraphDraft:
-            value = schema.model_validate({
-                "emoji": "T",
-                "nodes": [
-                    {"key": "root", "label": f"{self.domain} foundation", "parent_keys": [], "estimated_minutes": 20},
-                    {"key": "a", "label": "A", "parent_keys": ["root"], "estimated_minutes": 20},
-                    {"key": "b", "label": "B", "parent_keys": ["root"], "estimated_minutes": 20},
-                    {"key": "c", "label": "C", "parent_keys": ["a", "b"], "estimated_minutes": 20},
-                    {"key": "d", "label": "D", "parent_keys": ["c"], "estimated_minutes": 20},
-                    {"key": "e", "label": "E", "parent_keys": ["d"], "estimated_minutes": 20},
-                ],
-            })
-        elif schema is AssessmentQuestions:
-            value = schema.model_validate({"questions": [
+            value = schema.model_validate(
                 {
-                    "question_id": f"aq{index}", "dimension": dimension,
-                    "prompt": f"{self.domain} {dimension}", "input_type": self.input_type,
-                    "rubric": [{"criterion": "observable", "observable_standards": ["specific"]}],
+                    "questions": [
+                        {
+                            "question_id": "q1",
+                            "dimension": "prior_knowledge",
+                            "prompt": f"{self.domain} prior",
+                            "input_type": self.input_type,
+                        },
+                        {
+                            "question_id": "q2",
+                            "dimension": "application",
+                            "prompt": f"{self.domain} application",
+                            "input_type": self.input_type,
+                        },
+                        {
+                            "question_id": "q3",
+                            "dimension": "limits",
+                            "prompt": f"{self.domain} limits",
+                            "input_type": self.input_type,
+                        },
+                    ]
                 }
-                for index, dimension in enumerate(("concept", "application", "boundary"), 1)
-            ]})
+            )
+        elif schema is DiagnosticScore:
+            value = schema.model_validate(
+                {
+                    "score": 60,
+                    "level": "foundation",
+                    "domain": self.domain,
+                    "outcome_type": params["outcome_type"],
+                    "strengths": [],
+                    "weaknesses": [f"{self.domain} boundary"],
+                    "graph_guidance": [],
+                }
+            )
+        elif schema is PersonalizedGraphDraft:
+            value = schema.model_validate(
+                {
+                    "emoji": "T",
+                    "nodes": [
+                        {
+                            "key": "root",
+                            "label": f"{self.domain} foundation",
+                            "parent_keys": [],
+                            "estimated_minutes": 20,
+                        },
+                        {
+                            "key": "a",
+                            "label": "A",
+                            "parent_keys": ["root"],
+                            "estimated_minutes": 20,
+                        },
+                        {
+                            "key": "b",
+                            "label": "B",
+                            "parent_keys": ["root"],
+                            "estimated_minutes": 20,
+                        },
+                        {
+                            "key": "c",
+                            "label": "C",
+                            "parent_keys": ["a", "b"],
+                            "estimated_minutes": 20,
+                        },
+                        {"key": "d", "label": "D", "parent_keys": ["c"], "estimated_minutes": 20},
+                        {"key": "e", "label": "E", "parent_keys": ["d"], "estimated_minutes": 20},
+                    ],
+                }
+            )
+        elif schema is AssessmentQuestions:
+            value = schema.model_validate(
+                {
+                    "questions": [
+                        {
+                            "question_id": f"aq{index}",
+                            "dimension": dimension,
+                            "prompt": f"{self.domain} {dimension}",
+                            "input_type": self.input_type,
+                            "rubric": [
+                                {"criterion": "observable", "observable_standards": ["specific"]}
+                            ],
+                        }
+                        for index, dimension in enumerate(("concept", "application", "boundary"), 1)
+                    ]
+                }
+            )
         else:
             raise AssertionError(f"Unexpected schema {schema}")
         return StructuredResult(value=value, token_usage=1, latency_ms=1, attempts=1)
@@ -116,9 +171,11 @@ def test_fixed_cross_domain_learning_flows(
         run_id=run.id,
         request_id=f"confirm-{domain}",
     )
-    root = db_session.query(Node).filter_by(
-        topic_id=completed.result_json["topic_id"], node_key="root"
-    ).one()
+    root = (
+        db_session.query(Node)
+        .filter_by(topic_id=completed.result_json["topic_id"], node_key="root")
+        .one()
+    )
     assessment = start_assessment(
         db_session,
         user_id=auth_user.id,

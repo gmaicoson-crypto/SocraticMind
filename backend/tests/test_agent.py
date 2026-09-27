@@ -8,16 +8,10 @@ from ai.agent import chat_stream
 class ChatStreamTests(unittest.TestCase):
     def test_ignores_metadata_chunks_without_choices(self):
         chunks = [
-            SimpleNamespace(
-                choices=[SimpleNamespace(delta=SimpleNamespace(content="first"))]
-            ),
+            SimpleNamespace(choices=[SimpleNamespace(delta=SimpleNamespace(content="first"))]),
             SimpleNamespace(choices=[]),
-            SimpleNamespace(
-                choices=[SimpleNamespace(delta=SimpleNamespace(content=None))]
-            ),
-            SimpleNamespace(
-                choices=[SimpleNamespace(delta=SimpleNamespace(content="second"))]
-            ),
+            SimpleNamespace(choices=[SimpleNamespace(delta=SimpleNamespace(content=None))]),
+            SimpleNamespace(choices=[SimpleNamespace(delta=SimpleNamespace(content="second"))]),
         ]
         completions = SimpleNamespace(create=lambda **_: iter(chunks))
         client = SimpleNamespace(chat=SimpleNamespace(completions=completions))

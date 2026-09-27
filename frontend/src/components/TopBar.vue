@@ -1,11 +1,20 @@
 <template>
   <header class="topbar">
-    <div class="logo-wrap" style="cursor:pointer" @click="router.push('/')">
+    <div class="logo-wrap" style="cursor: pointer" @click="router.push('/')">
       <div class="logo-icon">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="12" cy="6" r="2.5" fill="white" stroke="none"/>
-          <circle cx="6" cy="16" r="2" fill="white" stroke="none"/>
-          <circle cx="18" cy="16" r="2" fill="white" stroke="none"/>
+        <svg
+          width="18"
+          height="18"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="white"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <circle cx="12" cy="6" r="2.5" fill="white" stroke="none" />
+          <circle cx="6" cy="16" r="2" fill="white" stroke="none" />
+          <circle cx="18" cy="16" r="2" fill="white" stroke="none" />
           <path d="M12 8 L6 14 M12 8 L18 14 M8 16 H16" />
         </svg>
       </div>
@@ -19,14 +28,27 @@
 
     <div class="search-outer" ref="searchRef">
       <div class="search-wrap" :class="{ focused }">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--ink-3)" stroke-width="2">
-          <circle cx="11" cy="11" r="7"/><path d="M21 21 L17 17"/>
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="var(--ink-3)"
+          stroke-width="2"
+        >
+          <circle cx="11" cy="11" r="7" />
+          <path d="M21 21 L17 17" />
         </svg>
         <input
           ref="inputRef"
           v-model="query"
           placeholder="搜索主题或节点…"
-          @focus="focused = true; showDropdown = true"
+          @focus="
+            () => {
+              focused = true
+              showDropdown = true
+            }
+          "
           @blur="onBlur"
           @keydown.escape="closeSearch"
           @keydown.down.prevent="moveDown"
@@ -35,8 +57,16 @@
         />
         <span v-if="!query" class="kbd">⌘K</span>
         <button v-else class="clear-btn" @mousedown.prevent @click="clearSearch">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-            <path d="M18 6L6 18M6 6l12 12"/>
+          <svg
+            width="12"
+            height="12"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+          >
+            <path d="M18 6L6 18M6 6l12 12" />
           </svg>
         </button>
       </div>
@@ -54,14 +84,42 @@
               @click="selectNode(item)"
             >
               <div class="item-icon" :class="item.state">
-                <svg v-if="item.state === 'mastered'" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-                  <path d="M3 8L7 12L13 4"/>
+                <svg
+                  v-if="item.state === 'mastered'"
+                  width="12"
+                  height="12"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                >
+                  <path d="M3 8L7 12L13 4" />
                 </svg>
-                <svg v-else-if="item.state === 'locked'" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-                  <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                <svg
+                  v-else-if="item.state === 'locked'"
+                  width="12"
+                  height="12"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                >
+                  <rect x="3" y="11" width="18" height="11" rx="2" />
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4" />
                 </svg>
-                <svg v-else width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-                  <circle cx="12" cy="12" r="4"/>
+                <svg
+                  v-else
+                  width="12"
+                  height="12"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                >
+                  <circle cx="12" cy="12" r="4" />
                 </svg>
               </div>
               <div class="item-content">
@@ -99,10 +157,21 @@
       </Transition>
 
       <Transition name="dropdown">
-        <div v-if="showDropdown && focused && query && results.length === 0" class="search-dropdown">
+        <div
+          v-if="showDropdown && focused && query && results.length === 0"
+          class="search-dropdown"
+        >
           <div class="no-result">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--ink-3)" stroke-width="1.5">
-              <circle cx="11" cy="11" r="7"/><path d="M21 21 L17 17"/>
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="var(--ink-3)"
+              stroke-width="1.5"
+            >
+              <circle cx="11" cy="11" r="7" />
+              <path d="M21 21 L17 17" />
             </svg>
             <span>没有找到「{{ query }}」相关内容</span>
           </div>
@@ -142,7 +211,25 @@ const store = useLearningStore()
 const router = useRouter()
 const chatCount = ref(0)
 const userLevel = computed(() => computeLevel(chatCount.value))
-const { query, focused, showDropdown, activeIndex, inputRef, nodeResults, topicResults, results, closeSearch, clearSearch, onBlur, moveDown, moveUp, selectCurrent, selectNode, selectTopic, stateLabel } = useGlobalSearch()
+const {
+  query,
+  focused,
+  showDropdown,
+  activeIndex,
+  inputRef,
+  nodeResults,
+  topicResults,
+  results,
+  closeSearch,
+  clearSearch,
+  onBlur,
+  moveDown,
+  moveUp,
+  selectCurrent,
+  selectNode,
+  selectTopic,
+  stateLabel,
+} = useGlobalSearch()
 void inputRef
 
 onMounted(async () => {
@@ -219,7 +306,9 @@ onMounted(async () => {
   border: 1px solid var(--line);
   border-radius: 10px;
   padding: 7px 12px;
-  transition: border-color .15s, box-shadow .15s;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
 }
 .search-wrap.focused {
   border-color: var(--blue);
@@ -257,7 +346,7 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   border-radius: 4px;
-  transition: color .15s;
+  transition: color 0.15s;
 }
 .clear-btn:hover {
   color: var(--ink);
@@ -292,7 +381,7 @@ onMounted(async () => {
   gap: 10px;
   padding: 8px 12px;
   cursor: pointer;
-  transition: background .1s;
+  transition: background 0.1s;
 }
 .dropdown-item:hover,
 .dropdown-item.active {
@@ -370,7 +459,9 @@ onMounted(async () => {
 
 .dropdown-enter-active,
 .dropdown-leave-active {
-  transition: opacity .15s ease, transform .15s ease;
+  transition:
+    opacity 0.15s ease,
+    transform 0.15s ease;
 }
 .dropdown-enter-from,
 .dropdown-leave-to {
@@ -406,7 +497,7 @@ onMounted(async () => {
   height: 100%;
   background: linear-gradient(90deg, var(--blue), var(--blue-2));
   border-radius: 999px;
-  transition: width .4s ease;
+  transition: width 0.4s ease;
 }
 
 .profile-wrap {
@@ -415,7 +506,7 @@ onMounted(async () => {
   gap: 10px;
   padding: 4px 8px;
   border-radius: 10px;
-  transition: background .15s;
+  transition: background 0.15s;
 }
 .profile-wrap:hover {
   background: var(--bg-2);
@@ -438,7 +529,7 @@ onMounted(async () => {
 .avatar {
   width: 36px;
   height: 36px;
-  background: linear-gradient(135deg, oklch(0.85 0.06 60), oklch(0.7 0.10 35));
+  background: linear-gradient(135deg, oklch(0.85 0.06 60), oklch(0.7 0.1 35));
   color: white;
   font-size: 13px;
   font-weight: 700;

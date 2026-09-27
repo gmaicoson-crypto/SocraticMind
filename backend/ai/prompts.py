@@ -10,15 +10,15 @@ def _load(name: str) -> str:
 
 
 # 苏格拉底式教学 prompt，对应三种 AI 风格
-SOCRATIC_GENTLE_PROMPT   = _load("socratic_gentle")
+SOCRATIC_GENTLE_PROMPT = _load("socratic_gentle")
 SOCRATIC_STANDARD_PROMPT = _load("socratic_standard")
-SOCRATIC_STRICT_PROMPT   = _load("socratic_strict")
+SOCRATIC_STRICT_PROMPT = _load("socratic_strict")
 
 # 各场景的独立 prompt
-TOPIC_OVERVIEW_PROMPT   = _load("topic_overview")    # 主题概览（约 500 字）
-NODE_OVERVIEW_PROMPT    = _load("node_overview")     # 节点概览（约 100 字 + 引导问题）
-NORMAL_CHAT_PROMPT      = _load("normal_chat")       # 普通对话模式
-GENERATE_NODES_PROMPT   = _load("generate_nodes")    # 生成知识图谱节点
+TOPIC_OVERVIEW_PROMPT = _load("topic_overview")  # 主题概览（约 500 字）
+NODE_OVERVIEW_PROMPT = _load("node_overview")  # 节点概览（约 100 字 + 引导问题）
+NORMAL_CHAT_PROMPT = _load("normal_chat")  # 普通对话模式
+GENERATE_NODES_PROMPT = _load("generate_nodes")  # 生成知识图谱节点
 RECOMMEND_TOPICS_PROMPT = _load("recommend_topics")  # 推荐学习主题
 
 

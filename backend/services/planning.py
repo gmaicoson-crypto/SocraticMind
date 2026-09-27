@@ -108,9 +108,7 @@ def _schedule(
         (item.scheduled_date for item in items),
         default=start_date,
     )
-    delay_days = (
-        max(0, (estimated_end_date - target_date).days) if target_date is not None else 0
-    )
+    delay_days = max(0, (estimated_end_date - target_date).days) if target_date is not None else 0
     return PlanningResult(
         items=items,
         effective_timezone=effective_timezone,

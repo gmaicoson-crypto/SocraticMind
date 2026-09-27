@@ -1,7 +1,16 @@
 <template>
   <div class="hero-card">
-    <div class="big-avatar" :style="userInfo?.avatar_url ? {} : { background: userInfo?.avatar_grad }">
-      <img v-if="userInfo?.avatar_url" :src="avatarSrc(userInfo.avatar_url)" alt="avatar" class="big-avatar-img ui-avatar-image" decoding="async" />
+    <div
+      class="big-avatar"
+      :style="userInfo?.avatar_url ? {} : { background: userInfo?.avatar_grad }"
+    >
+      <img
+        v-if="userInfo?.avatar_url"
+        :src="avatarSrc(userInfo.avatar_url)"
+        alt="avatar"
+        class="big-avatar-img ui-avatar-image"
+        decoding="async"
+      />
       <template v-else>{{ userName.slice(0, 1) }}</template>
     </div>
     <div class="hero-info">
@@ -31,8 +40,16 @@
     </div>
     <div class="hero-actions">
       <button class="back-btn" @click="$emit('back')">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
-          <path d="M19 12H5M12 5l-7 7 7 7"/>
+        <svg
+          width="12"
+          height="12"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2.5"
+          stroke-linecap="round"
+        >
+          <path d="M19 12H5M12 5l-7 7 7 7" />
         </svg>
         返回对话
       </button>
@@ -79,7 +96,7 @@ defineEmits<{
   width: 72px;
   height: 72px;
   border-radius: 18px;
-  background: linear-gradient(135deg, oklch(0.85 0.06 60), oklch(0.7 0.10 35));
+  background: linear-gradient(135deg, oklch(0.85 0.06 60), oklch(0.7 0.1 35));
   color: white;
   font-size: 26px;
   font-weight: 700;
@@ -140,7 +157,8 @@ defineEmits<{
   align-items: center;
   gap: 5px;
 }
-.edit-btn, .back-btn {
+.edit-btn,
+.back-btn {
   padding: 7px 16px;
   border-radius: 8px;
   border: 2px solid var(--line);
@@ -150,9 +168,10 @@ defineEmits<{
   color: var(--ink-2);
   cursor: pointer;
   font-family: var(--font-sans);
-  transition: background .15s;
+  transition: background 0.15s;
 }
-.edit-btn:hover, .back-btn:hover {
+.edit-btn:hover,
+.back-btn:hover {
   background: var(--bg-2);
 }
 .streak-chip {

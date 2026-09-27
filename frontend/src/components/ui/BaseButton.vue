@@ -1,5 +1,10 @@
 <template>
-  <button class="ui-button" :type="type" :disabled="disabled || loading" :aria-busy="loading || undefined">
+  <button
+    class="ui-button"
+    :type="type"
+    :disabled="disabled || loading"
+    :aria-busy="loading || undefined"
+  >
     <slot name="loading" v-if="loading" />
     <slot v-else />
   </button>

@@ -37,9 +37,7 @@ class StudyPlan(Base):
 
     user = relationship("User", back_populates="study_plans")
     topic = relationship("Topic", back_populates="study_plan")
-    items = relationship(
-        "StudyPlanItem", back_populates="plan", cascade="all, delete-orphan"
-    )
+    items = relationship("StudyPlanItem", back_populates="plan", cascade="all, delete-orphan")
 
     __table_args__ = (
         UniqueConstraint("topic_id", name="uq_study_plans_topic_id"),

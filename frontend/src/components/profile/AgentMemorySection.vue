@@ -11,7 +11,10 @@
     </header>
 
     <div v-if="memories.loading" class="memory-state">正在加载记忆</div>
-    <div v-else-if="memories.error && memories.memories.length === 0" class="memory-state error-state">
+    <div
+      v-else-if="memories.error && memories.memories.length === 0"
+      class="memory-state error-state"
+    >
       <span>{{ memories.error.message }}</span>
       <BaseButton @click="memories.fetchMemories()">重试</BaseButton>
     </div>
@@ -30,37 +33,66 @@
             <time :datetime="memory.updated_at">{{ formatDate(memory.updated_at) }}</time>
           </div>
           <div class="memory-actions">
-            <button type="button" title="编辑记忆" :disabled="memories.mutating" @click="openEdit(memory)">✎</button>
-            <button type="button" title="删除记忆" :disabled="memories.mutating" @click="deletingMemory = memory">×</button>
+            <button
+              type="button"
+              title="编辑记忆"
+              :disabled="memories.mutating"
+              @click="openEdit(memory)"
+            >
+              ✎
+            </button>
+            <button
+              type="button"
+              title="删除记忆"
+              :disabled="memories.mutating"
+              @click="deletingMemory = memory"
+            >
+              ×
+            </button>
           </div>
         </article>
       </section>
     </div>
-    <p v-if="memories.error && memories.memories.length" class="memory-inline-error">{{ memories.error.message }}</p>
+    <p v-if="memories.error && memories.memories.length" class="memory-inline-error">
+      {{ memories.error.message }}
+    </p>
 
     <BaseModal
       :model-value="editor !== null"
       :close-disabled="memories.mutating"
       @close="closeEditor"
-      @update:model-value="value => { if (!value) closeEditor() }"
+      @update:model-value="
+        (value) => {
+          if (!value) closeEditor()
+        }
+      "
     >
       <div class="memory-overlay" @click.self="closeEditor">
         <form class="memory-dialog" @submit.prevent="saveMemory">
           <header>
-            <div><p>Agent 记忆</p><h2>{{ editor?.id ? '编辑记忆' : '新增记忆' }}</h2></div>
-            <button type="button" title="关闭" :disabled="memories.mutating" @click="closeEditor">×</button>
+            <div>
+              <p>Agent 记忆</p>
+              <h2>{{ editor?.id ? '编辑记忆' : '新增记忆' }}</h2>
+            </div>
+            <button type="button" title="关闭" :disabled="memories.mutating" @click="closeEditor">
+              ×
+            </button>
           </header>
           <label>
             <span>类型</span>
             <select v-model="form.kind" name="kind">
-              <option v-for="kind in memoryKinds" :key="kind.value" :value="kind.value">{{ kind.label }}</option>
+              <option v-for="kind in memoryKinds" :key="kind.value" :value="kind.value">
+                {{ kind.label }}
+              </option>
             </select>
           </label>
           <label>
             <span>主题作用域</span>
             <select v-model="form.topicId" name="topic_id">
               <option value="">全部主题</option>
-              <option v-for="topic in learning.topics" :key="topic.id" :value="topic.id">{{ topic.title }}</option>
+              <option v-for="topic in learning.topics" :key="topic.id" :value="topic.id">
+                {{ topic.title }}
+              </option>
             </select>
           </label>
           <label>
@@ -86,7 +118,11 @@
       confirm-text="确认删除"
       :loading="memories.mutating"
       @close="deletingMemory = null"
-      @update:model-value="value => { if (!value) deletingMemory = null }"
+      @update:model-value="
+        (value) => {
+          if (!value) deletingMemory = null
+        }
+      "
       @confirm="confirmDelete"
     >
       删除后，后续对话将不再使用这条记忆。
@@ -117,13 +153,17 @@ const memories = useMemoriesStore()
 const editor = ref<Memory | { id: null } | null>(null)
 const deletingMemory = ref<Memory | null>(null)
 const form = reactive({ kind: 'goal' as MemoryKind, topicId: '', content: '' })
-const groups = computed(() => memoryKinds.map(kind => ({
-  kind: kind.value,
-  label: kind.label,
-  items: memories.memories.filter(memory => memory.kind === kind.value),
-})))
+const groups = computed(() =>
+  memoryKinds.map((kind) => ({
+    kind: kind.value,
+    label: kind.label,
+    items: memories.memories.filter((memory) => memory.kind === kind.value),
+  })),
+)
 
-onMounted(() => { memories.fetchMemories() })
+onMounted(() => {
+  memories.fetchMemories()
+})
 
 function openCreate() {
   form.kind = 'goal'
@@ -170,7 +210,7 @@ function sourceLabel(source: MemorySource) {
 
 function scopeLabel(topicId: number | null) {
   if (topicId == null) return '全部主题'
-  return learning.topics.find(topic => Number(topic.id) === topicId)?.title ?? `主题 ${topicId}`
+  return learning.topics.find((topic) => Number(topic.id) === topicId)?.title ?? `主题 ${topicId}`
 }
 
 function formatDate(value: string) {
@@ -180,46 +220,233 @@ function formatDate(value: string) {
 </script>
 
 <style scoped>
-.memory-section { border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: 18px 0 20px; color: var(--ink); }
-.memory-header { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 14px; }
-.memory-header p, .memory-dialog header p { margin: 0 0 3px; color: var(--blue-2); font-size: 10px; font-weight: 700; text-transform: uppercase; }
-.memory-header h2, .memory-dialog header h2 { margin: 0; font-size: 15px; letter-spacing: 0; }
-.add-button, .memory-state :deep(.ui-button), .dialog-actions :deep(.ui-button) { min-height: 32px; padding: 0 11px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg-2); color: var(--ink-2); cursor: pointer; }
-.memory-groups { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
-.memory-group { min-width: 0; padding: 12px; background: var(--surface); }
-.memory-group + .memory-group { border-left: 1px solid var(--line); }
-.group-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
-.group-heading h3 { margin: 0; font-size: 12px; }
-.group-heading span { color: var(--ink-3); font-size: 10px; }
-.group-empty { margin: 12px 0; color: var(--ink-3); font-size: 11px; }
-.memory-item { position: relative; min-width: 0; padding: 10px 42px 10px 0; border-top: 1px solid var(--line); }
-.memory-item > p { margin: 0; font-size: 11.5px; line-height: 1.55; overflow-wrap: anywhere; }
-.memory-meta { display: flex; flex-wrap: wrap; gap: 4px 7px; margin-top: 6px; color: var(--ink-3); font-size: 9.5px; }
-.memory-actions { position: absolute; top: 8px; right: 0; display: flex; gap: 2px; }
-.memory-actions button, .memory-dialog header button { display: grid; place-items: center; width: 22px; height: 22px; padding: 0; border: 0; background: transparent; color: var(--ink-3); cursor: pointer; }
-.memory-actions button:hover { color: var(--blue-2); background: var(--bg-2); }
-.memory-state { display: grid; place-items: center; gap: 10px; min-height: 140px; color: var(--ink-3); font-size: 12px; }
-.error-state, .dialog-error { color: #b91c1c; }
-.memory-inline-error { margin: 9px 0 0; color: #b91c1c; font-size: 11px; overflow-wrap: anywhere; }
-.memory-overlay { position: fixed; inset: 0; z-index: 400; display: grid; place-items: center; padding: 20px; background: rgba(0, 0, 0, .4); backdrop-filter: blur(4px); }
-.memory-dialog { display: grid; gap: 13px; width: min(440px, 100%); padding: 18px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); box-shadow: 0 14px 44px rgba(0, 0, 0, .2); }
-.memory-dialog header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
-.memory-dialog label { display: grid; gap: 5px; min-width: 0; color: var(--ink-2); font-size: 11px; }
-.memory-dialog select, .memory-dialog :deep(.ui-input) { width: 100%; min-width: 0; height: 36px; box-sizing: border-box; padding: 0 9px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--ink); }
-.memory-dialog small { justify-self: end; color: var(--ink-3); }
-.dialog-error { margin: 0; font-size: 11px; overflow-wrap: anywhere; }
-.dialog-actions { display: flex; justify-content: flex-end; gap: 8px; }
-.dialog-actions :deep(.primary) { border-color: var(--blue-2); background: var(--blue-2); color: white; }
+.memory-section {
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  padding: 18px 0 20px;
+  color: var(--ink);
+}
+.memory-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+.memory-header p,
+.memory-dialog header p {
+  margin: 0 0 3px;
+  color: var(--blue-2);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.memory-header h2,
+.memory-dialog header h2 {
+  margin: 0;
+  font-size: 15px;
+  letter-spacing: 0;
+}
+.add-button,
+.memory-state :deep(.ui-button),
+.dialog-actions :deep(.ui-button) {
+  min-height: 32px;
+  padding: 0 11px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg-2);
+  color: var(--ink-2);
+  cursor: pointer;
+}
+.memory-groups {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.memory-group {
+  min-width: 0;
+  padding: 12px;
+  background: var(--surface);
+}
+.memory-group + .memory-group {
+  border-left: 1px solid var(--line);
+}
+.group-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.group-heading h3 {
+  margin: 0;
+  font-size: 12px;
+}
+.group-heading span {
+  color: var(--ink-3);
+  font-size: 10px;
+}
+.group-empty {
+  margin: 12px 0;
+  color: var(--ink-3);
+  font-size: 11px;
+}
+.memory-item {
+  position: relative;
+  min-width: 0;
+  padding: 10px 42px 10px 0;
+  border-top: 1px solid var(--line);
+}
+.memory-item > p {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+.memory-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 7px;
+  margin-top: 6px;
+  color: var(--ink-3);
+  font-size: 9.5px;
+}
+.memory-actions {
+  position: absolute;
+  top: 8px;
+  right: 0;
+  display: flex;
+  gap: 2px;
+}
+.memory-actions button,
+.memory-dialog header button {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink-3);
+  cursor: pointer;
+}
+.memory-actions button:hover {
+  color: var(--blue-2);
+  background: var(--bg-2);
+}
+.memory-state {
+  display: grid;
+  place-items: center;
+  gap: 10px;
+  min-height: 140px;
+  color: var(--ink-3);
+  font-size: 12px;
+}
+.error-state,
+.dialog-error {
+  color: #b91c1c;
+}
+.memory-inline-error {
+  margin: 9px 0 0;
+  color: #b91c1c;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+.memory-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 400;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(4px);
+}
+.memory-dialog {
+  display: grid;
+  gap: 13px;
+  width: min(440px, 100%);
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: 0 14px 44px rgba(0, 0, 0, 0.2);
+}
+.memory-dialog header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.memory-dialog label {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  color: var(--ink-2);
+  font-size: 11px;
+}
+.memory-dialog select,
+.memory-dialog :deep(.ui-input) {
+  width: 100%;
+  min-width: 0;
+  height: 36px;
+  box-sizing: border-box;
+  padding: 0 9px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--ink);
+}
+.memory-dialog small {
+  justify-self: end;
+  color: var(--ink-3);
+}
+.dialog-error {
+  margin: 0;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.dialog-actions :deep(.primary) {
+  border-color: var(--blue-2);
+  background: var(--blue-2);
+  color: white;
+}
 @media (max-width: 1100px) {
-  .memory-groups { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .memory-group + .memory-group { border-left: 0; border-top: 1px solid var(--line); }
-  .memory-group:nth-child(2) { border-top: 0; border-left: 1px solid var(--line); }
-  .memory-group:nth-child(4) { border-left: 1px solid var(--line); }
+  .memory-groups {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .memory-group + .memory-group {
+    border-left: 0;
+    border-top: 1px solid var(--line);
+  }
+  .memory-group:nth-child(2) {
+    border-top: 0;
+    border-left: 1px solid var(--line);
+  }
+  .memory-group:nth-child(4) {
+    border-left: 1px solid var(--line);
+  }
 }
 @media (max-width: 620px) {
-  .memory-groups { grid-template-columns: minmax(0, 1fr); }
-  .memory-group:nth-child(2) { border-top: 1px solid var(--line); border-left: 0; }
-  .memory-group:nth-child(4) { border-left: 0; }
-  .memory-header { align-items: flex-start; }
+  .memory-groups {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .memory-group:nth-child(2) {
+    border-top: 1px solid var(--line);
+    border-left: 0;
+  }
+  .memory-group:nth-child(4) {
+    border-left: 0;
+  }
+  .memory-header {
+    align-items: flex-start;
+  }
 }
 </style>

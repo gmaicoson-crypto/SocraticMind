@@ -38,10 +38,14 @@ def record_today(
 ):
     """记录今日打卡，幂等操作：同一天重复调用不会重复写入。"""
     today = today_str()
-    exists = db.query(LearningRecord).filter(
-        LearningRecord.user_id == current_user.id,
-        LearningRecord.date == today,
-    ).first()
+    exists = (
+        db.query(LearningRecord)
+        .filter(
+            LearningRecord.user_id == current_user.id,
+            LearningRecord.date == today,
+        )
+        .first()
+    )
     if not exists:
         db.add(LearningRecord(user_id=current_user.id, date=today))
         db.commit()
@@ -58,15 +62,23 @@ def get_streak(
     streak 计算只取近 60 天记录（连续学习上限远小于此值），total_days 用 count() 统计总天数。
     """
     cutoff = (date.today() - timedelta(days=60)).isoformat()
-    recent_records = db.query(LearningRecord.date).filter(
-        LearningRecord.user_id == current_user.id,
-        LearningRecord.date >= cutoff,
-    ).all()
+    recent_records = (
+        db.query(LearningRecord.date)
+        .filter(
+            LearningRecord.user_id == current_user.id,
+            LearningRecord.date >= cutoff,
+        )
+        .all()
+    )
     learned_dates = {r.date for r in recent_records}
 
-    total_days = db.query(LearningRecord).filter(
-        LearningRecord.user_id == current_user.id,
-    ).count()
+    total_days = (
+        db.query(LearningRecord)
+        .filter(
+            LearningRecord.user_id == current_user.id,
+        )
+        .count()
+    )
 
     streak = _compute_streak(learned_dates)
 
@@ -95,23 +107,32 @@ def get_stats(
     one_year_ago = today - timedelta(days=364)
 
     # 苏格拉底模式下用户发出的消息总数（不含 AI 回复）
-    chat_count = db.query(ChatMessage).filter(
-        ChatMessage.user_id == current_user.id,
-        ChatMessage.role == "user",
-        ChatMessage.mode == "socratic",
-    ).count()
+    chat_count = (
+        db.query(ChatMessage)
+        .filter(
+            ChatMessage.user_id == current_user.id,
+            ChatMessage.role == "user",
+            ChatMessage.mode == "socratic",
+        )
+        .count()
+    )
 
     # 热力图：单次 GROUP BY 查询替代原先的 365 次独立 COUNT，性能差异显著
     date_expr = func.substr(func.cast(ChatMessage.created_at, String(10)), 1, 10)
-    heatmap_rows = db.query(
-        date_expr.label("d"),
-        func.count().label("c"),
-    ).filter(
-        ChatMessage.user_id == current_user.id,
-        ChatMessage.role == "user",
-        ChatMessage.mode == "socratic",
-        ChatMessage.created_at >= one_year_ago,
-    ).group_by("d").all()
+    heatmap_rows = (
+        db.query(
+            date_expr.label("d"),
+            func.count().label("c"),
+        )
+        .filter(
+            ChatMessage.user_id == current_user.id,
+            ChatMessage.role == "user",
+            ChatMessage.mode == "socratic",
+            ChatMessage.created_at >= one_year_ago,
+        )
+        .group_by("d")
+        .all()
+    )
     by_date = {row.d: row.c for row in heatmap_rows}
     heatmap = [
         {
@@ -123,45 +144,67 @@ def get_stats(
 
     # streak 和总学习天数
     streak_cutoff = (today - timedelta(days=60)).isoformat()
-    recent_records = db.query(LearningRecord.date).filter(
-        LearningRecord.user_id == current_user.id,
-        LearningRecord.date >= streak_cutoff,
-    ).all()
+    recent_records = (
+        db.query(LearningRecord.date)
+        .filter(
+            LearningRecord.user_id == current_user.id,
+            LearningRecord.date >= streak_cutoff,
+        )
+        .all()
+    )
     learned_dates = {r.date for r in recent_records}
     streak = _compute_streak(learned_dates)
-    total_days_learned = db.query(LearningRecord).filter(
-        LearningRecord.user_id == current_user.id,
-    ).count()
+    total_days_learned = (
+        db.query(LearningRecord)
+        .filter(
+            LearningRecord.user_id == current_user.id,
+        )
+        .count()
+    )
 
     # 本周统计（从本周一到今天）
     weekday = today.weekday()
     week_start = today - timedelta(days=weekday)
     week_start_str = week_start.isoformat()
 
-    week_chats = db.query(ChatMessage).filter(
-        ChatMessage.user_id == current_user.id,
-        ChatMessage.role == "user",
-        ChatMessage.mode == "socratic",
-        date_expr >= week_start_str,
-    ).count()
+    week_chats = (
+        db.query(ChatMessage)
+        .filter(
+            ChatMessage.user_id == current_user.id,
+            ChatMessage.role == "user",
+            ChatMessage.mode == "socratic",
+            date_expr >= week_start_str,
+        )
+        .count()
+    )
 
-    week_mastered = db.query(Node).join(Topic).filter(
-        Topic.user_id == current_user.id,
-        Node.state == "mastered",
-        Node.mastered_at.isnot(None),
-        func.substr(func.cast(Node.mastered_at, String(10)), 1, 10) >= week_start_str,
-    ).count()
+    week_mastered = (
+        db.query(Node)
+        .join(Topic)
+        .filter(
+            Topic.user_id == current_user.id,
+            Node.state == "mastered",
+            Node.mastered_at.isnot(None),
+            func.substr(func.cast(Node.mastered_at, String(10)), 1, 10) >= week_start_str,
+        )
+        .count()
+    )
 
     # 最活跃时段：按小时 GROUP BY，避免全表加载到 Python 再循环统计
     hour_expr = func.cast(func.date_format(ChatMessage.created_at, "%H"), String(2))
-    hour_rows = db.query(
-        hour_expr.label("h"),
-        func.count().label("c"),
-    ).filter(
-        ChatMessage.user_id == current_user.id,
-        ChatMessage.role == "user",
-        ChatMessage.mode == "socratic",
-    ).group_by("h").all()
+    hour_rows = (
+        db.query(
+            hour_expr.label("h"),
+            func.count().label("c"),
+        )
+        .filter(
+            ChatMessage.user_id == current_user.id,
+            ChatMessage.role == "user",
+            ChatMessage.mode == "socratic",
+        )
+        .group_by("h")
+        .all()
+    )
     if hour_rows:
         peak_hour = int(max(hour_rows, key=lambda r: r.c).h)
         peak_label = f"{peak_hour:02d}:00 - {(peak_hour + 2) % 24:02d}:00"
@@ -173,11 +216,19 @@ def get_stats(
     week_days_learned = sum(1 for d in learned_dates if d >= week_start_str)
 
     # 最近掌握时间线：joinedload 避免循环中对 node.topic 的 N+1 查询
-    recent_mastered = db.query(Node).options(joinedload(Node.topic)).join(Topic).filter(
-        Topic.user_id == current_user.id,
-        Node.state == "mastered",
-        Node.mastered_at.isnot(None),
-    ).order_by(Node.mastered_at.desc()).limit(5).all()
+    recent_mastered = (
+        db.query(Node)
+        .options(joinedload(Node.topic))
+        .join(Topic)
+        .filter(
+            Topic.user_id == current_user.id,
+            Node.state == "mastered",
+            Node.mastered_at.isnot(None),
+        )
+        .order_by(Node.mastered_at.desc())
+        .limit(5)
+        .all()
+    )
     timeline = [
         {
             "type": "mastered",
@@ -189,20 +240,25 @@ def get_stats(
     ]
 
     # 成就徽章：按解锁条件计算，顺序即展示顺序
-    mastered_count = db.query(Node).join(Topic).filter(
-        Topic.user_id == current_user.id,
-        Node.state == "mastered",
-    ).count()
+    mastered_count = (
+        db.query(Node)
+        .join(Topic)
+        .filter(
+            Topic.user_id == current_user.id,
+            Node.state == "mastered",
+        )
+        .count()
+    )
 
     badges = [
-        {"icon": "🚀", "name": "第一步",     "unlocked": chat_count >= 1},
-        {"icon": "🔥", "name": "连续7天",    "unlocked": streak >= 7},
+        {"icon": "🚀", "name": "第一步", "unlocked": chat_count >= 1},
+        {"icon": "🔥", "name": "连续7天", "unlocked": streak >= 7},
         {"icon": "⭐", "name": "掌握10节点", "unlocked": mastered_count >= 10},
-        {"icon": "💬", "name": "对话达人",   "unlocked": chat_count >= 50},
+        {"icon": "💬", "name": "对话达人", "unlocked": chat_count >= 50},
         {"icon": "🏆", "name": "掌握50节点", "unlocked": mastered_count >= 50},
-        {"icon": "🌙", "name": "连续30天",   "unlocked": streak >= 30},
-        {"icon": "💎", "name": "全图通关",   "unlocked": False},
-        {"icon": "👑", "name": "学习大师",   "unlocked": mastered_count >= 100},
+        {"icon": "🌙", "name": "连续30天", "unlocked": streak >= 30},
+        {"icon": "💎", "name": "全图通关", "unlocked": False},
+        {"icon": "👑", "name": "学习大师", "unlocked": mastered_count >= 100},
     ]
 
     return {

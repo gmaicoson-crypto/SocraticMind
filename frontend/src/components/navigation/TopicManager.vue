@@ -3,7 +3,6 @@
     <Transition name="slide">
       <div v-if="show" class="manager-overlay" @click.self="emit('close')">
         <div class="manager-panel">
-
           <div class="panel-header">
             <div>
               <div class="panel-title">我的主题</div>
@@ -23,12 +22,10 @@
                 <div class="topic-emoji">{{ topic.emoji }}</div>
                 <div class="topic-info">
                   <div class="topic-name">{{ topic.title }}</div>
-                  <div class="topic-stats">
-                    {{ topic.mastered }} / {{ topic.nodes }} 节点已掌握
-                  </div>
+                  <div class="topic-stats">{{ topic.mastered }} / {{ topic.nodes }} 节点已掌握</div>
                   <ProgressBar
                     class="topic-track"
-                    :value="topic.nodes ? topic.mastered / topic.nodes * 100 : 0"
+                    :value="topic.nodes ? (topic.mastered / topic.nodes) * 100 : 0"
                     :label="`${topic.title}掌握进度`"
                   />
                 </div>
@@ -40,8 +37,16 @@
                 @click="handleDelete(topic.id, topic.title)"
               >
                 <template #loading><span class="spinner" /></template>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-                  <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/>
+                <svg
+                  width="13"
+                  height="13"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                >
+                  <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" />
                 </svg>
               </IconButton>
             </div>
@@ -60,7 +65,6 @@
               </div>
             </div>
           </Transition>
-
         </div>
       </div>
     </Transition>
@@ -124,7 +128,7 @@ async function doDelete() {
   position: fixed;
   inset: 0;
   z-index: 200;
-  background: rgba(0,0,0,0.3);
+  background: rgba(0, 0, 0, 0.3);
   backdrop-filter: blur(2px);
 }
 
@@ -138,7 +142,7 @@ async function doDelete() {
   border-right: 1px solid var(--line);
   display: flex;
   flex-direction: column;
-  box-shadow: 4px 0 24px rgba(0,0,0,0.12);
+  box-shadow: 4px 0 24px rgba(0, 0, 0, 0.12);
 }
 
 .panel-header {
@@ -175,7 +179,7 @@ async function doDelete() {
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all .15s;
+  transition: all 0.15s;
   font-family: var(--font-sans);
 }
 .close-btn:hover {
@@ -200,7 +204,7 @@ async function doDelete() {
   border-radius: 10px;
   border: 1px solid var(--line);
   background: var(--surface);
-  transition: all .15s;
+  transition: all 0.15s;
 }
 .topic-item:hover {
   border-color: var(--blue-line);
@@ -278,12 +282,12 @@ async function doDelete() {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  transition: all .15s;
+  transition: all 0.15s;
 }
 .delete-btn:hover {
-  background: #FCEBEB;
-  border-color: #F7C1C1;
-  color: #E24B4A;
+  background: #fcebeb;
+  border-color: #f7c1c1;
+  color: #e24b4a;
 }
 .delete-btn:disabled {
   opacity: 0.5;
@@ -296,10 +300,14 @@ async function doDelete() {
   border-radius: 50%;
   border: 2px solid var(--line);
   border-top-color: var(--blue-2);
-  animation: spin .7s linear infinite;
+  animation: spin 0.7s linear infinite;
   display: inline-block;
 }
-@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
 
 .empty-state {
   padding: 32px 16px;
@@ -314,13 +322,13 @@ async function doDelete() {
 .confirm-bar {
   padding: 12px 16px;
   border-top: 1px solid var(--line);
-  background: #FCEBEB;
+  background: #fcebeb;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
   font-size: 12.5px;
-  color: #A32D2D;
+  color: #a32d2d;
   flex-shrink: 0;
 }
 
@@ -332,9 +340,9 @@ async function doDelete() {
 .confirm-cancel {
   padding: 5px 12px;
   border-radius: 7px;
-  border: 1px solid #F7C1C1;
+  border: 1px solid #f7c1c1;
   background: white;
-  color: #A32D2D;
+  color: #a32d2d;
   font-size: 12px;
   cursor: pointer;
   font-family: var(--font-sans);
@@ -344,7 +352,7 @@ async function doDelete() {
   padding: 5px 12px;
   border-radius: 7px;
   border: none;
-  background: #E24B4A;
+  background: #e24b4a;
   color: white;
   font-size: 12px;
   font-weight: 600;
@@ -354,11 +362,11 @@ async function doDelete() {
 
 .slide-enter-active,
 .slide-leave-active {
-  transition: opacity .2s ease;
+  transition: opacity 0.2s ease;
 }
 .slide-enter-active .manager-panel,
 .slide-leave-active .manager-panel {
-  transition: transform .25s ease;
+  transition: transform 0.25s ease;
 }
 .slide-enter-from .manager-panel,
 .slide-leave-to .manager-panel {
@@ -371,7 +379,7 @@ async function doDelete() {
 
 .fade-enter-active,
 .fade-leave-active {
-  transition: opacity .2s;
+  transition: opacity 0.2s;
 }
 .fade-enter-from,
 .fade-leave-to {

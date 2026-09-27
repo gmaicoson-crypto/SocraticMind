@@ -39,9 +39,7 @@ def _uses_p0_error_contract(path: str) -> bool:
     )
 
 
-async def validation_error_handler(
-    request: Request, error: RequestValidationError
-) -> JSONResponse:
+async def validation_error_handler(request: Request, error: RequestValidationError) -> JSONResponse:
     if _uses_p0_error_contract(request.url.path):
         return JSONResponse(
             status_code=422,

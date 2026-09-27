@@ -16,10 +16,10 @@ const STORAGE_KEY_PROGRESS = (userId: number) => `sm_daily_progress_${userId}`
 
 export function getDefaultGoal(): DailyGoalConfig {
   return {
-    chat_count:       { enabled: true,  target: 5  },
-    mastered_nodes:   { enabled: true,  target: 2  },
-    completed_topics: { enabled: false, target: 1  },
-    study_minutes:    { enabled: true,  target: 30 },
+    chat_count: { enabled: true, target: 5 },
+    mastered_nodes: { enabled: true, target: 2 },
+    completed_topics: { enabled: false, target: 1 },
+    study_minutes: { enabled: true, target: 30 },
   }
 }
 

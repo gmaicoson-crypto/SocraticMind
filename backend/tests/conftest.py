@@ -89,9 +89,7 @@ def client(app):
 def mock_ai_client():
     def build(*chunks: str):
         stream = [
-            SimpleNamespace(
-                choices=[SimpleNamespace(delta=SimpleNamespace(content=chunk))]
-            )
+            SimpleNamespace(choices=[SimpleNamespace(delta=SimpleNamespace(content=chunk))])
             for chunk in chunks
         ]
         completions = SimpleNamespace(create=lambda **_: iter(stream))

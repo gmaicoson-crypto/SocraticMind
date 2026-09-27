@@ -39,24 +39,20 @@ renderer.codespan = ({ text }: { text: string }) => {
 }
 
 function preprocessMarkdown(md: string): string {
-  const zwsp = String.fromCodePoint(0x200B)
+  const zwsp = String.fromCodePoint(0x200b)
   const quoteCPs = [
-    0x0022, 0x0027,
-    0x201C, 0x201D,
-    0x2018, 0x2019,
-    0x300C, 0x300D,
-    0x300E, 0x300F,
-    0x300A, 0x300B,
-    0x3008, 0x3009,
-    0x3010, 0x3011,
-    0x2039, 0x203A,
-    0x00AB, 0x00BB,
+    0x0022, 0x0027, 0x201c, 0x201d, 0x2018, 0x2019, 0x300c, 0x300d, 0x300e, 0x300f, 0x300a, 0x300b,
+    0x3008, 0x3009, 0x3010, 0x3011, 0x2039, 0x203a, 0x00ab, 0x00bb,
   ]
-  const quotes = quoteCPs.map(function(cp) { return String.fromCodePoint(cp) }).join("")
-  const cls = "([" + quotes + "])"
-  const delim = "(\\*{1,2}|_{1,2})"
-  md = md.replace(new RegExp(delim + cls, "g"), "$1" + zwsp + "$2")
-  md = md.replace(new RegExp(cls + delim, "g"), "$1" + zwsp + "$2")
+  const quotes = quoteCPs
+    .map(function (cp) {
+      return String.fromCodePoint(cp)
+    })
+    .join('')
+  const cls = '([' + quotes + '])'
+  const delim = '(\\*{1,2}|_{1,2})'
+  md = md.replace(new RegExp(delim + cls, 'g'), '$1' + zwsp + '$2')
+  md = md.replace(new RegExp(cls + delim, 'g'), '$1' + zwsp + '$2')
   return md
 }
 
@@ -67,17 +63,21 @@ function compileNow(text: string) {
   renderedHtml.value = text ? (marked.parse(preprocessMarkdown(text), { renderer }) as string) : ''
 }
 
-watch(() => props.text, (text) => {
-  if (props.withCaret) {
-    if (pendingFrame !== null) return
-    pendingFrame = requestAnimationFrame(() => {
-      pendingFrame = null
-      compileNow(props.text)
-    })
-  } else {
-    compileNow(text)
-  }
-}, { immediate: true })
+watch(
+  () => props.text,
+  (text) => {
+    if (props.withCaret) {
+      if (pendingFrame !== null) return
+      pendingFrame = requestAnimationFrame(() => {
+        pendingFrame = null
+        compileNow(props.text)
+      })
+    } else {
+      compileNow(text)
+    }
+  },
+  { immediate: true },
+)
 
 onBeforeUnmount(() => {
   if (pendingFrame !== null) cancelAnimationFrame(pendingFrame)
@@ -97,10 +97,12 @@ onBeforeUnmount(() => {
 }
 
 @keyframes blink {
-  0%, 60% {
+  0%,
+  60% {
     opacity: 1;
   }
-  70%, 100% {
+  70%,
+  100% {
     opacity: 0;
   }
 }
@@ -125,7 +127,9 @@ onBeforeUnmount(() => {
   font-style: italic;
 }
 
-.md-inline h1, .md-inline h2, .md-inline h3 {
+.md-inline h1,
+.md-inline h2,
+.md-inline h3 {
   font-weight: 600;
   margin: 12px 0 6px;
   line-height: 1.4;
@@ -140,7 +144,8 @@ onBeforeUnmount(() => {
   font-size: 13.5px;
 }
 
-.md-inline ul, .md-inline ol {
+.md-inline ul,
+.md-inline ol {
   padding-left: 20px;
   margin: 6px 0;
 }
@@ -176,7 +181,7 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   padding: 6px 14px;
   background: #2a2a3e;
-  border-bottom: 1px solid rgba(255,255,255,0.08);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .md-inline .code-lang {
@@ -192,15 +197,15 @@ onBeforeUnmount(() => {
   font-family: var(--font-sans);
   color: #888;
   background: transparent;
-  border: 1px solid rgba(255,255,255,0.12);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 5px;
   padding: 2px 8px;
   cursor: pointer;
-  transition: all .15s;
+  transition: all 0.15s;
 }
 .md-inline .code-copy:hover {
   color: #fff;
-  border-color: rgba(255,255,255,0.3);
+  border-color: rgba(255, 255, 255, 0.3);
 }
 
 .md-inline pre {
@@ -225,7 +230,8 @@ onBeforeUnmount(() => {
   margin: 8px 0;
   font-size: 13px;
 }
-.md-inline th, .md-inline td {
+.md-inline th,
+.md-inline td {
   border: 1px solid var(--line);
   padding: 6px 10px;
   text-align: left;

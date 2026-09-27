@@ -8,8 +8,12 @@ describe('AgentStepMessage', () => {
     const wrapper = mount(AgentStepMessage, {
       props: {
         step: {
-          step_id: 'step-2', prompt: longPrompt, input_type: 'choice',
-          choices: ['选项 A', '选项 B'], current: 2, total: 3,
+          step_id: 'step-2',
+          prompt: longPrompt,
+          input_type: 'choice',
+          choices: ['选项 A', '选项 B'],
+          current: 2,
+          total: 3,
         },
       },
     })

@@ -1,28 +1,55 @@
 <template>
   <aside class="sidebar">
-
-    <TopicManager
-      v-if="hasOpenedManager"
-      :show="showManager"
-      @close="showManager = false"
-    />
+    <TopicManager v-if="hasOpenedManager" :show="showManager" @close="showManager = false" />
 
     <div class="section">
       <div class="section-header">
         <span class="section-title">我的主题</span>
         <div class="header-btns">
           <button class="manage-btn" title="管理主题" @click="openManager()">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-              <path d="M12 20h9M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4 12.5-12.5z"/>
+            <svg
+              width="13"
+              height="13"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+            >
+              <path d="M12 20h9M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4 12.5-12.5z" />
             </svg>
           </button>
-          <button class="theme-btn" :title="store.isDark ? '切换到明亮' : '切换到黑暗'" @click="store.toggleTheme">
-            <svg v-if="store.isDark" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-              <circle cx="12" cy="12" r="4"/>
-              <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>
+          <button
+            class="theme-btn"
+            :title="store.isDark ? '切换到明亮' : '切换到黑暗'"
+            @click="store.toggleTheme"
+          >
+            <svg
+              v-if="store.isDark"
+              width="15"
+              height="15"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+            >
+              <circle cx="12" cy="12" r="4" />
+              <path
+                d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"
+              />
             </svg>
-            <svg v-else width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+            <svg
+              v-else
+              width="15"
+              height="15"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+            >
+              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
             </svg>
           </button>
         </div>
@@ -49,21 +76,27 @@
             <div
               class="prog-fill"
               :class="{ 'fill-active': store.activeTopicId === topic.id }"
-              :style="{ width: (topic.nodes ? topic.mastered / topic.nodes * 100 : 0) + '%' }"
+              :style="{ width: (topic.nodes ? (topic.mastered / topic.nodes) * 100 : 0) + '%' }"
             />
           </div>
         </button>
 
         <button v-if="showMoreTopics" class="expand-btn" @click="openManager()">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-            <path d="M6 9l6 6 6-6"/>
+          <svg
+            width="12"
+            height="12"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+          >
+            <path d="M6 9l6 6 6-6" />
           </svg>
           还有 {{ store.topics.length - MAX_VISIBLE }} 个主题
         </button>
 
-        <div v-if="store.topics.length === 0" class="empty-topics">
-          在对话框告诉 AI 你想学什么
-        </div>
+        <div v-if="store.topics.length === 0" class="empty-topics">在对话框告诉 AI 你想学什么</div>
       </div>
     </div>
 
@@ -77,18 +110,25 @@
           @click="refreshRecommend"
         >
           <svg
-            width="13" height="13" viewBox="0 0 24 24" fill="none"
-            stroke="currentColor" stroke-width="2" stroke-linecap="round"
+            width="13"
+            height="13"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
             :style="{ animation: isRefreshing ? 'spin .7s linear infinite' : 'none' }"
           >
-            <path d="M1 4v6h6M23 20v-6h-6"/>
-            <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/>
+            <path d="M1 4v6h6M23 20v-6h-6" />
+            <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15" />
           </svg>
         </button>
       </div>
 
       <div v-if="store.recommendations.length === 0 || isRefreshing" class="rec-empty">
-        <span class="rec-loading">{{ isRefreshing ? 'AI 正在重新推荐…' : 'AI 正在分析推荐…' }}</span>
+        <span class="rec-loading">{{
+          isRefreshing ? 'AI 正在重新推荐…' : 'AI 正在分析推荐…'
+        }}</span>
       </div>
 
       <div v-else class="recommend-list">
@@ -110,7 +150,7 @@
 
     <div class="streak-card">
       <div class="streak-header">
-        <span style="font-size: 18px;">✦</span>
+        <span style="font-size: 18px">✦</span>
         <span class="streak-label">连续学习</span>
       </div>
       <div class="streak-days">
@@ -131,13 +171,20 @@
 
     <Transition name="toast">
       <div v-if="showToast" class="toast">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
-          <path d="M20 6L9 17l-5-5"/>
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2.5"
+          stroke-linecap="round"
+        >
+          <path d="M20 6L9 17l-5-5" />
         </svg>
         {{ toastMsg }}
       </div>
     </Transition>
-
   </aside>
 </template>
 
@@ -171,7 +218,9 @@ function showToastMsg(msg: string) {
   showToast.value = true
   if (toastTimer) clearTimeout(toastTimer)
   if (!msg.includes('请稍等')) {
-    toastTimer = setTimeout(() => { showToast.value = false }, 2500)
+    toastTimer = setTimeout(() => {
+      showToast.value = false
+    }, 2500)
   }
 }
 
@@ -233,7 +282,9 @@ onBeforeUnmount(() => {
   background: var(--bg-2);
   border-right: 1px solid var(--line);
   overflow-y: auto;
-  transition: background .3s, border-color .3s;
+  transition:
+    background 0.3s,
+    border-color 0.3s;
 }
 
 .section-header {
@@ -270,7 +321,7 @@ onBeforeUnmount(() => {
   border-radius: 7px;
   color: var(--ink-3);
   cursor: pointer;
-  transition: all .15s;
+  transition: all 0.15s;
 }
 .manage-btn:hover {
   background: var(--blue-tint);
@@ -289,7 +340,7 @@ onBeforeUnmount(() => {
   border-radius: 8px;
   color: var(--ink-2);
   cursor: pointer;
-  transition: all .15s;
+  transition: all 0.15s;
 }
 .theme-btn:hover {
   background: var(--blue-tint);
@@ -322,7 +373,7 @@ onBeforeUnmount(() => {
   border-radius: 10px;
   text-align: left;
   cursor: pointer;
-  transition: background .15s;
+  transition: background 0.15s;
   font-family: var(--font-sans);
 }
 .topic-row:hover {
@@ -351,7 +402,7 @@ onBeforeUnmount(() => {
   font-size: 13px;
   font-weight: 600;
   flex-shrink: 0;
-  transition: background .15s;
+  transition: background 0.15s;
 }
 .emoji-active {
   background: var(--blue-2);
@@ -389,7 +440,7 @@ onBeforeUnmount(() => {
   height: 100%;
   background: var(--blue);
   border-radius: 999px;
-  transition: width .4s;
+  transition: width 0.4s;
 }
 .fill-active {
   background: var(--blue-2);
@@ -410,7 +461,7 @@ onBeforeUnmount(() => {
   font-weight: 500;
   font-family: var(--font-sans);
   cursor: pointer;
-  transition: all .15s;
+  transition: all 0.15s;
   margin-top: 2px;
 }
 .expand-btn:hover {
@@ -436,7 +487,7 @@ onBeforeUnmount(() => {
   cursor: pointer;
   text-align: left;
   font-family: var(--font-sans);
-  transition: background .15s;
+  transition: background 0.15s;
 }
 .recommend-row:hover {
   background: var(--bg-3);
@@ -508,13 +559,15 @@ onBeforeUnmount(() => {
   gap: 8px;
   z-index: 999;
   white-space: nowrap;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
   font-family: var(--font-sans);
 }
 
 .toast-enter-active,
 .toast-leave-active {
-  transition: opacity .2s ease, transform .2s ease;
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s ease;
 }
 .toast-enter-from,
 .toast-leave-to {
@@ -536,7 +589,7 @@ onBeforeUnmount(() => {
   background: var(--blue-tint);
   border: 1px solid var(--blue-line);
   border-radius: 10px;
-  transition: background .3s;
+  transition: background 0.3s;
 }
 
 .streak-header {
@@ -579,7 +632,9 @@ onBeforeUnmount(() => {
   flex: 1;
   height: 12px;
   border-radius: 2px;
-  transition: background .3s, opacity .3s;
+  transition:
+    background 0.3s,
+    opacity 0.3s;
   cursor: default;
 }
 

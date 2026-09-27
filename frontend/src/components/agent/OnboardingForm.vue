@@ -36,7 +36,13 @@
       </label>
       <label class="field">
         <span>每日分钟</span>
-        <BaseInput v-model="form.daily_minutes" name="daily_minutes" type="number" min="5" max="240" />
+        <BaseInput
+          v-model="form.daily_minutes"
+          name="daily_minutes"
+          type="number"
+          min="5"
+          max="240"
+        />
       </label>
       <label class="field">
         <span>目标日期</span>
@@ -70,19 +76,22 @@ import type { OnboardingInput, OutcomeType } from '../../types/learningAgent'
 import BaseButton from '../ui/BaseButton.vue'
 import BaseInput from '../ui/BaseInput.vue'
 
-const props = withDefaults(defineProps<{
-  topic: string
-  sessionId: string
-  busy?: boolean
-  defaultTimezone?: string
-  error?: string
-  mode?: 'new-topic' | 'existing-topic'
-}>(), {
-  busy: false,
-  defaultTimezone: '',
-  error: '',
-  mode: 'new-topic',
-})
+const props = withDefaults(
+  defineProps<{
+    topic: string
+    sessionId: string
+    busy?: boolean
+    defaultTimezone?: string
+    error?: string
+    mode?: 'new-topic' | 'existing-topic'
+  }>(),
+  {
+    busy: false,
+    defaultTimezone: '',
+    error: '',
+    mode: 'new-topic',
+  },
+)
 
 const emit = defineEmits<{
   submit: [input: OnboardingInput]
@@ -111,10 +120,13 @@ const form = reactive({
   use_diagnostic: true,
 })
 
-watch(() => props.topic, (topic) => {
-  form.topic = topic
-  form.goal = `系统掌握${topic}`
-})
+watch(
+  () => props.topic,
+  (topic) => {
+    form.topic = topic
+    form.goal = `系统掌握${topic}`
+  },
+)
 
 function submit() {
   emit('submit', {
@@ -139,23 +151,108 @@ function submit() {
   padding: 18px;
   color: var(--ink);
 }
-.tool-heading { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; }
-.tool-kicker { margin: 0 0 4px; color: var(--blue-2); font-size: 11px; font-weight: 700; }
-h3 { margin: 0; font-size: 18px; overflow-wrap: anywhere; }
-.step-badge { flex: 0 0 auto; padding: 4px 8px; border-radius: 6px; background: var(--blue-tint); color: var(--blue-2); font-size: 11px; }
-.form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 16px; }
-.field { display: grid; gap: 6px; min-width: 0; color: var(--ink-2); font-size: 11px; }
-.field-wide { grid-column: 1 / -1; }
-.field :deep(.ui-input), select { width: 100%; min-width: 0; height: 36px; padding: 0 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--ink); font: inherit; font-size: 13px; }
-.diagnostic-toggle { display: inline-flex; align-items: center; gap: 8px; margin-top: 14px; color: var(--ink-2); font-size: 12px; }
-.diagnostic-toggle input { width: 16px; height: 16px; accent-color: var(--blue-2); }
-.form-error { margin: 10px 0 0; color: #b91c1c; font-size: 12px; overflow-wrap: anywhere; }
-.tool-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
-.tool-actions :deep(.ui-button) { min-width: 76px; height: 34px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg-2); color: var(--ink-2); cursor: pointer; }
-.tool-actions :deep(.primary) { border-color: var(--blue-2); background: var(--blue-2); color: white; }
+.tool-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+}
+.tool-kicker {
+  margin: 0 0 4px;
+  color: var(--blue-2);
+  font-size: 11px;
+  font-weight: 700;
+}
+h3 {
+  margin: 0;
+  font-size: 18px;
+  overflow-wrap: anywhere;
+}
+.step-badge {
+  flex: 0 0 auto;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: var(--blue-tint);
+  color: var(--blue-2);
+  font-size: 11px;
+}
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+.field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  color: var(--ink-2);
+  font-size: 11px;
+}
+.field-wide {
+  grid-column: 1 / -1;
+}
+.field :deep(.ui-input),
+select {
+  width: 100%;
+  min-width: 0;
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+}
+.diagnostic-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+  color: var(--ink-2);
+  font-size: 12px;
+}
+.diagnostic-toggle input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--blue-2);
+}
+.form-error {
+  margin: 10px 0 0;
+  color: #b91c1c;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.tool-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 18px;
+}
+.tool-actions :deep(.ui-button) {
+  min-width: 76px;
+  height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg-2);
+  color: var(--ink-2);
+  cursor: pointer;
+}
+.tool-actions :deep(.primary) {
+  border-color: var(--blue-2);
+  background: var(--blue-2);
+  color: white;
+}
 @media (max-width: 640px) {
-  .agent-tool { padding: 14px; }
-  .form-grid { grid-template-columns: minmax(0, 1fr); }
-  .field-wide { grid-column: auto; }
+  .agent-tool {
+    padding: 14px;
+  }
+  .form-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .field-wide {
+    grid-column: auto;
+  }
 }
 </style>

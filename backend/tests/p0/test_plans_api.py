@@ -51,10 +51,39 @@ def create_plan(db_session, user, *, title="Plan"):
     db_session.flush()
     completed_at = datetime.now(timezone.utc)
     items = [
-        StudyPlanItem(plan_id=plan.id, node_id=root.id, scheduled_date=today - timedelta(days=2), day_order=1, estimated_minutes=20, status="completed", completed_at=completed_at),
-        StudyPlanItem(plan_id=plan.id, node_id=child.id, scheduled_date=today - timedelta(days=1), day_order=1, estimated_minutes=10, status="pending"),
-        StudyPlanItem(plan_id=plan.id, node_id=child.id, scheduled_date=today, day_order=1, estimated_minutes=30, status="pending"),
-        StudyPlanItem(plan_id=plan.id, node_id=leaf.id, scheduled_date=today + timedelta(days=1), day_order=1, estimated_minutes=20, status="pending"),
+        StudyPlanItem(
+            plan_id=plan.id,
+            node_id=root.id,
+            scheduled_date=today - timedelta(days=2),
+            day_order=1,
+            estimated_minutes=20,
+            status="completed",
+            completed_at=completed_at,
+        ),
+        StudyPlanItem(
+            plan_id=plan.id,
+            node_id=child.id,
+            scheduled_date=today - timedelta(days=1),
+            day_order=1,
+            estimated_minutes=10,
+            status="pending",
+        ),
+        StudyPlanItem(
+            plan_id=plan.id,
+            node_id=child.id,
+            scheduled_date=today,
+            day_order=1,
+            estimated_minutes=30,
+            status="pending",
+        ),
+        StudyPlanItem(
+            plan_id=plan.id,
+            node_id=leaf.id,
+            scheduled_date=today + timedelta(days=1),
+            day_order=1,
+            estimated_minutes=20,
+            status="pending",
+        ),
     ]
     db_session.add_all(items)
     db_session.commit()

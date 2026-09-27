@@ -1,11 +1,6 @@
 import { ref, shallowRef } from 'vue'
 import { defineStore } from 'pinia'
-import {
-  createMemory,
-  deleteMemory,
-  getMemories,
-  updateMemory,
-} from '../api/memories'
+import { createMemory, deleteMemory, getMemories, updateMemory } from '../api/memories'
 import type { MemoryFilters } from '../api/memories'
 import { parseApiError } from '../api'
 import type { ApiProblem } from '../api'
@@ -56,15 +51,17 @@ export const useMemoriesStore = defineStore('memories', () => {
   function addMemory(input: MemoryInput) {
     return mutate(
       () => createMemory(input),
-      created => { memories.value = [created, ...memories.value] },
+      (created) => {
+        memories.value = [created, ...memories.value]
+      },
     )
   }
 
   function editMemory(memoryId: number, input: MemoryUpdate) {
     return mutate(
       () => updateMemory(memoryId, input),
-      updated => {
-        memories.value = memories.value.map(item => item.id === memoryId ? updated : item)
+      (updated) => {
+        memories.value = memories.value.map((item) => (item.id === memoryId ? updated : item))
       },
     )
   }
@@ -72,7 +69,9 @@ export const useMemoriesStore = defineStore('memories', () => {
   function removeMemory(memoryId: number) {
     return mutate(
       () => deleteMemory(memoryId),
-      () => { memories.value = memories.value.filter(item => item.id !== memoryId) },
+      () => {
+        memories.value = memories.value.filter((item) => item.id !== memoryId)
+      },
     )
   }
 
@@ -82,7 +81,14 @@ export const useMemoriesStore = defineStore('memories', () => {
   }
 
   return {
-    memories, loading, mutating, error,
-    fetchMemories, addMemory, editMemory, removeMemory, clearMemories,
+    memories,
+    loading,
+    mutating,
+    error,
+    fetchMemories,
+    addMemory,
+    editMemory,
+    removeMemory,
+    clearMemories,
   }
 })

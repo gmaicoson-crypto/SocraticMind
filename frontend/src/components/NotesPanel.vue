@@ -1,6 +1,5 @@
 <template>
   <div class="notes-wrap">
-
     <div class="notes-header">
       <div class="notes-header-left">
         <span class="notes-title">笔记与画布</span>
@@ -23,7 +22,6 @@
       <MarkdownEditor v-if="activeTab === 'md'" />
       <CanvasSketch v-else />
     </div>
-
   </div>
 </template>
 
@@ -36,23 +34,35 @@ const CanvasSketch = defineAsyncComponent(() => import('./notes/CanvasSketch.vue
 
 const activeTab = ref<'md' | 'canvas'>('md')
 
-const IconMd = () => h('svg', {
-  width: 13, height: 13, viewBox: '0 0 24 24',
-  fill: 'none', stroke: 'currentColor',
-  'stroke-width': 2,
-}, [
-  h('path', { d: 'M4 6H20M4 12H20M4 18H14' })
-])
+const IconMd = () =>
+  h(
+    'svg',
+    {
+      width: 13,
+      height: 13,
+      viewBox: '0 0 24 24',
+      fill: 'none',
+      stroke: 'currentColor',
+      'stroke-width': 2,
+    },
+    [h('path', { d: 'M4 6H20M4 12H20M4 18H14' })],
+  )
 
-const IconCanvas = () => h('svg', {
-  width: 13, height: 13, viewBox: '0 0 24 24',
-  fill: 'none', stroke: 'currentColor',
-  'stroke-width': 2,
-}, [
-  h('path', { d: 'M3 17L9 11L13 15L21 7' })
-])
+const IconCanvas = () =>
+  h(
+    'svg',
+    {
+      width: 13,
+      height: 13,
+      viewBox: '0 0 24 24',
+      fill: 'none',
+      stroke: 'currentColor',
+      'stroke-width': 2,
+    },
+    [h('path', { d: 'M3 17L9 11L13 15L21 7' })],
+  )
 
-const tabs: Array<{ key: 'md' | 'canvas', label: string, icon: any }> = [
+const tabs: Array<{ key: 'md' | 'canvas'; label: string; icon: any }> = [
   { key: 'md', label: 'Markdown 笔记', icon: IconMd },
   { key: 'canvas', label: '画布草图', icon: IconCanvas },
 ]
@@ -111,7 +121,7 @@ const tabs: Array<{ key: 'md' | 'canvas', label: string, icon: any }> = [
   border-radius: 7px;
   cursor: pointer;
   font-family: var(--font-sans);
-  transition: all .15s;
+  transition: all 0.15s;
 }
 
 .tab-btn:hover {

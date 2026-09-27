@@ -40,8 +40,12 @@
           <div
             class="weekly-day-bar"
             :style="{
-              height: day.count > 0 ? Math.min(day.count / maxWeekCount * 100, 100) + '%' : '4px',
-              background: day.isToday ? 'var(--blue-2)' : day.count > 0 ? 'var(--blue)' : 'var(--bg-3)',
+              height: day.count > 0 ? Math.min((day.count / maxWeekCount) * 100, 100) + '%' : '4px',
+              background: day.isToday
+                ? 'var(--blue-2)'
+                : day.count > 0
+                  ? 'var(--blue)'
+                  : 'var(--bg-3)',
             }"
           />
         </div>
@@ -73,7 +77,7 @@ const props = defineProps<{
 const weekDayLabels = ['一', '二', '三', '四', '五', '六', '日']
 
 const weekDays = computed(() => {
-  const heatmapMap = Object.fromEntries(props.heatmap.map(h => [h.date, h.count]))
+  const heatmapMap = Object.fromEntries(props.heatmap.map((h) => [h.date, h.count]))
   const today = new Date()
   const weekday = today.getDay() === 0 ? 6 : today.getDay() - 1
   return Array.from({ length: 7 }, (_, i) => {
@@ -89,7 +93,7 @@ const weekDays = computed(() => {
   })
 })
 
-const maxWeekCount = computed(() => Math.max(...weekDays.value.map(d => d.count), 1))
+const maxWeekCount = computed(() => Math.max(...weekDays.value.map((d) => d.count), 1))
 </script>
 
 <style scoped>
@@ -172,7 +176,7 @@ const maxWeekCount = computed(() => Math.max(...weekDays.value.map(d => d.count)
   width: 100%;
   min-height: 4px;
   border-radius: 3px 3px 0 0;
-  transition: height .4s ease;
+  transition: height 0.4s ease;
 }
 .weekly-day-label {
   font-size: 9px;

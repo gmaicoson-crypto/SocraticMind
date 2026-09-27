@@ -1,10 +1,5 @@
 import api from './index'
-import type {
-  Memory,
-  MemoryInput,
-  MemoryKind,
-  MemoryUpdate,
-} from '../types/learningAgent'
+import type { Memory, MemoryInput, MemoryKind, MemoryUpdate } from '../types/learningAgent'
 
 export interface MemoryFilters {
   topic_id?: number

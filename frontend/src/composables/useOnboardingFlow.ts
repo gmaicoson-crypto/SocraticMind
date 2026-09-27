@@ -1,5 +1,10 @@
 import { useAgentStore } from '../stores/agent'
-import type { AgentRun, AgentRunUpdate, OnboardingInput, TopicPlanInput } from '../types/learningAgent'
+import type {
+  AgentRun,
+  AgentRunUpdate,
+  OnboardingInput,
+  TopicPlanInput,
+} from '../types/learningAgent'
 import { useAgentRun } from './useAgentRun'
 
 interface OnboardingFlowOptions {

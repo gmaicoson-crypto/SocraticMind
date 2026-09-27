@@ -9,11 +9,7 @@ from models.enums import MemoryKind, MemorySource
 def _validate_topic_scope(db: Session, user_id: int, topic_id: int | None) -> None:
     if topic_id is None:
         return
-    exists = (
-        db.query(Topic.id)
-        .filter(Topic.id == topic_id, Topic.user_id == user_id)
-        .first()
-    )
+    exists = db.query(Topic.id).filter(Topic.id == topic_id, Topic.user_id == user_id).first()
     if exists is None:
         raise ApiError(status_code=404, code="TOPIC_NOT_FOUND", message="主题不存在")
 
@@ -155,8 +151,7 @@ def upsert_assessment_memories(
     else:
         effective_weaknesses = weaknesses or [f"“{node.label}”的评估尚未通过"]
         entries.extend(
-            (MemoryKind.WEAKNESS.value, str(content)[:300])
-            for content in effective_weaknesses
+            (MemoryKind.WEAKNESS.value, str(content)[:300]) for content in effective_weaknesses
         )
 
     memories: list[LearnerMemory] = []

@@ -21,21 +21,24 @@ export function useSessionTopicChoice(options: SessionTopicChoiceOptions) {
 
   function prepareTopicChoice(session: DialogueSession, previous?: DialogueSession) {
     if (previous?.topicId == null) return
-    const title = previous.topicTitle
-      ?? topics().find(topic => Number(topic.id) === previous.topicId)?.title
-      ?? previous.name
+    const title =
+      previous.topicTitle ??
+      topics().find((topic) => Number(topic.id) === previous.topicId)?.title ??
+      previous.name
     session.awaitingTopicChoice = true
     session.suggestedTopicId = previous.topicId
     session.suggestedTopicTitle = title
-    session.messages = [{
-      role: 'ai',
-      text: `你刚才学习的是「**${title}**」。这个新对话要继续该主题，还是创建一个全新的学习主题呢？`,
-      time: now(),
-      choices: [
-        { label: 'A', text: `继续「${title}」` },
-        { label: 'B', text: '创建新的主题对话' },
-      ],
-    }]
+    session.messages = [
+      {
+        role: 'ai',
+        text: `你刚才学习的是「**${title}**」。这个新对话要继续该主题，还是创建一个全新的学习主题呢？`,
+        time: now(),
+        choices: [
+          { label: 'A', text: `继续「${title}」` },
+          { label: 'B', text: '创建新的主题对话' },
+        ],
+      },
+    ]
   }
 
   async function handlePendingTopicChoice(value: string): Promise<boolean> {
@@ -46,10 +49,14 @@ export function useSessionTopicChoice(options: SessionTopicChoiceOptions) {
     const chooseNew = /^B[.、\s]/i.test(value) || isNewTopicIntent(value)
 
     if (continuePrevious) {
-      const topic = topics().find(item => Number(item.id) === session.suggestedTopicId)
+      const topic = topics().find((item) => Number(item.id) === session.suggestedTopicId)
       if (!topic) {
         clearTopicChoice(session)
-        pushMessage({ role: 'ai', text: '刚才的主题已不存在。请告诉我你想学习的新主题。', time: now() })
+        pushMessage({
+          role: 'ai',
+          text: '刚才的主题已不存在。请告诉我你想学习的新主题。',
+          time: now(),
+        })
         return true
       }
 

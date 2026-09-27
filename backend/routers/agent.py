@@ -85,7 +85,7 @@ def create_assessment(
             request_id=request.request_id,
             session_id=request.session_id,
             generator=generator,
-        )
+        ),
     )
 
 
@@ -138,7 +138,7 @@ def create_onboarding_run(
             user_id=current_user.id,
             request=request,
             generator=generator,
-        )
+        ),
     )
 
 
@@ -162,7 +162,7 @@ def create_topic_plan_run(
             topic_id=topic_id,
             request=request,
             generator=generator,
-        )
+        ),
     )
 
 
@@ -184,11 +184,7 @@ def answer_run(
     generator: Any = Depends(get_agent_generator),
 ):
     run = get_run(db, user_id=current_user.id, run_id=run_id)
-    submit = (
-        submit_assessment_answer
-        if run.run_type == "assessment"
-        else submit_answer
-    )
+    submit = submit_assessment_answer if run.run_type == "assessment" else submit_answer
     completed = submit(
         db,
         user_id=current_user.id,
@@ -225,7 +221,7 @@ def patch_run(
             run_id=run_id,
             updates=request.model_dump(mode="json", exclude_unset=True),
             generator=generator,
-        )
+        ),
     )
 
 
@@ -243,7 +239,7 @@ def confirm_agent_run(
             user_id=current_user.id,
             run_id=run_id,
             request_id=request.request_id,
-        )
+        ),
     )
 
 
@@ -255,9 +251,7 @@ def cancel_agent_run(
 ):
     run = get_run(db, user_id=current_user.id, run_id=run_id)
     cancel = cancel_assessment if run.run_type == "assessment" else cancel_run
-    return serialize_and_sync(
-        db, cancel(db, user_id=current_user.id, run_id=run_id)
-    )
+    return serialize_and_sync(db, cancel(db, user_id=current_user.id, run_id=run_id))
 
 
 @router.post("/runs/{run_id}/retry", response_model=AgentRunResponse)
@@ -276,5 +270,5 @@ def retry_agent_run(
             user_id=current_user.id,
             run_id=run_id,
             generator=generator,
-        )
+        ),
     )

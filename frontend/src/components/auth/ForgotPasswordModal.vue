@@ -1,83 +1,89 @@
 <template>
   <BaseModal :model-value="show" :close-disabled="submitting" @close="onClose">
-      <div class="fp-overlay" @click.self="onClose">
-        <div class="fp-modal">
-          <div class="fp-header">
-            <div class="fp-title">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-              </svg>
-              重置密码
-            </div>
-            <button class="fp-close ui-modal-close" @click="onClose">✕</button>
+    <div class="fp-overlay" @click.self="onClose">
+      <div class="fp-modal">
+        <div class="fp-header">
+          <div class="fp-title">
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <rect x="3" y="11" width="18" height="11" rx="2" />
+              <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+            </svg>
+            重置密码
+          </div>
+          <button class="fp-close ui-modal-close" @click="onClose">✕</button>
+        </div>
+
+        <div class="fp-body">
+          <div class="fp-step-hint">输入注册邮箱 → 接收验证码 → 设置新密码</div>
+
+          <div class="fp-field ui-field">
+            <label>邮箱地址</label>
+            <input
+              v-model="email"
+              type="email"
+              placeholder="your@email.com"
+              :disabled="submitting"
+            />
           </div>
 
-          <div class="fp-body">
-            <div class="fp-step-hint">输入注册邮箱 → 接收验证码 → 设置新密码</div>
-
-            <div class="fp-field ui-field">
-              <label>邮箱地址</label>
+          <div class="fp-field ui-field">
+            <label>验证码</label>
+            <div class="fp-code-row">
               <input
-                v-model="email"
-                type="email"
-                placeholder="your@email.com"
+                v-model="code"
+                type="text"
+                inputmode="numeric"
+                maxlength="6"
+                placeholder="6 位数字"
                 :disabled="submitting"
               />
+              <button class="fp-send-btn" :disabled="!canSend || sending" @click="onSendCode">
+                <span v-if="sending">发送中…</span>
+                <span v-else-if="cooldown > 0">{{ cooldown }}s 后重发</span>
+                <span v-else>发送验证码</span>
+              </button>
             </div>
-
-            <div class="fp-field ui-field">
-              <label>验证码</label>
-              <div class="fp-code-row">
-                <input
-                  v-model="code"
-                  type="text"
-                  inputmode="numeric"
-                  maxlength="6"
-                  placeholder="6 位数字"
-                  :disabled="submitting"
-                />
-                <button
-                  class="fp-send-btn"
-                  :disabled="!canSend || sending"
-                  @click="onSendCode"
-                >
-                  <span v-if="sending">发送中…</span>
-                  <span v-else-if="cooldown > 0">{{ cooldown }}s 后重发</span>
-                  <span v-else>发送验证码</span>
-                </button>
-              </div>
-            </div>
-
-            <div class="fp-field ui-field">
-              <label>新密码</label>
-              <input
-                v-model="newPassword"
-                type="password"
-                placeholder="至少 8 位，包含字母和数字"
-                :disabled="submitting"
-              />
-            </div>
-
-            <div class="fp-field ui-field">
-              <label>确认新密码</label>
-              <input
-                v-model="confirm"
-                type="password"
-                placeholder="再次输入新密码"
-                :disabled="submitting"
-              />
-            </div>
-
-            <div v-if="errorMsg" class="fp-error ui-error-message">{{ errorMsg }}</div>
-            <div v-if="successMsg" class="fp-success">{{ successMsg }}</div>
-
-            <button class="fp-submit" :disabled="!canSubmit || submitting" @click="onSubmit">
-              <span v-if="submitting">提交中…</span>
-              <span v-else>重置密码</span>
-            </button>
           </div>
+
+          <div class="fp-field ui-field">
+            <label>新密码</label>
+            <input
+              v-model="newPassword"
+              type="password"
+              placeholder="至少 8 位，包含字母和数字"
+              :disabled="submitting"
+            />
+          </div>
+
+          <div class="fp-field ui-field">
+            <label>确认新密码</label>
+            <input
+              v-model="confirm"
+              type="password"
+              placeholder="再次输入新密码"
+              :disabled="submitting"
+            />
+          </div>
+
+          <div v-if="errorMsg" class="fp-error ui-error-message">{{ errorMsg }}</div>
+          <div v-if="successMsg" class="fp-success">{{ successMsg }}</div>
+
+          <button class="fp-submit" :disabled="!canSubmit || submitting" @click="onSubmit">
+            <span v-if="submitting">提交中…</span>
+            <span v-else>重置密码</span>
+          </button>
         </div>
       </div>
+    </div>
   </BaseModal>
 </template>
 
@@ -113,19 +119,25 @@ function startCooldown() {
   }, 1000)
 }
 
-const emailValid = computed(() => /^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$/.test(email.value.trim()))
+const emailValid = computed(() =>
+  /^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$/.test(email.value.trim()),
+)
 const canSend = computed(() => emailValid.value && cooldown.value === 0 && !sending.value)
-const canSubmit = computed(() =>
-  emailValid.value &&
-  code.value.trim().length === 6 &&
-  newPassword.value.length >= 8 &&
-  newPassword.value === confirm.value
+const canSubmit = computed(
+  () =>
+    emailValid.value &&
+    code.value.trim().length === 6 &&
+    newPassword.value.length >= 8 &&
+    newPassword.value === confirm.value,
 )
 
 async function onSendCode() {
   errorMsg.value = ''
   successMsg.value = ''
-  if (!emailValid.value) { errorMsg.value = '邮箱格式不正确'; return }
+  if (!emailValid.value) {
+    errorMsg.value = '邮箱格式不正确'
+    return
+  }
   sending.value = true
   try {
     await sendVerificationCode(email.value.trim().toLowerCase(), 'reset')
@@ -141,7 +153,10 @@ async function onSendCode() {
 async function onSubmit() {
   errorMsg.value = ''
   successMsg.value = ''
-  if (newPassword.value !== confirm.value) { errorMsg.value = '两次密码不一致'; return }
+  if (newPassword.value !== confirm.value) {
+    errorMsg.value = '两次密码不一致'
+    return
+  }
   if (!/[A-Za-z]/.test(newPassword.value) || !/\d/.test(newPassword.value)) {
     errorMsg.value = '密码必须同时包含字母和数字'
     return
@@ -168,13 +183,16 @@ function onClose() {
   emit('close')
 }
 
-watch(() => props.show, (v) => {
-  if (!v && cooldownTimer !== null) {
-    clearInterval(cooldownTimer)
-    cooldownTimer = null
-    cooldown.value = 0
-  }
-})
+watch(
+  () => props.show,
+  (v) => {
+    if (!v && cooldownTimer !== null) {
+      clearInterval(cooldownTimer)
+      cooldownTimer = null
+      cooldown.value = 0
+    }
+  },
+)
 
 onBeforeUnmount(() => {
   if (cooldownTimer !== null) clearInterval(cooldownTimer)
@@ -186,7 +204,7 @@ onBeforeUnmount(() => {
   position: fixed;
   inset: 0;
   z-index: 340;
-  background: rgba(0,0,0,0.36);
+  background: rgba(0, 0, 0, 0.36);
   backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
@@ -200,7 +218,7 @@ onBeforeUnmount(() => {
   width: min(440px, 100%);
   display: flex;
   flex-direction: column;
-  box-shadow: 0 12px 48px rgba(0,0,0,0.18);
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.18);
   overflow: hidden;
 }
 .fp-header {
@@ -246,7 +264,9 @@ onBeforeUnmount(() => {
   font-size: 13px;
   font-family: var(--font-sans);
   outline: none;
-  transition: border-color .15s, box-shadow .15s;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
 }
 .fp-field input:focus {
   border-color: var(--blue);
@@ -274,7 +294,7 @@ onBeforeUnmount(() => {
   cursor: pointer;
   font-family: var(--font-sans);
   white-space: nowrap;
-  transition: all .15s;
+  transition: all 0.15s;
 }
 .fp-send-btn:hover:not(:disabled) {
   background: var(--blue-tint);
@@ -286,11 +306,11 @@ onBeforeUnmount(() => {
 
 .fp-success {
   padding: 8px 12px;
-  background: #E8F5EE;
-  border: 1px solid #B6D9C6;
+  background: #e8f5ee;
+  border: 1px solid #b6d9c6;
   border-radius: 8px;
   font-size: 12px;
-  color: #1F6F4A;
+  color: #1f6f4a;
 }
 
 .fp-submit {
@@ -313,10 +333,12 @@ onBeforeUnmount(() => {
   cursor: not-allowed;
 }
 
-.fade-enter-active, .fade-leave-active {
-  transition: opacity .2s ease;
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.2s ease;
 }
-.fade-enter-from, .fade-leave-to {
+.fade-enter-from,
+.fade-leave-to {
   opacity: 0;
 }
 </style>

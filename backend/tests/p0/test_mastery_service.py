@@ -23,11 +23,27 @@ def create_graph_with_plan(db_session, user):
     db_session.flush()
     nodes = {
         "root": Node(topic_id=topic.id, node_key="root", label="Root", state="mastered"),
-        "a": Node(topic_id=topic.id, node_key="a", label="A", state="available", parent_keys="root"),
+        "a": Node(
+            topic_id=topic.id, node_key="a", label="A", state="available", parent_keys="root"
+        ),
         "b": Node(topic_id=topic.id, node_key="b", label="B", state="mastered", parent_keys="root"),
-        "child": Node(topic_id=topic.id, node_key="child", label="Child", state="locked", parent_keys="a,b"),
-        "mastered-child": Node(topic_id=topic.id, node_key="mastered-child", label="Mastered child", state="mastered", parent_keys="a"),
-        "leaf": Node(topic_id=topic.id, node_key="leaf", label="Leaf", state="available", parent_keys="mastered-child"),
+        "child": Node(
+            topic_id=topic.id, node_key="child", label="Child", state="locked", parent_keys="a,b"
+        ),
+        "mastered-child": Node(
+            topic_id=topic.id,
+            node_key="mastered-child",
+            label="Mastered child",
+            state="mastered",
+            parent_keys="a",
+        ),
+        "leaf": Node(
+            topic_id=topic.id,
+            node_key="leaf",
+            label="Leaf",
+            state="available",
+            parent_keys="mastered-child",
+        ),
     }
     db_session.add_all(nodes.values())
     plan = StudyPlan(
@@ -57,9 +73,7 @@ def create_graph_with_plan(db_session, user):
     return topic, nodes, item
 
 
-def test_self_reported_mastery_completes_plan_and_unlocks_all_parent_child(
-    db_session, auth_user
-):
+def test_self_reported_mastery_completes_plan_and_unlocks_all_parent_child(db_session, auth_user):
     _topic, nodes, item = create_graph_with_plan(db_session, auth_user)
 
     first = record_mastery(

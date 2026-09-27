@@ -27,7 +27,9 @@ describe('Home plan tab', () => {
         },
       },
     })
-    const tab = wrapper.findAll('.right-tab').find(candidate => candidate.text().includes('今日计划'))
+    const tab = wrapper
+      .findAll('.right-tab')
+      .find((candidate) => candidate.text().includes('今日计划'))
     expect(tab).toBeTruthy()
     await tab!.trigger('click')
     expect(tab!.classes()).toContain('active')

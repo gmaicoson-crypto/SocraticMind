@@ -13,11 +13,7 @@ export async function getTopicPlan(topicId: number) {
   return response.data as StudyPlan
 }
 
-export async function replanStudyPlan(
-  planId: number,
-  requestId: string,
-  timezone?: string,
-) {
+export async function replanStudyPlan(planId: number, requestId: string, timezone?: string) {
   const response = await api.post(`/api/plans/${planId}/replan`, {
     request_id: requestId,
     ...(timezone ? { timezone } : {}),

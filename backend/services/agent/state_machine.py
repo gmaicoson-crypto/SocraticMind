@@ -44,9 +44,7 @@ ALLOWED_TRANSITIONS: dict[AgentRunStatus, set[AgentRunStatus]] = {
 }
 
 
-def transition(
-    current: AgentRunStatus | str, target: AgentRunStatus | str
-) -> AgentRunStatus:
+def transition(current: AgentRunStatus | str, target: AgentRunStatus | str) -> AgentRunStatus:
     current_status = AgentRunStatus(current)
     target_status = AgentRunStatus(target)
     if target_status not in ALLOWED_TRANSITIONS[current_status]:

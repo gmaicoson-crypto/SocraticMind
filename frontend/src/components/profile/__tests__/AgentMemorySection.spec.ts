@@ -8,22 +8,38 @@ import { useLearningStore } from '../../../stores/learning'
 import type { Memory } from '../../../types/learningAgent'
 
 vi.mock('../../../api/memories', () => ({
-  createMemory: vi.fn(), deleteMemory: vi.fn(), getMemories: vi.fn(), updateMemory: vi.fn(),
+  createMemory: vi.fn(),
+  deleteMemory: vi.fn(),
+  getMemories: vi.fn(),
+  updateMemory: vi.fn(),
 }))
 
 const preference: Memory = {
-  id: 1, topic_id: 2, kind: 'preference', content: '先看示例再解释概念', source: 'user',
-  confidence: null, created_at: '2026-09-07T00:00:00Z', updated_at: '2026-09-07T00:00:00Z',
+  id: 1,
+  topic_id: 2,
+  kind: 'preference',
+  content: '先看示例再解释概念',
+  source: 'user',
+  confidence: null,
+  created_at: '2026-09-07T00:00:00Z',
+  updated_at: '2026-09-07T00:00:00Z',
 }
 const weakness: Memory = {
-  id: 2, topic_id: null, kind: 'weakness', content: '边界条件容易遗漏', source: 'assessment',
-  confidence: 0.8, created_at: '2026-09-07T00:00:00Z', updated_at: '2026-09-07T00:00:00Z',
+  id: 2,
+  topic_id: null,
+  kind: 'weakness',
+  content: '边界条件容易遗漏',
+  source: 'assessment',
+  confidence: 0.8,
+  created_at: '2026-09-07T00:00:00Z',
+  updated_at: '2026-09-07T00:00:00Z',
 }
 
 describe('AgentMemorySection', () => {
   beforeEach(() => {
     Object.defineProperty(window, 'matchMedia', {
-      configurable: true, value: vi.fn().mockReturnValue({ matches: false }),
+      configurable: true,
+      value: vi.fn().mockReturnValue({ matches: false }),
     })
     document.body.innerHTML = ''
     const pinia = createPinia()
@@ -52,7 +68,11 @@ describe('AgentMemorySection', () => {
 
   it('creates and edits memory through the shared editor modal', async () => {
     vi.mocked(memoriesApi.createMemory).mockResolvedValue({
-      ...preference, id: 3, topic_id: null, kind: 'goal', content: '完成项目',
+      ...preference,
+      id: 3,
+      topic_id: null,
+      kind: 'goal',
+      content: '完成项目',
     })
     vi.mocked(memoriesApi.updateMemory).mockResolvedValue({ ...preference, content: '优先看代码' })
     const wrapper = mount(AgentMemorySection, { attachTo: document.body })
@@ -63,7 +83,9 @@ describe('AgentMemorySection', () => {
     clickDialogButton('保存')
     await flushPromises()
     expect(memoriesApi.createMemory).toHaveBeenCalledWith({
-      kind: 'goal', topic_id: null, content: '完成项目',
+      kind: 'goal',
+      topic_id: null,
+      content: '完成项目',
     })
     expect(wrapper.text()).toContain('完成项目')
 
@@ -71,14 +93,19 @@ describe('AgentMemorySection', () => {
     await setEditorContent('优先看代码')
     clickDialogButton('保存')
     await flushPromises()
-    expect(memoriesApi.updateMemory).toHaveBeenCalledWith(3, expect.objectContaining({ content: '优先看代码' }))
+    expect(memoriesApi.updateMemory).toHaveBeenCalledWith(
+      3,
+      expect.objectContaining({ content: '优先看代码' }),
+    )
   })
 
   it('deletes only after confirmation', async () => {
     vi.mocked(memoriesApi.deleteMemory).mockResolvedValue(undefined)
     const wrapper = mount(AgentMemorySection)
     await flushPromises()
-    const deleteButton = wrapper.findAll('.memory-actions button').find(button => button.attributes('title') === '删除记忆')
+    const deleteButton = wrapper
+      .findAll('.memory-actions button')
+      .find((button) => button.attributes('title') === '删除记忆')
     await deleteButton!.trigger('click')
 
     await wrapper.findComponent(ConfirmDialog).vm.$emit('confirm')
@@ -98,8 +125,9 @@ async function setEditorContent(value: string) {
 }
 
 function clickDialogButton(label: string) {
-  const button = [...document.querySelectorAll<HTMLButtonElement>('.memory-dialog button')]
-    .find(candidate => candidate.textContent?.trim() === label)
+  const button = [...document.querySelectorAll<HTMLButtonElement>('.memory-dialog button')].find(
+    (candidate) => candidate.textContent?.trim() === label,
+  )
   if (!button) throw new Error(`${label} button not found`)
   button.click()
 }

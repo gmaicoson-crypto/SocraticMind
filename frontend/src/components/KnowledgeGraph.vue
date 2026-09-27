@@ -1,6 +1,5 @@
 <template>
   <div ref="containerRef" class="graph-wrap">
-
     <div class="graph-header">
       <div>
         <div class="graph-label">Knowledge Graph</div>
@@ -16,15 +15,16 @@
       />
     </div>
 
-    <svg
-      :viewBox="viewBox"
-      preserveAspectRatio="xMidYMid meet"
-      class="graph-svg"
-      ref="svgRef"
-    >
+    <svg :viewBox="viewBox" preserveAspectRatio="xMidYMid meet" class="graph-svg" ref="svgRef">
       <defs>
         <pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse">
-          <path d="M 32 0 L 0 0 0 32" fill="none" stroke="var(--line)" stroke-width="0.5" opacity="0.5" />
+          <path
+            d="M 32 0 L 0 0 0 32"
+            fill="none"
+            stroke="var(--line)"
+            stroke-width="0.5"
+            opacity="0.5"
+          />
         </pattern>
         <radialGradient id="masteredGlow" cx="50%" cy="50%" r="50%">
           <stop offset="0%" stop-color="oklch(0.72 0.085 235 / 0.18)" />
@@ -43,7 +43,8 @@
       <circle
         v-for="n in masteredNodes"
         :key="`glow-${n.id}`"
-        :cx="n.x" :cy="n.y"
+        :cx="n.x"
+        :cy="n.y"
         r="60"
         fill="url(#masteredGlow)"
       />
@@ -65,9 +66,18 @@
     </svg>
 
     <div v-if="store.totalCount === 0" class="empty-graph">
-      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--ink-3)" stroke-width="1">
-        <circle cx="12" cy="5" r="2"/><circle cx="5" cy="19" r="2"/><circle cx="19" cy="19" r="2"/>
-        <path d="M12 7v4M12 11L5 17M12 11L19 17"/>
+      <svg
+        width="48"
+        height="48"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="var(--ink-3)"
+        stroke-width="1"
+      >
+        <circle cx="12" cy="5" r="2" />
+        <circle cx="5" cy="19" r="2" />
+        <circle cx="19" cy="19" r="2" />
+        <path d="M12 7v4M12 11L5 17M12 11L19 17" />
       </svg>
       <div class="empty-title">暂无知识图谱</div>
       <div class="empty-sub">在左侧对话框告诉 AI 你想学什么</div>
@@ -76,29 +86,48 @@
     <canvas ref="confettiCanvasRef" class="confetti-canvas" />
 
     <Transition name="fade">
-      <div v-if="showScaleHint" class="scale-hint">
-        {{ Math.round(scale * 100) }}%
-      </div>
+      <div v-if="showScaleHint" class="scale-hint">{{ Math.round(scale * 100) }}%</div>
     </Transition>
 
     <div class="controls">
       <button class="ctrl-btn" title="居中" @click="resetView">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="12" cy="12" r="3"/><path d="M3 12h3M18 12h3M12 3v3M12 18v3"/>
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+        >
+          <circle cx="12" cy="12" r="3" />
+          <path d="M3 12h3M18 12h3M12 3v3M12 18v3" />
         </svg>
       </button>
       <button class="ctrl-btn" title="放大" @click="zoomIn">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M12 5v14M5 12h14"/>
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+        >
+          <path d="M12 5v14M5 12h14" />
         </svg>
       </button>
       <button class="ctrl-btn" title="缩小" @click="zoomOut">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M5 12h14"/>
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+        >
+          <path d="M5 12h14" />
         </svg>
       </button>
     </div>
-
   </div>
 </template>
 
@@ -120,29 +149,30 @@ const confettiCanvasRef = ref<HTMLCanvasElement | null>(null)
 let VW = 900
 let VH = 720
 
-const { scale, panX, panY, showScaleHint, zoomIn, zoomOut, resetView } = useGraphViewport(
-  svgRef,
-  { width: () => VW, height: () => VH },
-)
-
-watch(() => store.nodes, (nodes) => {
-  if (nodes.length === 0) {
-    VW = 900
-    VH = 720
-    panX.value = 0
-    panY.value = 0
-    return
-  }
-  const maxX = Math.max(...nodes.map(n => n.x)) + 120
-  const maxY = Math.max(...nodes.map(n => n.y)) + 120
-  VW = Math.max(1200, maxX)
-  VH = Math.max(720, maxY)
-  nextTick(() => resetView())
+const { scale, panX, panY, showScaleHint, zoomIn, zoomOut, resetView } = useGraphViewport(svgRef, {
+  width: () => VW,
+  height: () => VH,
 })
 
-const viewBoxParts = computed(() =>
-  viewBox.value.split(' ').map(Number)
+watch(
+  () => store.nodes,
+  (nodes) => {
+    if (nodes.length === 0) {
+      VW = 900
+      VH = 720
+      panX.value = 0
+      panY.value = 0
+      return
+    }
+    const maxX = Math.max(...nodes.map((n) => n.x)) + 120
+    const maxY = Math.max(...nodes.map((n) => n.y)) + 120
+    VW = Math.max(1200, maxX)
+    VH = Math.max(720, maxY)
+    nextTick(() => resetView())
+  },
 )
+
+const viewBoxParts = computed(() => viewBox.value.split(' ').map(Number))
 
 const viewBox = computed(() => {
   const w = VW / scale.value
@@ -151,8 +181,10 @@ const viewBox = computed(() => {
   let offsetX = 0
   let offsetY = 0
   if (store.nodes.length > 0) {
-
-    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity
+    let minX = Infinity,
+      maxX = -Infinity,
+      minY = Infinity,
+      maxY = -Infinity
     for (const n of store.nodes) {
       if (n.x < minX) minX = n.x
       if (n.x > maxX) maxX = n.x
@@ -169,18 +201,14 @@ const viewBox = computed(() => {
 })
 
 const currentTopicTitle = computed(() => {
-  const t = store.topics.find(t => t.id === store.activeTopicId)
+  const t = store.topics.find((t) => t.id === store.activeTopicId)
   return t?.title ?? 'Knowledge Graph'
 })
 
 let confettiInstance: any = null
 
-const nodeMap = computed(() =>
-  Object.fromEntries(store.nodes.map(n => [n.id, n]))
-)
-const masteredNodes = computed(() =>
-  store.nodes.filter(n => n.state === 'mastered')
-)
+const nodeMap = computed(() => Object.fromEntries(store.nodes.map((n) => [n.id, n])))
+const masteredNodes = computed(() => store.nodes.filter((n) => n.state === 'mastered'))
 
 function getNodeScreenPos(node: KNode) {
   if (!containerRef.value || !svgRef.value) return { x: 0.5, y: 0.5 }
@@ -263,7 +291,6 @@ onMounted(() => {
       pendingConfettiTimers.push(t)
     })
   }, 600)
-
 })
 
 let initialConfettiTimer: ReturnType<typeof setTimeout> | null = null
@@ -275,31 +302,36 @@ onBeforeUnmount(() => {
 })
 
 watch(
-  () => store.nodes.filter(n => n.state === 'mastered').map(n => n.id),
+  () => store.nodes.filter((n) => n.state === 'mastered').map((n) => n.id),
   (newIds, oldIds) => {
     const oldSet = new Set(oldIds)
     for (const id of newIds) {
       if (oldSet.has(id)) continue
-      const node = store.nodes.find(n => n.id === id)
+      const node = store.nodes.find((n) => n.id === id)
       if (node) setTimeout(() => fireConfettiAt(node), 50)
     }
-  }
+  },
 )
 
-watch(() => store.activeTopicId, () => resetView())
+watch(
+  () => store.activeTopicId,
+  () => resetView(),
+)
 
-watch(() => store.lastMasteredId, (id) => {
-  if (!id) return
-  const node = store.nodes.find(n => n.id === id)
-  if (node) {
-    fireConfettiAt(node)
-    const allMastered = store.nodes.length > 0 &&
-      store.nodes.every(n => n.state === 'mastered')
-    if (allMastered) {
-      setTimeout(() => fireCelebration(), 400)
+watch(
+  () => store.lastMasteredId,
+  (id) => {
+    if (!id) return
+    const node = store.nodes.find((n) => n.id === id)
+    if (node) {
+      fireConfettiAt(node)
+      const allMastered = store.nodes.length > 0 && store.nodes.every((n) => n.state === 'mastered')
+      if (allMastered) {
+        setTimeout(() => fireCelebration(), 400)
+      }
     }
-  }
-})
+  },
+)
 
 function handleClick(node: KNode) {
   store.setActiveNode(node)
@@ -314,7 +346,9 @@ function handleClick(node: KNode) {
   border: 1px solid var(--line);
   border-radius: var(--radius);
   overflow: hidden;
-  box-shadow: 0 1px 0 var(--line), 0 6px 20px -8px oklch(0.5 0.04 235 / 0.12);
+  box-shadow:
+    0 1px 0 var(--line),
+    0 6px 20px -8px oklch(0.5 0.04 235 / 0.12);
 }
 
 .graph-header {
@@ -412,7 +446,7 @@ function handleClick(node: KNode) {
 
 .fade-enter-active,
 .fade-leave-active {
-  transition: opacity .2s ease;
+  transition: opacity 0.2s ease;
 }
 .fade-enter-from,
 .fade-leave-to {
