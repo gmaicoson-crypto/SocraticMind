@@ -15,7 +15,7 @@ frontend/.env.local
 **/*.pyd
 backend/.venv/
 backend/venv/
-backend/.ruff_cache/
+**/.ruff_cache/
 backend/.mypy_cache/
 .pytest_cache/
 .coverage

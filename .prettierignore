@@ -1,0 +1,7 @@
+**/node_modules/
+**/dist/
+**/.venv/
+**/venv/
+**/__pycache__/
+backend/uploads/
+frontend/pnpm-lock.yaml
