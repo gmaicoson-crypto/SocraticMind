@@ -11,7 +11,7 @@ def generate_graph(topic: str) -> dict:
     返回格式：{"nodes": [...]}，每个节点包含 key、label、sub、parent_keys 等字段。
     """
     response = get_ai_client().chat.completions.create(
-        model=settings.deepseek_model,
+        model=settings.llm_model,
         messages=[
             {"role": "system", "content": GENERATE_NODES_PROMPT},
             {"role": "user", "content": build_generate_prompt(topic)},

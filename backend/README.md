@@ -1,6 +1,6 @@
 # Backend
 
-SocraticMind 后端是基于 FastAPI、SQLAlchemy 和 DeepSeek/OpenAI 兼容接口构建的 API 服务。它负责用户认证、可恢复 Learning Agent、知识图谱、学习计划、节点评估、学习记忆、AI 对话和学习统计。
+SocraticMind 后端是基于 FastAPI、SQLAlchemy 和 OpenAI 兼容 LLM 接口构建的 API 服务。它负责用户认证、可恢复 Learning Agent、知识图谱、学习计划、节点评估、学习记忆、AI 对话和学习统计。
 
 ## 技术栈
 
@@ -19,7 +19,7 @@ SocraticMind 后端是基于 FastAPI、SQLAlchemy 和 DeepSeek/OpenAI 兼容接�
 
 - Python 3.10 或更高版本
 - 可访问的 MySQL 数据库
-- DeepSeek API Key，或其他兼容 OpenAI Chat Completions 的服务
+- OpenAI Chat Completions 兼容服务的 API Key、地址和模型 ID
 - 可选 SMTP 邮件服务，用于发送注册和找回密码验证码
 
 ## 快速启动
@@ -57,9 +57,9 @@ copy .env.example .env
 根据本地环境修改 `.env`，至少需要配置：
 
 ```env
-DEEPSEEK_API_KEY=your_api_key_here
-DEEPSEEK_BASE_URL=https://api.deepseek.com
-DEEPSEEK_MODEL=deepseek-chat
+LLM_API_KEY=your_api_key_here
+LLM_BASE_URL=https://your-provider.example/v1
+LLM_MODEL=your-model-id
 
 SECRET_KEY=change_me_to_a_random_secret_string
 
@@ -96,9 +96,9 @@ http://127.0.0.1:8000/health
 
 | 变量 | 必填 | 说明 | 示例 |
 | --- | --- | --- | --- |
-| `DEEPSEEK_API_KEY` | 是 | AI 服务 API Key | `sk-...` |
-| `DEEPSEEK_BASE_URL` | 否 | OpenAI 兼容 API 地址 | `https://api.deepseek.com` |
-| `DEEPSEEK_MODEL` | 否 | 聊天模型名称 | `deepseek-chat` |
+| `LLM_API_KEY` | 是 | LLM 服务 API Key | 服务商提供的密钥 |
+| `LLM_BASE_URL` | 是 | OpenAI 兼容 API 地址 | 服务商提供的地址 |
+| `LLM_MODEL` | 是 | 服务商提供的模型 ID | 服务商提供的模型 ID |
 | `SECRET_KEY` | 是 | JWT 签名密钥 | `a-long-random-string` |
 | `DATABASE_URL` | 是 | SQLAlchemy 数据库连接 URL | `mysql+pymysql://root:pass@localhost:3306/socraticmind` |
 | `CORS_ORIGINS` | 否 | 允许访问 API 的前端来源，多个值用逗号分隔 | `http://localhost:5173` |

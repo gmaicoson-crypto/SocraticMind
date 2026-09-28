@@ -158,7 +158,7 @@ def recommend_topics(
 
     try:
         response = get_ai_client().chat.completions.create(
-            model=settings.deepseek_model,
+            model=settings.llm_model,
             messages=[
                 {"role": "system", "content": RECOMMEND_TOPICS_PROMPT},
                 {"role": "user", "content": prompt},

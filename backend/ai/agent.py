@@ -66,7 +66,7 @@ def chat_stream(
     ]
 
     stream = get_ai_client().chat.completions.create(
-        model=settings.deepseek_model,
+        model=settings.llm_model,
         messages=full_messages,
         stream=True,
         max_tokens=4096,

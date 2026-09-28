@@ -331,7 +331,7 @@ def get_suggestions(
 
     try:
         response = get_ai_client().chat.completions.create(
-            model=settings.deepseek_model,
+            model=settings.llm_model,
             messages=[{"role": "user", "content": prompt}],
             max_tokens=200,
             temperature=0.8,

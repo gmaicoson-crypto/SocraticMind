@@ -2,9 +2,9 @@ from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    deepseek_api_key: str
-    deepseek_base_url: str = "https://api.deepseek.com"
-    deepseek_model: str = "deepseek-chat"
+    llm_api_key: str
+    llm_base_url: str
+    llm_model: str
     secret_key: str
     database_url: str = "mysql+pymysql://root@localhost:3306/socraticmind"
     access_token_expire_minutes: int = 60 * 24 * 7  # 默认 7 天

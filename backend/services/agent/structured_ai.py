@@ -110,7 +110,7 @@ def generate_structured(
     client=None,
 ) -> StructuredResult[SchemaT]:
     ai_client = client or get_ai_client()
-    model = run_context.model or settings.deepseek_model
+    model = run_context.model or settings.llm_model
     started = perf_counter()
     total_tokens = 0
     try:

@@ -7,7 +7,9 @@ import pytest
 # Configure an isolated database before importing application modules, because the
 # database engine is created when core.database is imported.
 os.environ["DATABASE_URL"] = "sqlite://"
-os.environ.setdefault("DEEPSEEK_API_KEY", "test-key")
+os.environ.setdefault("LLM_API_KEY", "test-key")
+os.environ.setdefault("LLM_BASE_URL", "https://llm.example.test/v1")
+os.environ.setdefault("LLM_MODEL", "test-model")
 os.environ.setdefault("SECRET_KEY", "test-secret")
 
 from fastapi import FastAPI

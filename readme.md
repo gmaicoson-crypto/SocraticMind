@@ -82,7 +82,7 @@ flowchart LR
   Frontend <-->|SSE 流式响应| Backend
 
   Backend --> DB[(MySQL\nsocraticmind)]
-  Backend --> AI[AI 服务\nDeepSeek / OpenAI 兼容]
+  Backend --> AI[LLM 服务\nOpenAI 兼容接口]
 
   Backend --> Auth[JWT 鉴权]
   Backend --> Agent[可恢复 Agent 状态机\n结构化 AI 调用]
@@ -112,7 +112,7 @@ flowchart LR
 - **ORM**：SQLAlchemy 2
 - **数据校验**：Pydantic v2 Settings
 - **AI 编排**：可恢复状态机 + Pydantic 结构化输出
-- **AI 调用**：OpenAI SDK（兼容 DeepSeek 等）
+- **AI 调用**：OpenAI SDK（兼容 OpenAI Chat Completions 的服务）
 - **认证**：JWT (python-jose) + Passlib
 - **实时通信**：Server-Sent Events
 - **数据库驱动**：PyMySQL
@@ -133,7 +133,7 @@ flowchart LR
 - pnpm
 - Python 3.10+
 - MySQL 8.x
-- DeepSeek API Key，或任何兼容 OpenAI Chat Completions 接口的服务
+- OpenAI Chat Completions 兼容服务的 API Key、地址和模型 ID
 - SMTP 邮件服务（可选，用于发送验证码）
 
 ### 安装步骤
@@ -180,7 +180,9 @@ cp .env.example .env     # macOS / Linux
 编辑 `backend/.env`，至少配置以下必填项（建议配置所有选项）：
 
 ```env
-DEEPSEEK_API_KEY=your_api_key_here
+LLM_API_KEY=your_api_key_here
+LLM_BASE_URL=https://your-provider.example/v1
+LLM_MODEL=your-model-id
 SECRET_KEY=your_random_secret_string_here
 DATABASE_URL=mysql+pymysql://root:your_password@localhost:3306/socraticmind
 ```
@@ -220,9 +222,9 @@ VITE_API_BASE=http://127.0.0.1:8000
 
 | 变量 | 必填 | 说明 | 默认值 |
 |------|:----:|------|--------|
-| `DEEPSEEK_API_KEY` | 是 | AI 服务 API Key | — |
-| `DEEPSEEK_BASE_URL` | 否 | OpenAI 兼容 API 地址 | `https://api.deepseek.com` |
-| `DEEPSEEK_MODEL` | 否 | 模型名称 | `deepseek-chat` |
+| `LLM_API_KEY` | 是 | LLM 服务 API Key | — |
+| `LLM_BASE_URL` | 是 | OpenAI 兼容 API 地址 | — |
+| `LLM_MODEL` | 是 | 服务商提供的模型 ID | — |
 | `SECRET_KEY` | 是 | JWT 签名密钥（建议 32 位以上随机字符串） | — |
 | `DATABASE_URL` | 是 | SQLAlchemy 连接串 | `mysql+pymysql://root@localhost:3306/socraticmind` |
 | `CORS_ORIGINS` | 否 | 允许的前端来源（逗号分隔） | `http://localhost:5173` |
