@@ -42,9 +42,9 @@ def graph_payload():
             {"key": "root", "label": "Root", "parent_keys": [], "estimated_minutes": 20},
             {"key": "a", "label": "A", "parent_keys": ["root"], "estimated_minutes": 20},
             {"key": "b", "label": "B", "parent_keys": ["root"], "estimated_minutes": 20},
-            {"key": "c", "label": "C", "parent_keys": ["a", "b"], "estimated_minutes": 20},
-            {"key": "d", "label": "D", "parent_keys": ["c"], "estimated_minutes": 20},
-            {"key": "e", "label": "E", "parent_keys": ["d"], "estimated_minutes": 20},
+            {"key": "c", "label": "C", "parent_keys": ["a"], "estimated_minutes": 20},
+            {"key": "d", "label": "D", "parent_keys": ["a"], "estimated_minutes": 20},
+            {"key": "e", "label": "E", "parent_keys": ["b"], "estimated_minutes": 20},
         ],
     }
 

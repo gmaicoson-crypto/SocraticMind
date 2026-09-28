@@ -4,6 +4,12 @@ from typing import Any
 from ai.graph_generator import assign_positions
 
 
+MIN_BRANCHING_NODES = 2
+MIN_LEAF_NODES = 3
+MIN_ROOT_CHILDREN = 2
+MAX_TREE_DEPTH = 4
+
+
 class GraphValidationError(ValueError):
     def __init__(self, code: str, message: str) -> None:
         super().__init__(message)
@@ -54,6 +60,13 @@ def stable_topological_sort(nodes: Sequence[dict[str, Any]]) -> list[dict[str, A
     if len(roots) != 1:
         raise GraphValidationError("GRAPH_ROOT_COUNT", "graph must contain exactly one root")
 
+    multi_parent = next((node for node in normalized if len(node["parent_keys"]) > 1), None)
+    if multi_parent is not None:
+        raise GraphValidationError(
+            "GRAPH_TREE_PARENT_COUNT",
+            f"node {multi_parent['key']} must have exactly one parent",
+        )
+
     by_key = {node["key"]: node for node in normalized}
     children: dict[str, list[str]] = {key: [] for key in keys}
     indegree = {node["key"]: len(node["parent_keys"]) for node in normalized}
@@ -94,7 +107,39 @@ def validate_graph(nodes: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
                 "GRAPH_DURATION", "estimated_minutes must be between 10 and 120"
             )
 
-    return stable_topological_sort(normalized)
+    ordered = stable_topological_sort(normalized)
+    children = {node["key"]: [] for node in ordered}
+    depth = {ordered[0]["key"]: 0}
+    for node in ordered[1:]:
+        parent = node["parent_keys"][0]
+        children[parent].append(node["key"])
+        depth[node["key"]] = depth[parent] + 1
+
+    branching_nodes = [key for key, descendants in children.items() if len(descendants) >= 2]
+    leaf_nodes = [key for key, descendants in children.items() if not descendants]
+    root_key = ordered[0]["key"]
+    if len(children[root_key]) < MIN_ROOT_CHILDREN:
+        raise GraphValidationError(
+            "GRAPH_TREE_ROOT_BRANCHING",
+            f"root must have at least {MIN_ROOT_CHILDREN} direct children",
+        )
+    if len(branching_nodes) < MIN_BRANCHING_NODES:
+        raise GraphValidationError(
+            "GRAPH_TREE_BRANCHING",
+            f"graph must contain at least {MIN_BRANCHING_NODES} branching nodes",
+        )
+    if len(leaf_nodes) < MIN_LEAF_NODES:
+        raise GraphValidationError(
+            "GRAPH_TREE_LEAVES",
+            f"graph must contain at least {MIN_LEAF_NODES} leaf nodes",
+        )
+    if max(depth.values()) > MAX_TREE_DEPTH - 1:
+        raise GraphValidationError(
+            "GRAPH_TREE_DEPTH",
+            f"graph depth must not exceed {MAX_TREE_DEPTH} layers",
+        )
+
+    return ordered
 
 
 def prepare_graph(nodes: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:

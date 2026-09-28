@@ -9,9 +9,9 @@ def valid_graph():
         {"key": "root", "label": "Root", "parent_keys": [], "estimated_minutes": 20},
         {"key": "b", "label": "B", "parent_keys": ["root"], "estimated_minutes": 30},
         {"key": "a", "label": "A", "parent_keys": ["root"], "estimated_minutes": 30},
-        {"key": "c", "label": "C", "parent_keys": ["a", "b"], "estimated_minutes": 40},
-        {"key": "d", "label": "D", "parent_keys": ["c"], "estimated_minutes": 50},
-        {"key": "e", "label": "E", "parent_keys": ["d"], "estimated_minutes": 60},
+        {"key": "c", "label": "C", "parent_keys": ["a"], "estimated_minutes": 40},
+        {"key": "d", "label": "D", "parent_keys": ["a"], "estimated_minutes": 50},
+        {"key": "e", "label": "E", "parent_keys": ["b"], "estimated_minutes": 60},
     ]
 
 
@@ -48,3 +48,29 @@ def test_invalid_graphs_are_rejected(valid_graph, mutate, code):
     with pytest.raises(GraphValidationError) as error:
         validate_graph(mutate(valid_graph))
     assert error.value.code == code
+
+
+def test_graph_rejects_multiple_parents(valid_graph):
+    graph = [
+        {**node, "parent_keys": ["a", "b"]} if node["key"] == "c" else node for node in valid_graph
+    ]
+
+    with pytest.raises(GraphValidationError) as error:
+        validate_graph(graph)
+
+    assert error.value.code == "GRAPH_TREE_PARENT_COUNT"
+
+
+def test_graph_rejects_a_linear_tree(valid_graph):
+    graph = [
+        {"key": "root", "label": "Root", "parent_keys": [], "estimated_minutes": 20},
+        *[
+            {"key": key, "label": key.upper(), "parent_keys": [parent], "estimated_minutes": 20}
+            for key, parent in zip(("a", "b", "c", "d", "e"), ("root", "a", "b", "c", "d"))
+        ],
+    ]
+
+    with pytest.raises(GraphValidationError) as error:
+        validate_graph(graph)
+
+    assert error.value.code == "GRAPH_TREE_ROOT_BRANCHING"

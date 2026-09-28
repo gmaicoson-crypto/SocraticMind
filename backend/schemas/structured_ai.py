@@ -57,7 +57,7 @@ class GraphDraftNode(StrictModel):
     key: str = Field(min_length=1, max_length=100)
     label: str = Field(min_length=1, max_length=200)
     sub: str = Field(default="", max_length=500)
-    parent_keys: list[str] = Field(default_factory=list)
+    parent_keys: list[str] = Field(default_factory=list, max_length=1)
     estimated_minutes: int = Field(ge=10, le=120)
 
 

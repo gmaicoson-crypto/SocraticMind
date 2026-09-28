@@ -98,11 +98,11 @@ class DomainGenerator:
                         {
                             "key": "c",
                             "label": "C",
-                            "parent_keys": ["a", "b"],
+                            "parent_keys": ["a"],
                             "estimated_minutes": 20,
                         },
-                        {"key": "d", "label": "D", "parent_keys": ["c"], "estimated_minutes": 20},
-                        {"key": "e", "label": "E", "parent_keys": ["d"], "estimated_minutes": 20},
+                        {"key": "d", "label": "D", "parent_keys": ["a"], "estimated_minutes": 20},
+                        {"key": "e", "label": "E", "parent_keys": ["b"], "estimated_minutes": 20},
                     ],
                 }
             )

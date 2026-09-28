@@ -1,5 +1,5 @@
 <template>
-  <div ref="containerRef" class="graph-wrap">
+  <div class="graph-wrap">
     <div class="graph-header">
       <div>
         <div class="graph-label">Knowledge Graph</div>
@@ -15,55 +15,14 @@
       />
     </div>
 
-    <svg :viewBox="viewBox" preserveAspectRatio="xMidYMid meet" class="graph-svg" ref="svgRef">
-      <defs>
-        <pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse">
-          <path
-            d="M 32 0 L 0 0 0 32"
-            fill="none"
-            stroke="var(--line)"
-            stroke-width="0.5"
-            opacity="0.5"
-          />
-        </pattern>
-        <radialGradient id="masteredGlow" cx="50%" cy="50%" r="50%">
-          <stop offset="0%" stop-color="var(--graph-glow)" />
-          <stop offset="100%" stop-color="var(--graph-glow-transparent)" />
-        </radialGradient>
-      </defs>
-
-      <rect
-        :x="viewBoxParts[0]"
-        :y="viewBoxParts[1]"
-        :width="viewBoxParts[2]"
-        :height="viewBoxParts[3]"
-        fill="url(#grid)"
-      />
-
-      <circle
-        v-for="n in masteredNodes"
-        :key="`glow-${n.id}`"
-        :cx="n.x"
-        :cy="n.y"
-        r="60"
-        fill="url(#masteredGlow)"
-      />
-
-      <GraphEdge
-        v-for="(edge, i) in store.edges"
-        :key="`edge-${i}`"
-        :from="nodeMap[edge.source]"
-        :to="nodeMap[edge.target]"
-      />
-
-      <GraphNode
-        v-for="n in store.nodes"
-        :key="n.id"
-        :node="n"
-        :is-selected="store.activeNode?.id === n.id"
-        @click="handleClick"
-      />
-    </svg>
+    <ThreeGraphCanvas
+      ref="graphRef"
+      :nodes="store.nodes"
+      :edges="store.edges"
+      :selected-id="store.activeNode?.id"
+      :theme-key="store.isDark ? 'dark' : 'light'"
+      @select="handleClick"
+    />
 
     <div v-if="store.totalCount === 0" class="empty-graph">
       <svg
@@ -84,10 +43,6 @@
     </div>
 
     <canvas ref="confettiCanvasRef" class="confetti-canvas" />
-
-    <Transition name="fade">
-      <div v-if="showScaleHint" class="scale-hint">{{ Math.round(scale * 100) }}%</div>
-    </Transition>
 
     <div class="controls">
       <button class="ctrl-btn" title="居中" @click="resetView">
@@ -133,73 +88,16 @@
 
 <script setup lang="ts">
 // KnowledgeGraph 组件，封装局部界面和交互逻辑。
-import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useLearningStore } from '../stores/learning'
 import type { KNode } from '../types'
-import { useGraphViewport } from '../composables/useGraphViewport'
-import GraphNode from './graph/GraphNode.vue'
-import GraphEdge from './graph/GraphEdge.vue'
+import ThreeGraphCanvas from './graph/ThreeGraphCanvas.vue'
 import GraphLegend from './graph/GraphLegend.vue'
 import { themeColors } from '../utils/theme'
 
 const store = useLearningStore()
-const containerRef = ref<HTMLElement | null>(null)
-const svgRef = ref<SVGSVGElement | null>(null)
+const graphRef = ref<InstanceType<typeof ThreeGraphCanvas> | null>(null)
 const confettiCanvasRef = ref<HTMLCanvasElement | null>(null)
-
-let VW = 900
-let VH = 720
-
-const { scale, panX, panY, showScaleHint, zoomIn, zoomOut, resetView } = useGraphViewport(svgRef, {
-  width: () => VW,
-  height: () => VH,
-})
-
-watch(
-  () => store.nodes,
-  (nodes) => {
-    if (nodes.length === 0) {
-      VW = 900
-      VH = 720
-      panX.value = 0
-      panY.value = 0
-      return
-    }
-    const maxX = Math.max(...nodes.map((n) => n.x)) + 120
-    const maxY = Math.max(...nodes.map((n) => n.y)) + 120
-    VW = Math.max(1200, maxX)
-    VH = Math.max(720, maxY)
-    nextTick(() => resetView())
-  },
-)
-
-const viewBoxParts = computed(() => viewBox.value.split(' ').map(Number))
-
-const viewBox = computed(() => {
-  const w = VW / scale.value
-  const h = VH / scale.value
-
-  let offsetX = 0
-  let offsetY = 0
-  if (store.nodes.length > 0) {
-    let minX = Infinity,
-      maxX = -Infinity,
-      minY = Infinity,
-      maxY = -Infinity
-    for (const n of store.nodes) {
-      if (n.x < minX) minX = n.x
-      if (n.x > maxX) maxX = n.x
-      if (n.y < minY) minY = n.y
-      if (n.y > maxY) maxY = n.y
-    }
-    offsetX = (minX + maxX) / 2 - VW / 2
-    offsetY = (minY + maxY) / 2 - VH / 2
-  }
-
-  const x = offsetX + panX.value + (VW - w) / 2
-  const y = offsetY + panY.value + (VH - h) / 2
-  return `${x} ${y} ${w} ${h}`
-})
 
 const currentTopicTitle = computed(() => {
   const t = store.topics.find((t) => t.id === store.activeTopicId)
@@ -208,21 +106,22 @@ const currentTopicTitle = computed(() => {
 
 let confettiInstance: any = null
 
-const nodeMap = computed(() => Object.fromEntries(store.nodes.map((n) => [n.id, n])))
 const masteredNodes = computed(() => store.nodes.filter((n) => n.state === 'mastered'))
 
 function getNodeScreenPos(node: KNode) {
-  if (!containerRef.value || !svgRef.value) return { x: 0.5, y: 0.5 }
-  const containerRect = containerRef.value.getBoundingClientRect()
-  const svgRect = svgRef.value.getBoundingClientRect()
-  const parts = viewBox.value.split(' ').map(Number)
-  const [vx, vy, vw, vh] = parts
-  const px = ((node.x - vx) / vw) * svgRect.width + (svgRect.left - containerRect.left)
-  const py = ((node.y - vy) / vh) * svgRect.height + (svgRect.top - containerRect.top)
-  return {
-    x: px / containerRect.width,
-    y: py / containerRect.height,
-  }
+  return graphRef.value?.getNodeScreenPos(node) ?? { x: 0.5, y: 0.5 }
+}
+
+function resetView() {
+  graphRef.value?.resetView()
+}
+
+function zoomIn() {
+  graphRef.value?.zoomIn()
+}
+
+function zoomOut() {
+  graphRef.value?.zoomOut()
 }
 
 function fireConfettiAt(node: KNode) {
@@ -405,16 +304,6 @@ function handleClick(node: KNode) {
   align-items: center;
 }
 
-.graph-svg {
-  width: 100%;
-  height: 100%;
-  display: block;
-  cursor: grab;
-}
-.graph-svg:active {
-  cursor: grabbing;
-}
-
 .empty-graph {
   position: absolute;
   inset: 0;
@@ -442,30 +331,6 @@ function handleClick(node: KNode) {
   pointer-events: none;
   width: 100%;
   height: 100%;
-}
-
-.scale-hint {
-  position: absolute;
-  bottom: 56px;
-  right: 14px;
-  background: var(--toast-bg);
-  color: var(--on-accent);
-  font-size: 12px;
-  font-weight: 600;
-  font-family: var(--font-mono);
-  padding: 5px 10px;
-  border-radius: 8px;
-  pointer-events: none;
-  z-index: 10;
-}
-
-.fade-enter-active,
-.fade-leave-active {
-  transition: opacity 0.2s ease;
-}
-.fade-enter-from,
-.fade-leave-to {
-  opacity: 0;
 }
 
 .controls {
