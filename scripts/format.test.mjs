@@ -125,6 +125,27 @@ test('format command checks and fixes changed files without rewriting unrelated 
     const clean = format('--check')
     assert.equal(clean.status, 0, clean.stdout + clean.stderr)
     assert.ok(clean.stdout.includes('No supported code files to format.'))
+
+    const base = run('git', ['rev-parse', 'HEAD']).stdout.trim()
+    write('staged.ts', 'export const staged={value:4};\n')
+    git('add', 'staged.ts')
+    git(
+      '-c',
+      'user.name=Formatter Test',
+      '-c',
+      'user.email=formatter@example.invalid',
+      '-c',
+      'commit.gpgsign=false',
+      'commit',
+      '--quiet',
+      '-m',
+      'unformatted PR change',
+    )
+    assert.equal(format('--check').status, 0)
+    const prCheck = format('--check', `--base=${base}`)
+    assert.equal(prCheck.status, 1, prCheck.stdout + prCheck.stderr)
+    assert.ok((prCheck.stdout + prCheck.stderr).includes('staged.ts'))
+    assert.equal(format('--check', '--all', `--base=${base}`).status, 2)
   } finally {
     rmSync(fixture, { recursive: true, force: true })
   }

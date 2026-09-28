@@ -4,14 +4,19 @@ import { dirname, extname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
-const options = new Set(process.argv.slice(2))
+const args = process.argv.slice(2)
+const options = new Set(args.filter((arg) => !arg.startsWith('--base=')))
+const baseOptions = args.filter((arg) => arg.startsWith('--base='))
 if (
   [...options].some((option) => !['--check', '--write', '--all'].includes(option)) ||
-  (options.has('--check') && options.has('--write'))
+  (options.has('--check') && options.has('--write')) ||
+  baseOptions.length > 1 ||
+  (baseOptions.length === 1 && (baseOptions[0] === '--base=' || options.has('--all')))
 ) {
-  console.error('Usage: node scripts/format.mjs [--check | --write] [--all]')
+  console.error('Usage: node scripts/format.mjs [--check | --write] [--all | --base=<ref>]')
   process.exit(2)
 }
+const base = baseOptions[0]?.slice('--base='.length)
 
 function gitFiles(args) {
   const result = spawnSync('git', args, { cwd: root, encoding: 'utf8' })
@@ -22,10 +27,10 @@ function gitFiles(args) {
   return result.stdout.split('\0').filter(Boolean)
 }
 
-// NUL-separated paths preserve spaces; HEAD includes staged and unstaged changes.
+// NUL-separated paths preserve spaces; --base includes committed PR changes.
 const tracked = options.has('--all')
   ? gitFiles(['ls-files', '-z'])
-  : gitFiles(['diff', 'HEAD', '--name-only', '--diff-filter=ACMR', '-z'])
+  : gitFiles(['diff', base ? `${base}...HEAD` : 'HEAD', '--name-only', '--diff-filter=ACMR', '-z'])
 const files = [
   ...new Set([...tracked, ...gitFiles(['ls-files', '--others', '--exclude-standard', '-z'])]),
 ]
