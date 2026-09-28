@@ -1,5 +1,4 @@
-from core.config import settings
-from core.ai_client import get_ai_client
+from core.ai_client import get_ai_client, resolve_llm_profile
 from .prompts import (
     get_socratic_prompt,
     NORMAL_CHAT_PROMPT,
@@ -31,6 +30,7 @@ def chat_stream(
     ai_style: str = "标准",
     kind: str = "qa",
     memories: list[dict] | None = None,
+    model_id: str | None = None,
 ) -> Generator[str, None, None]:
     """向 AI 发起流式请求，逐块 yield 文本片段。
 
@@ -65,8 +65,10 @@ def chat_stream(
         {"role": "user", "content": user_content},
     ]
 
-    stream = get_ai_client().chat.completions.create(
-        model=settings.llm_model,
+    profile = resolve_llm_profile(model_id)
+    client = get_ai_client(model_id) if model_id else get_ai_client()
+    stream = client.chat.completions.create(
+        model=profile.model,
         messages=full_messages,
         stream=True,
         max_tokens=4096,

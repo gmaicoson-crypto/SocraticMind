@@ -30,7 +30,7 @@ SocraticMind 是一个基于 **Vue 3 + TypeScript + FastAPI + MySQL** 构建的 
 ### 知识图谱
 
 - 新主题先完成目标与节奏 onboarding，可选三题诊断，确认计划预览后再创建图谱
-- 节点带父子依赖关系，父节点掌握后自动解锁子节点
+- 节点带树形父子依赖关系，父节点掌握后自动解锁子节点
 - 节点三态管理：锁定 → 可学习 → 已掌握
 - 基于 Vue Flow + Dagre 的交互式图谱可视化，支持拖拽与缩放
 
@@ -133,7 +133,7 @@ flowchart LR
 - pnpm
 - Python 3.10+
 - MySQL 8.x
-- OpenAI Chat Completions 兼容服务的 API Key、地址和模型 ID
+- 一个或多个 OpenAI Chat Completions 兼容服务的 API Key、地址和模型 ID
 - SMTP 邮件服务（可选，用于发送验证码）
 
 ### 安装步骤
@@ -180,9 +180,8 @@ cp .env.example .env     # macOS / Linux
 编辑 `backend/.env`，至少配置以下必填项（建议配置所有选项）：
 
 ```env
-LLM_API_KEY=your_api_key_here
-LLM_BASE_URL=https://your-provider.example/v1
-LLM_MODEL=your-model-id
+LLM_MODELS=[{"id":"deepseek","name":"DeepSeek","api_key":"your_deepseek_key","base_url":"https://api.deepseek.com/v1","model":"deepseek-chat"},{"id":"openai","name":"OpenAI","api_key":"your_openai_key","base_url":"https://api.openai.com/v1","model":"gpt-4o-mini"}]
+LLM_DEFAULT_MODEL_ID=deepseek
 SECRET_KEY=your_random_secret_string_here
 DATABASE_URL=mysql+pymysql://root:your_password@localhost:3306/socraticmind
 ```
@@ -222,9 +221,11 @@ VITE_API_BASE=http://127.0.0.1:8000
 
 | 变量 | 必填 | 说明 | 默认值 |
 |------|:----:|------|--------|
-| `LLM_API_KEY` | 是 | LLM 服务 API Key | — |
-| `LLM_BASE_URL` | 是 | OpenAI 兼容 API 地址 | — |
-| `LLM_MODEL` | 是 | 服务商提供的模型 ID | — |
+| `LLM_MODELS` | 与旧配置二选一 | 多个 OpenAI 兼容服务的 JSON 数组 | 见 `backend/.env.example` |
+| `LLM_DEFAULT_MODEL_ID` | 否 | 默认 profile 的 `id`，未设置时使用第一项 | — |
+| `LLM_API_KEY` | 与 `LLM_MODELS` 二选一 | 兼容旧版的单模型 API Key | — |
+| `LLM_BASE_URL` | 与 `LLM_MODELS` 二选一 | 兼容旧版的 OpenAI 兼容 API 地址 | — |
+| `LLM_MODEL` | 与 `LLM_MODELS` 二选一 | 兼容旧版的模型 ID | — |
 | `SECRET_KEY` | 是 | JWT 签名密钥（建议 32 位以上随机字符串） | — |
 | `DATABASE_URL` | 是 | SQLAlchemy 连接串 | `mysql+pymysql://root@localhost:3306/socraticmind` |
 | `CORS_ORIGINS` | 否 | 允许的前端来源（逗号分隔） | `http://localhost:5173` |

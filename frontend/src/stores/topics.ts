@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { computed, ref, shallowRef } from 'vue'
 import type { KEdge, KNode, Topic } from '../types'
 import { getNodes, getRecommendations, getTopics } from '../api/topic'
+import { useModelsStore } from './models'
 
 export const useTopicsStore = defineStore('topics', () => {
   const nodes = shallowRef<KNode[]>([])
@@ -64,7 +65,13 @@ export const useTopicsStore = defineStore('topics', () => {
 
   async function fetchRecommendations() {
     try {
-      recommendations.value = await getRecommendations()
+      const modelStore = useModelsStore()
+      if (modelStore.models.length === 0) await modelStore.fetchModels()
+      const selectedId = modelStore.selectedModelId
+      const model = modelStore.models.some((available) => available.id === selectedId)
+        ? selectedId
+        : null
+      recommendations.value = await getRecommendations(model)
     } catch (err) {
       console.error('加载推荐失败', err)
     }

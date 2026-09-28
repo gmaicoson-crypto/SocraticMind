@@ -19,7 +19,7 @@ SocraticMind 后端是基于 FastAPI、SQLAlchemy 和 OpenAI 兼容 LLM 接口�
 
 - Python 3.10 或更高版本
 - 可访问的 MySQL 数据库
-- OpenAI Chat Completions 兼容服务的 API Key、地址和模型 ID
+- 一个或多个 OpenAI Chat Completions 兼容服务的 API Key、地址和模型 ID
 - 可选 SMTP 邮件服务，用于发送注册和找回密码验证码
 
 ## 快速启动
@@ -57,9 +57,23 @@ copy .env.example .env
 根据本地环境修改 `.env`，至少需要配置：
 
 ```env
-LLM_API_KEY=your_api_key_here
-LLM_BASE_URL=https://your-provider.example/v1
-LLM_MODEL=your-model-id
+LLM_MODELS=[
+  {
+    "id": "deepseek",
+    "name": "DeepSeek",
+    "api_key": "your_deepseek_key",
+    "base_url": "https://api.deepseek.com/v1",
+    "model": "deepseek-chat"
+  },
+  {
+    "id": "openai",
+    "name": "OpenAI",
+    "api_key": "your_openai_key",
+    "base_url": "https://api.openai.com/v1",
+    "model": "gpt-4o-mini"
+  }
+]
+LLM_DEFAULT_MODEL_ID=deepseek
 
 SECRET_KEY=change_me_to_a_random_secret_string
 
@@ -96,9 +110,11 @@ http://127.0.0.1:8000/health
 
 | 变量 | 必填 | 说明 | 示例 |
 | --- | --- | --- | --- |
-| `LLM_API_KEY` | 是 | LLM 服务 API Key | 服务商提供的密钥 |
-| `LLM_BASE_URL` | 是 | OpenAI 兼容 API 地址 | 服务商提供的地址 |
-| `LLM_MODEL` | 是 | 服务商提供的模型 ID | 服务商提供的模型 ID |
+| `LLM_MODELS` | 与旧配置二选一 | 多个 OpenAI 兼容服务的 JSON 数组，包含 `id`、`name`、`api_key`、`base_url`、`model` | 见 `.env.example` |
+| `LLM_DEFAULT_MODEL_ID` | 否 | 默认 profile 的 `id`；未设置时使用数组第一项 | `deepseek` |
+| `LLM_API_KEY` | 与 `LLM_MODELS` 二选一 | 兼容旧版的单模型 API Key | 服务商提供的密钥 |
+| `LLM_BASE_URL` | 与 `LLM_MODELS` 二选一 | 兼容旧版的 OpenAI 兼容 API 地址 | 服务商提供的地址 |
+| `LLM_MODEL` | 与 `LLM_MODELS` 二选一 | 兼容旧版的模型 ID | 服务商提供的模型 ID |
 | `SECRET_KEY` | 是 | JWT 签名密钥 | `a-long-random-string` |
 | `DATABASE_URL` | 是 | SQLAlchemy 数据库连接 URL | `mysql+pymysql://root:pass@localhost:3306/socraticmind` |
 | `CORS_ORIGINS` | 否 | 允许访问 API 的前端来源，多个值用逗号分隔 | `http://localhost:5173` |

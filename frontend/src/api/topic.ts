@@ -71,7 +71,9 @@ export async function searchNodes(q: string, limit = 10) {
   return res.data as SearchedNode[]
 }
 
-export async function getRecommendations() {
-  const res = await api.get('/api/topics/recommend')
+export async function getRecommendations(model: string | null) {
+  const res = await api.get('/api/topics/recommend', {
+    params: model ? { model } : undefined,
+  })
   return res.data.recommendations as Recommendation[]
 }

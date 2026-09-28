@@ -5,6 +5,7 @@ from typing import Any, Callable
 
 from sqlalchemy.orm import Session
 
+from core.ai_client import resolve_model_id
 from core.errors import ApiError
 from models import AgentRun, LearnerMemory, Node, StudyPlan, StudyPlanItem, Topic
 from models.enums import AgentRunStatus, AgentRunType, MemorySource
@@ -270,8 +271,9 @@ def _graph_messages(state: dict[str, Any]) -> list[dict]:
         {
             "role": "system",
             "content": (
-                "生成 6 到 10 个单根、无环、有依赖的学习节点。每个节点预计 10 到 120 分钟，"
-                "结构和题材必须适配领域及学习成果类型，只返回结构化 JSON。"
+                "生成 6 到 10 个严格树结构的学习节点：有且只有一个根节点，每个非根节点必须且只能有一个父节点，"
+                "根节点至少有两个直接子节点，整棵树至少有两个分支节点和三个叶子节点，最长路径不超过四层，禁止单链结构。"
+                "节点之间无环，每个节点预计 10 到 120 分钟，结构和题材必须适配领域及学习成果类型，只返回结构化 JSON。"
             ),
         },
         {
@@ -447,6 +449,7 @@ def start_onboarding(
     user_id: int,
     request: OnboardingRequest,
     generator: Generator | None = None,
+    model_id: str | None = None,
 ) -> AgentRun:
     params = request.model_dump(mode="json")
     run = AgentRun(
@@ -455,6 +458,7 @@ def start_onboarding(
         run_type=AgentRunType.ONBOARDING.value,
         status=AgentRunStatus.COLLECTING.value,
         state_json={"params": params, "processing": False},
+        model=resolve_model_id(model_id or request.model),
     )
     db.add(run)
     db.flush()
@@ -502,6 +506,7 @@ def start_topic_plan(
     topic_id: int,
     request: TopicPlanRequest,
     generator: Generator | None = None,
+    model_id: str | None = None,
 ) -> AgentRun:
     topic = db.query(Topic).filter(Topic.id == topic_id, Topic.user_id == user_id).first()
     if topic is None:
@@ -526,6 +531,7 @@ def start_topic_plan(
             "topic_emoji": topic.emoji,
             "node_snapshot": [_serialize_node_snapshot(node) for node in nodes],
         },
+        model=resolve_model_id(model_id or request.model),
     )
     db.add(run)
     db.flush()

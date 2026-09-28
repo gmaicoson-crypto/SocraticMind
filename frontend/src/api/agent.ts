@@ -1,4 +1,5 @@
 import api from './index'
+import { getSelectedModelId } from '../utils/modelSelection'
 import type {
   AgentRun,
   AgentRunUpdate,
@@ -8,12 +9,17 @@ import type {
 } from '../types/learningAgent'
 
 export async function startOnboarding(input: OnboardingInput) {
-  const response = await api.post('/api/agent/onboarding', input)
+  const model = getSelectedModelId()
+  const response = await api.post('/api/agent/onboarding', model ? { ...input, model } : input)
   return response.data as AgentRun
 }
 
 export async function startTopicPlan(topicId: number, input: TopicPlanInput) {
-  const response = await api.post(`/api/agent/topics/${topicId}/plan-runs`, input)
+  const model = getSelectedModelId()
+  const response = await api.post(
+    `/api/agent/topics/${topicId}/plan-runs`,
+    model ? { ...input, model } : input,
+  )
   return response.data as AgentRun
 }
 
@@ -53,10 +59,12 @@ export async function retryAgentRun(runId: string) {
 }
 
 export async function startAssessment(nodeId: number, requestId: string, sessionId?: string) {
+  const model = getSelectedModelId()
   const response = await api.post('/api/agent/assessments', {
     node_id: nodeId,
     request_id: requestId,
     session_id: sessionId,
+    ...(model ? { model } : {}),
   })
   return response.data as AgentRun
 }

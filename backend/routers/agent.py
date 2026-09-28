@@ -1,10 +1,11 @@
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from core.ai_client import resolve_model_id
 from core.database import get_db
 from core.deps import get_current_user
 from models import AgentRun, User
@@ -43,6 +44,13 @@ log = logging.getLogger(__name__)
 
 def get_agent_generator():
     return generate_structured
+
+
+def selected_model(model_id: str | None) -> str:
+    try:
+        return resolve_model_id(model_id)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
 
 
 def serialize_and_sync(
@@ -85,6 +93,7 @@ def create_assessment(
             request_id=request.request_id,
             session_id=request.session_id,
             generator=generator,
+            model_id=selected_model(request.model),
         ),
     )
 
@@ -138,6 +147,7 @@ def create_onboarding_run(
             user_id=current_user.id,
             request=request,
             generator=generator,
+            model_id=selected_model(request.model),
         ),
     )
 
@@ -162,6 +172,7 @@ def create_topic_plan_run(
             topic_id=topic_id,
             request=request,
             generator=generator,
+            model_id=selected_model(request.model),
         ),
     )
 

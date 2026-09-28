@@ -11,10 +11,9 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from ai.agent import chat_stream
 from ai.prompts import build_socratic_suggestions_prompt, NORMAL_SUGGESTIONS_PROMPT
 from ai.util import extract_json_from_markdown
-from core.config import settings
 from core.database import get_db
 from core.deps import get_current_user
-from core.ai_client import get_ai_client
+from core.ai_client import get_ai_client, resolve_llm_profile, resolve_model_id
 from models.progress import ChatMessage
 from models.node import Node
 from models.topic import Topic
@@ -44,6 +43,7 @@ class ChatRequest(BaseModel):
     mode: Literal["socratic", "normal"] = "socratic"
     ai_style: str = Field(default="标准", min_length=1, max_length=20)
     kind: Literal["qa", "topic_overview", "node_overview"] = "qa"
+    model: str | None = Field(default=None, min_length=1, max_length=100)
 
     @field_validator("node_key", "session_id", "ai_style")
     @classmethod
@@ -60,6 +60,13 @@ class ChatRequest(BaseModel):
         if self.kind != "qa" and self.mode != "socratic":
             raise ValueError("overview requests must use socratic mode")
         return self
+
+
+def selected_model(model_id: str | None) -> str:
+    try:
+        return resolve_model_id(model_id)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
 
 
 class HistoryResponse(BaseModel):
@@ -117,6 +124,8 @@ def chat_stream_endpoint(
         node_label = node.label
         node_sub = node.sub
 
+    model_id = selected_model(req.model)
+
     # 请求携带的 history 仅为旧客户端兼容字段，事实上下文始终从数据库读取。
     history = load_recent_chat_history(
         db,
@@ -154,6 +163,7 @@ def chat_stream_endpoint(
                 memories=[
                     {"kind": memory.kind, "content": memory.content} for memory in relevant_memories
                 ],
+                model_id=model_id,
             ):
                 full_text.append(chunk)
                 yield f"data: {json.dumps({'text': chunk}, ensure_ascii=False)}\n\n"
@@ -308,6 +318,7 @@ def delete_session_endpoint(
 @router.get("/suggestions")
 def get_suggestions(
     mode: str = "socratic",
+    model: str | None = None,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -329,9 +340,10 @@ def get_suggestions(
     else:
         prompt = NORMAL_SUGGESTIONS_PROMPT
 
+    profile = resolve_llm_profile(selected_model(model))
     try:
-        response = get_ai_client().chat.completions.create(
-            model=settings.llm_model,
+        response = get_ai_client(profile.id).chat.completions.create(
+            model=profile.model,
             messages=[{"role": "user", "content": prompt}],
             max_tokens=200,
             temperature=0.8,

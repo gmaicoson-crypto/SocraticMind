@@ -7,8 +7,7 @@ from typing import Generic, TypeVar
 from pydantic import BaseModel, ValidationError
 
 from ai.util import extract_json_from_markdown
-from core.ai_client import get_ai_client
-from core.config import settings
+from core.ai_client import get_ai_client, resolve_llm_profile
 
 
 log = logging.getLogger(__name__)
@@ -109,8 +108,9 @@ def generate_structured(
     *,
     client=None,
 ) -> StructuredResult[SchemaT]:
-    ai_client = client or get_ai_client()
-    model = run_context.model or settings.llm_model
+    profile = resolve_llm_profile(run_context.model)
+    ai_client = client or get_ai_client(profile.id)
+    model = profile.model
     started = perf_counter()
     total_tokens = 0
     try:

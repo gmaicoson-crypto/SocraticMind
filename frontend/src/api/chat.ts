@@ -2,6 +2,7 @@
 
 import api from './index'
 import { getToken } from '../utils/token'
+import { getSelectedModelId } from '../utils/modelSelection'
 
 export interface ChatMessage {
   role: 'ai' | 'user'
@@ -37,6 +38,7 @@ export function chatStream(
   kind: ChatKind = 'qa',
 ) {
   const token = getToken()
+  const model = getSelectedModelId()
   const controller = controllers ?? new AbortController()
 
   const timeout = setTimeout(() => controller.abort(), 5 * 60 * 1000)
@@ -79,6 +81,7 @@ export function chatStream(
       mode,
       ai_style: aiStyle,
       kind,
+      ...(model ? { model } : {}),
     }),
     signal: controller.signal,
   })
@@ -168,6 +171,9 @@ export async function deleteChatSession(sessionId: string) {
 }
 
 export async function getSuggestions(mode: 'socratic' | 'normal') {
-  const res = await api.get(`/api/chat/suggestions?mode=${mode}`)
+  const model = getSelectedModelId()
+  const res = await api.get(
+    `/api/chat/suggestions?mode=${mode}${model ? `&model=${encodeURIComponent(model)}` : ''}`,
+  )
   return res.data.suggestions as string[]
 }

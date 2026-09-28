@@ -80,19 +80,22 @@
           <span v-if="normalBadge > 0" class="mode-badge">{{ normalBadge }}</span>
         </button>
       </div>
-      <Transition name="fade-slide">
-        <div v-if="chatMode === 'socratic'" class="style-switch">
-          <button
-            v-for="s in aiStyleOptions"
-            :key="s"
-            class="style-btn"
-            :class="{ active: aiStyle === s }"
-            @click="$emit('update:aiStyle', s)"
-          >
-            {{ s }}
-          </button>
-        </div>
-      </Transition>
+      <div class="ai-controls">
+        <ModelSelector />
+        <Transition name="fade-slide">
+          <div v-if="chatMode === 'socratic'" class="style-switch">
+            <button
+              v-for="s in aiStyleOptions"
+              :key="s"
+              class="style-btn"
+              :class="{ active: aiStyle === s }"
+              @click="$emit('update:aiStyle', s)"
+            >
+              {{ s }}
+            </button>
+          </div>
+        </Transition>
+      </div>
     </div>
 
     <div class="input-box">
@@ -139,6 +142,7 @@
 <script setup lang="ts">
 // DialogueInputBar 组件，封装局部界面和交互逻辑。
 import { ref } from 'vue'
+import ModelSelector from './ModelSelector.vue'
 
 const props = withDefaults(
   defineProps<{
@@ -326,8 +330,17 @@ defineExpose({ reset, focus })
   margin-bottom: 8px;
   min-height: 24px;
 }
+.ai-controls {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+  flex: 0 1 auto;
+}
 .mode-switch {
   display: inline-flex;
+  flex: 0 0 auto;
   background: var(--bg-2);
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -348,6 +361,7 @@ defineExpose({ reset, focus })
   font-family: var(--font-sans);
   transition: all 0.15s;
   position: relative;
+  white-space: nowrap;
 }
 .mode-btn:hover:not(.active) {
   color: var(--ink);
@@ -391,6 +405,7 @@ defineExpose({ reset, focus })
   cursor: pointer;
   font-family: var(--font-sans);
   transition: all 0.15s;
+  white-space: nowrap;
 }
 .style-btn:hover:not(.active) {
   color: var(--ink);
@@ -411,6 +426,24 @@ defineExpose({ reset, focus })
 .fade-slide-leave-to {
   opacity: 0;
   transform: translateX(8px);
+}
+
+@container (max-width: 400px) {
+  .input-toolbar {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .ai-controls {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}
+
+@container (max-width: 420px) {
+  .ai-controls {
+    justify-content: space-between;
+  }
 }
 
 .input-box {

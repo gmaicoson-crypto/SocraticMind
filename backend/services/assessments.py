@@ -3,6 +3,7 @@ from copy import deepcopy
 
 from sqlalchemy.orm import Session
 
+from core.ai_client import resolve_model_id
 from core.errors import ApiError
 from models import AgentRun, AssessmentAttempt, Node, StudyPlan, Topic
 from models.enums import AgentRunStatus, AgentRunType, AssessmentStatus, MasterySource
@@ -166,6 +167,7 @@ def start_assessment(
     request_id: str,
     session_id: str | None = None,
     generator: Generator | None = None,
+    model_id: str | None = None,
 ) -> AgentRun:
     existing_request = (
         db.query(AgentRun)
@@ -233,6 +235,7 @@ def start_assessment(
             "processing": True,
             "processing_stage": "assessment_questions",
         },
+        model=resolve_model_id(model_id),
         request_id=request_id,
     )
     db.add(run)

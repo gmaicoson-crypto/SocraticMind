@@ -7,14 +7,16 @@
 import { RouterView } from 'vue-router'
 import { onMounted } from 'vue'
 import { useLearningStore } from './stores/learning'
+import { useModelsStore } from './stores/models'
 import { getToken } from './utils/token'
 
 const store = useLearningStore()
+const models = useModelsStore()
 
 onMounted(async () => {
   store.loadUserFromStorage()
   if (getToken()) {
-    await store.fetchTopics()
+    await Promise.all([store.fetchTopics(), models.fetchModels()])
 
     await store.recordLearning()
   }

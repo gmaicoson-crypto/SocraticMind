@@ -11,6 +11,7 @@ class StartAssessmentRequest(BaseModel):
     node_id: int = Field(ge=1)
     request_id: str = Field(min_length=1, max_length=100)
     session_id: str | None = Field(default=None, max_length=100)
+    model: str | None = Field(default=None, min_length=1, max_length=100)
 
 
 class AssessmentAnswerRequest(BaseModel):

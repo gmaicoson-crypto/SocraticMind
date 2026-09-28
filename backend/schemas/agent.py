@@ -17,6 +17,7 @@ class OnboardingRequest(BaseModel):
     timezone: str = Field(default="UTC", min_length=1, max_length=100)
     use_diagnostic: bool = True
     session_id: str | None = Field(default=None, max_length=100)
+    model: str | None = Field(default=None, min_length=1, max_length=100)
 
     @field_validator("topic", "goal", "domain", "timezone")
     @classmethod
@@ -59,6 +60,7 @@ class TopicPlanRequest(BaseModel):
     timezone: str = Field(default="UTC", min_length=1, max_length=100)
     use_diagnostic: bool = False
     session_id: str | None = Field(default=None, max_length=100)
+    model: str | None = Field(default=None, min_length=1, max_length=100)
 
     @field_validator("goal", "domain", "timezone")
     @classmethod

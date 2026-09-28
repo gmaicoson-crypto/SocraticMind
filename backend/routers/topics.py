@@ -4,10 +4,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, selectinload
 from pydantic import BaseModel
 from typing import List
-from core.config import settings
 from core.database import get_db
 from core.deps import get_current_user
-from core.ai_client import get_ai_client
+from core.ai_client import get_ai_client, resolve_llm_profile, resolve_model_id
 from core.errors import ApiError
 from models.user import User
 from models.topic import Topic
@@ -142,6 +141,7 @@ def update_topic_title(
 
 @router.get("/recommend")
 def recommend_topics(
+    model: str | None = None,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -157,8 +157,13 @@ def recommend_topics(
         prompt = "该用户还没有学习任何主题，请推荐 3 个适合初学者的热门技术学习主题。"
 
     try:
-        response = get_ai_client().chat.completions.create(
-            model=settings.llm_model,
+        profile = resolve_llm_profile(resolve_model_id(model))
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+    try:
+        response = get_ai_client(profile.id).chat.completions.create(
+            model=profile.model,
             messages=[
                 {"role": "system", "content": RECOMMEND_TOPICS_PROMPT},
                 {"role": "user", "content": prompt},

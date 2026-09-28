@@ -8,7 +8,7 @@ from core.config import settings
 from core.errors import install_api_error_handler
 from core.database import engine
 from core.migrations import assert_database_at_head
-from routers import agent, auth, topics, nodes, chat, memories, plans, progress
+from routers import agent, auth, topics, nodes, chat, memories, plans, progress, llm
 import models  # noqa: F401 - ensure ORM relationships can resolve registered models
 
 # 头像文件存储目录，不存在时自动创建
@@ -51,6 +51,7 @@ app.include_router(progress.router)
 app.include_router(agent.router)
 app.include_router(plans.router)
 app.include_router(memories.router)
+app.include_router(llm.router)
 
 
 @app.get("/")

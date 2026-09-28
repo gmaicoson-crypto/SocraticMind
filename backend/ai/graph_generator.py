@@ -1,17 +1,18 @@
-from core.config import settings
-from core.ai_client import get_ai_client
+from core.ai_client import get_ai_client, resolve_llm_profile
 from .prompts import GENERATE_NODES_PROMPT, build_generate_prompt
 from .util import extract_json_from_markdown
 import json
 
 
-def generate_graph(topic: str) -> dict:
+def generate_graph(topic: str, model_id: str | None = None) -> dict:
     """同步阻塞调用 LLM，为指定主题生成知识图谱节点结构，通常需要 5~15 秒。
 
     返回格式：{"nodes": [...]}，每个节点包含 key、label、sub、parent_keys 等字段。
     """
-    response = get_ai_client().chat.completions.create(
-        model=settings.llm_model,
+    profile = resolve_llm_profile(model_id)
+    client = get_ai_client(model_id) if model_id else get_ai_client()
+    response = client.chat.completions.create(
+        model=profile.model,
         messages=[
             {"role": "system", "content": GENERATE_NODES_PROMPT},
             {"role": "user", "content": build_generate_prompt(topic)},
