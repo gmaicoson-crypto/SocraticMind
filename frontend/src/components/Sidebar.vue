@@ -1,6 +1,27 @@
 <template>
-  <aside class="sidebar">
+  <aside class="sidebar" :class="{ 'is-collapsed': uiStore.sidebarCollapsed }">
     <TopicManager v-if="hasOpenedManager" :show="showManager" @close="showManager = false" />
+
+    <button
+      v-if="uiStore.sidebarCollapsed"
+      class="collapsed-toggle"
+      title="展开侧边栏"
+      aria-label="展开侧边栏"
+      @click="uiStore.toggleSidebar"
+    >
+      <svg
+        width="16"
+        height="16"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <path d="m9 18 6-6-6-6" />
+      </svg>
+    </button>
 
     <div class="section">
       <div class="section-header">
@@ -50,6 +71,25 @@
               stroke-linecap="round"
             >
               <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+            </svg>
+          </button>
+          <button
+            class="collapse-btn"
+            title="收起侧边栏"
+            aria-label="收起侧边栏"
+            @click="uiStore.toggleSidebar"
+          >
+            <svg
+              width="15"
+              height="15"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="m15 18-6-6 6-6" />
             </svg>
           </button>
         </div>
@@ -192,10 +232,12 @@
 // Sidebar 组件，封装局部界面和交互逻辑。
 import { ref, computed, onBeforeUnmount, defineAsyncComponent } from 'vue'
 import { useLearningStore } from '../stores/learning'
+import { useUiStore } from '../stores/ui'
 
 const TopicManager = defineAsyncComponent(() => import('./navigation/TopicManager.vue'))
 
 const store = useLearningStore()
+const uiStore = useUiStore()
 const showManager = ref(false)
 
 const hasOpenedManager = ref(false)
@@ -272,6 +314,7 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .sidebar {
+  position: relative;
   width: 232px;
   flex-shrink: 0;
   display: flex;
@@ -282,8 +325,51 @@ onBeforeUnmount(() => {
   border-right: 1px solid var(--line);
   overflow-y: auto;
   transition:
+    width 0.25s ease,
+    padding 0.25s ease,
     background 0.3s,
     border-color 0.3s;
+}
+
+.sidebar.is-collapsed {
+  width: 0;
+  min-width: 0;
+  padding-inline: 0;
+  gap: 0;
+  overflow: visible;
+  border-right-color: transparent;
+}
+
+.sidebar.is-collapsed > :not(.collapsed-toggle) {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.collapsed-toggle {
+  position: absolute;
+  top: 12px;
+  right: -38px;
+  z-index: 5;
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg-2);
+  color: var(--ink-2);
+  cursor: pointer;
+  box-shadow: var(--control-shadow);
+  transition:
+    background 0.15s,
+    color 0.15s;
+}
+
+.collapsed-toggle:hover,
+.collapse-btn:hover {
+  background: var(--blue-tint);
+  color: var(--blue-2);
 }
 
 .section-header {
@@ -329,6 +415,20 @@ onBeforeUnmount(() => {
 }
 
 .theme-btn {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-3);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink-2);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.collapse-btn {
   width: 28px;
   height: 28px;
   display: flex;

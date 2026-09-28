@@ -143,6 +143,27 @@ describe('useAssessment', () => {
     expect(celebrate).toHaveBeenCalledWith('arrays')
   })
 
+  it('restores an unfinished assessment for the current session', async () => {
+    vi.mocked(topicApi.getNodes).mockResolvedValue([
+      {
+        ...serverNodes[0],
+        state: 'available',
+        mastery_source: null,
+        mastery_confidence: null,
+        assessment_result: null,
+      },
+    ])
+    vi.mocked(agentApi.getAgentRun).mockResolvedValue(activeRun)
+    localStorage.setItem('sm_agent_runs_5', JSON.stringify({ 'session-1': activeRun.run_id }))
+
+    const flow = useAssessment({ userId: () => 5, sessionId: () => 'session-1' })
+    const restored = await flow.restore()
+
+    expect(restored).toEqual(activeRun)
+    expect(agentApi.getAgentRun).toHaveBeenCalledWith(activeRun.run_id)
+    expect(localStorage.getItem('sm_agent_runs_5')).toContain(activeRun.run_id)
+  })
+
   it('self report refreshes nodes without synthesizing descendant state locally', async () => {
     vi.mocked(agentApi.selfReportMastery).mockResolvedValue({
       event_id: 3,

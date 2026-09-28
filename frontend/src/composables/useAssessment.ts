@@ -60,6 +60,16 @@ export function useAssessment(options: AssessmentOptions) {
       .then((response) => accept(response, nodeId))
   }
 
+  async function restore() {
+    const index = recovery()
+    if (!index) return null
+    const runId = index.getRunId(options.sessionId())
+    if (!runId) return null
+    const response = await agent.restoreRun(runId)
+    if (!response || response.type !== 'assessment') return null
+    return accept(response)
+  }
+
   function answer(value: string) {
     return agent.answer(value).then((response) => accept(response))
   }
@@ -84,5 +94,5 @@ export function useAssessment(options: AssessmentOptions) {
     return response
   }
 
-  return { start, answer, retry, cancel, selfReport, revert, refreshNodeState }
+  return { start, restore, answer, retry, cancel, selfReport, revert, refreshNodeState }
 }

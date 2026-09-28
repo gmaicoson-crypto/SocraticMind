@@ -28,6 +28,7 @@ export const useAgentStore = defineStore('agent', () => {
   const run = shallowRef<AgentRun | null>(null)
   const loading = ref(false)
   const submitting = ref(false)
+  const retrying = ref(false)
   const error = shallowRef<ApiProblem | null>(null)
   const onboardingTopic = ref<string | null>(null)
   const topicPlanDraft = shallowRef<{ topicId: number; title: string } | null>(null)
@@ -165,7 +166,10 @@ export const useAgentStore = defineStore('agent', () => {
 
   function retry() {
     if (!run.value) return Promise.resolve(null)
-    return mutateRun(() => retryAgentRun(run.value!.run_id))
+    retrying.value = true
+    return mutateRun(() => retryAgentRun(run.value!.run_id)).finally(() => {
+      retrying.value = false
+    })
   }
 
   function mutateMastery(request: () => Promise<MasteryResult>) {
@@ -211,6 +215,7 @@ export const useAgentStore = defineStore('agent', () => {
     error.value = null
     loading.value = false
     submitting.value = false
+    retrying.value = false
     requestIds.clear()
   }
 
@@ -242,6 +247,7 @@ export const useAgentStore = defineStore('agent', () => {
     run,
     loading,
     submitting,
+    retrying,
     error,
     onboardingTopic,
     topicPlanDraft,

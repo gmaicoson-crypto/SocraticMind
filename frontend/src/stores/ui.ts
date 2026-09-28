@@ -14,6 +14,10 @@ function getInitialTheme(): ThemeName {
   return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
 }
 
+function getInitialSidebarCollapsed() {
+  return localStorage.getItem('sm_sidebar_collapsed') === 'true'
+}
+
 function applyTheme(theme: ThemeName) {
   const root = document.documentElement
   root.classList.add('theme-switching')
@@ -32,6 +36,7 @@ let themeSwitchFrame: number | null = null
 export const useUiStore = defineStore('ui', () => {
   const theme = ref<ThemeName>(getInitialTheme())
   const isDark = computed(() => theme.value === 'dark')
+  const sidebarCollapsed = ref(getInitialSidebarCollapsed())
   applyTheme(theme.value)
 
   function setTheme(nextTheme: ThemeName) {
@@ -44,5 +49,22 @@ export const useUiStore = defineStore('ui', () => {
     setTheme(isDark.value ? 'light' : 'dark')
   }
 
-  return { theme, isDark, setTheme, toggleTheme }
+  function setSidebarCollapsed(collapsed: boolean) {
+    sidebarCollapsed.value = collapsed
+    localStorage.setItem('sm_sidebar_collapsed', String(collapsed))
+  }
+
+  function toggleSidebar() {
+    setSidebarCollapsed(!sidebarCollapsed.value)
+  }
+
+  return {
+    theme,
+    isDark,
+    sidebarCollapsed,
+    setTheme,
+    toggleTheme,
+    setSidebarCollapsed,
+    toggleSidebar,
+  }
 })

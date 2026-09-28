@@ -5,6 +5,7 @@ import Sidebar from '../Sidebar.vue'
 import SocraticDialogue from '../SocraticDialogue.vue'
 import { useAgentStore } from '../../stores/agent'
 import { useLearningStore } from '../../stores/learning'
+import { useUiStore } from '../../stores/ui'
 
 vi.mock('../../api/chat', () => ({
   chatStream: vi.fn(),
@@ -50,5 +51,23 @@ describe('onboarding entry points', () => {
 
     expect(agent.onboardingTopic).toBe('Rust')
     dialogue.unmount()
+  })
+
+  it('toggles the sidebar and persists the collapsed state', async () => {
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    const ui = useUiStore()
+    const sidebar = mount(Sidebar, { global: { plugins: [pinia] } })
+
+    expect(ui.sidebarCollapsed).toBe(false)
+    await sidebar.get('.collapse-btn').trigger('click')
+    expect(ui.sidebarCollapsed).toBe(true)
+    expect(localStorage.getItem('sm_sidebar_collapsed')).toBe('true')
+    expect(sidebar.find('.sidebar').classes()).toContain('is-collapsed')
+
+    await sidebar.get('.collapsed-toggle').trigger('click')
+    expect(ui.sidebarCollapsed).toBe(false)
+    expect(localStorage.getItem('sm_sidebar_collapsed')).toBe('false')
+    sidebar.unmount()
   })
 })

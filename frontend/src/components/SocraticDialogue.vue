@@ -134,22 +134,33 @@
         <div
           v-else-if="chatMode === 'socratic' && agentStore.run?.status === 'failed'"
           class="agent-error"
+          :class="{ 'is-retrying': agentStore.retrying }"
+          role="status"
+          aria-live="polite"
         >
-          <strong>{{ agentStore.error?.message ?? '流程执行失败' }}</strong>
-          <span>{{ agentStore.error?.code }}</span>
+          <strong>{{
+            agentStore.retrying ? '流程正在重试…' : (agentStore.error?.message ?? '流程执行失败')
+          }}</strong>
+          <span v-if="!agentStore.retrying">{{ agentStore.error?.code }}</span>
           <div>
             <button
-              v-if="agentStore.canRetry"
+              v-if="agentStore.canRetry && !agentStore.retrying"
               :disabled="agentStore.submitting"
               @click="retryAgentFlow"
             >
               重试
             </button>
-            <button :disabled="agentStore.submitting" @click="cancelAgentFlow">取消流程</button>
+            <button
+              v-if="!agentStore.retrying"
+              :disabled="agentStore.submitting"
+              @click="cancelAgentFlow"
+            >
+              取消流程
+            </button>
           </div>
         </div>
         <NodeMasteryControls
-          v-else-if="chatMode === 'socratic' && store.activeNode && !draftTopic"
+          v-else-if="chatMode === 'socratic' && store.activeNode && !draftTopic && !activeAgentRun"
           :node="store.activeNode"
           :busy="agentStore.submitting"
           :error="agentStore.error?.message"
@@ -684,7 +695,8 @@ watch(
   async ([userId]) => {
     if (!userId) return
     resetSessionInteraction()
-    await onboardingFlow.restore()
+    const restoredAssessment = await assessmentFlow.restore()
+    if (!restoredAssessment) await onboardingFlow.restore()
     scrollToBottom()
   },
   { immediate: true },
@@ -1413,6 +1425,7 @@ onBeforeUnmount(() => {
   height: 100%;
   flex: 1;
   position: relative;
+  container-type: inline-size;
 }
 
 .dlg-header {
@@ -1497,6 +1510,10 @@ onBeforeUnmount(() => {
   background: var(--danger-soft);
   color: var(--ink);
   font-size: 12px;
+}
+.agent-error.is-retrying {
+  border-color: var(--line);
+  background: var(--surface);
 }
 .agent-error > span {
   color: var(--ink-3);

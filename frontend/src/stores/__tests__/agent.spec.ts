@@ -133,6 +133,32 @@ describe('agent store', () => {
     expect(store.canRetry).toBe(true)
   })
 
+  it('exposes retrying state while a failed run is being retried', async () => {
+    let resolveRequest: (value: AgentRun) => void = () => undefined
+    vi.mocked(agentApi.retryAgentRun).mockReturnValue(
+      new Promise((resolve) => {
+        resolveRequest = resolve
+      }),
+    )
+    const store = useAgentStore()
+    store.run = run({
+      status: 'failed',
+      step: null,
+      error: { code: 'AI_TIMEOUT', retryable: true },
+    })
+
+    const pending = store.retry()
+    expect(store.retrying).toBe(true)
+    expect(store.submitting).toBe(true)
+
+    resolveRequest(run({ status: 'diagnosing', step: null, error: null }))
+    await pending
+
+    expect(store.retrying).toBe(false)
+    expect(store.submitting).toBe(false)
+    expect(store.run?.status).toBe('diagnosing')
+  })
+
   it('ignores a run response that belongs to a session left while it was pending', async () => {
     let resolveRequest: (value: AgentRun) => void = () => undefined
     vi.mocked(agentApi.startOnboarding).mockReturnValue(
