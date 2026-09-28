@@ -229,7 +229,7 @@ function createTopicPlan() {
   font-size: 11px;
 }
 .overdue-section h3 {
-  color: #b45309;
+  color: var(--warning-ink);
 }
 .panel-state,
 :deep(.ui-empty-state) {
@@ -245,12 +245,12 @@ function createTopicPlan() {
   text-align: center;
 }
 .error-state {
-  color: #b91c1c;
+  color: var(--danger-strong);
 }
 .primary-action {
   border-color: var(--blue-2) !important;
   background: var(--blue-2) !important;
-  color: white !important;
+  color: var(--on-accent) !important;
 }
 @media (max-width: 640px) {
   .plan-header,

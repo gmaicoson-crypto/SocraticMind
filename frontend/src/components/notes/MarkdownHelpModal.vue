@@ -177,7 +177,7 @@ const activeGroup = ref(rawGroups[0].id)
   position: fixed;
   inset: 0;
   z-index: 320;
-  background: rgba(0, 0, 0, 0.32);
+  background: var(--overlay-soft);
   backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
@@ -192,7 +192,7 @@ const activeGroup = ref(rawGroups[0].id)
   height: min(640px, 100%);
   display: flex;
   flex-direction: column;
-  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.18);
+  box-shadow: var(--shadow-modal-sm);
   overflow: hidden;
 }
 .md-help-header {

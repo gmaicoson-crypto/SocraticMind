@@ -96,8 +96,8 @@ defineEmits<{
   width: 72px;
   height: 72px;
   border-radius: 18px;
-  background: linear-gradient(135deg, oklch(0.85 0.06 60), oklch(0.7 0.1 35));
-  color: white;
+  background: var(--avatar-bg);
+  color: var(--on-accent);
   font-size: 26px;
   font-weight: 700;
   display: flex;

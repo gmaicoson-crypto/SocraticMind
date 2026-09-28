@@ -37,13 +37,13 @@ defineEmits<{ open: [] }>()
   padding: 4px 8px;
   border: none;
   border-radius: 10px;
-  background: transparent;
+  background: var(--profile-bg);
   font-family: var(--font-sans);
   cursor: pointer;
   transition: background 0.15s;
 }
 .profile-wrap:hover {
-  background: var(--bg-2);
+  background: var(--profile-hover-bg);
 }
 .profile-info {
   display: flex;
@@ -70,8 +70,8 @@ defineEmits<{ open: [] }>()
   height: 36px;
   overflow: hidden;
   border-radius: 10px;
-  background: linear-gradient(135deg, oklch(0.85 0.06 60), oklch(0.7 0.1 35));
-  color: white;
+  background: var(--avatar-bg);
+  color: var(--on-accent);
   font-size: 13px;
   font-weight: 700;
 }

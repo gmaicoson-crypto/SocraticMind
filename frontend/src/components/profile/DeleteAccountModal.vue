@@ -118,7 +118,7 @@ watch(
   position: fixed;
   inset: 0;
   z-index: 360;
-  background: rgba(0, 0, 0, 0.45);
+  background: var(--overlay-strong);
   backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
@@ -127,12 +127,12 @@ watch(
 }
 .da-modal {
   background: var(--surface);
-  border: 1px solid #f7c1c1;
+  border: 1px solid var(--danger-line);
   border-radius: 16px;
   width: min(440px, 100%);
   display: flex;
   flex-direction: column;
-  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.22);
+  box-shadow: var(--shadow-modal-sm);
   overflow: hidden;
 }
 .da-header {
@@ -148,10 +148,10 @@ watch(
   gap: 8px;
   font-size: 14px;
   font-weight: 600;
-  color: #c0392b;
+  color: var(--danger-title);
 }
 .da-title svg {
-  color: #e24b4a;
+  color: var(--danger-button-text);
 }
 .da-body {
   padding: 18px 22px 20px;
@@ -162,14 +162,14 @@ watch(
 .da-warn {
   font-size: 12.5px;
   line-height: 1.7;
-  color: #8b2d2d;
-  background: #fcebeb;
-  border: 1px solid #f7c1c1;
+  color: var(--danger-body);
+  background: var(--danger-soft);
+  border: 1px solid var(--danger-line);
   border-radius: 10px;
   padding: 12px 14px;
 }
 .da-warn strong {
-  color: #a32d2d;
+  color: var(--danger-ink);
   font-weight: 700;
 }
 .da-warn ul {
@@ -203,9 +203,9 @@ watch(
     box-shadow 0.15s;
 }
 .da-field input:focus {
-  border-color: #e24b4a;
+  border-color: var(--danger-button-text);
   background: var(--surface);
-  box-shadow: 0 0 0 3px rgba(226, 75, 74, 0.15);
+  box-shadow: 0 0 0 3px var(--danger-focus-ring);
 }
 
 .da-actions {
@@ -235,9 +235,9 @@ watch(
 .da-submit {
   padding: 8px 18px;
   border-radius: 9px;
-  background: linear-gradient(135deg, #e24b4a, #b83232);
+  background: var(--danger-gradient);
   border: none;
-  color: white;
+  color: var(--on-accent);
   font-size: 12.5px;
   font-weight: 600;
   cursor: pointer;

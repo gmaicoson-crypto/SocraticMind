@@ -102,7 +102,7 @@ const sourceLabel = computed(
 }
 .mastery-error {
   margin: 0;
-  color: #b91c1c;
+  color: var(--danger-strong);
   font-size: 11.5px;
   overflow-wrap: anywhere;
 }
@@ -119,8 +119,8 @@ const sourceLabel = computed(
   color: var(--blue-2);
 }
 .state-badge.mastered {
-  background: color-mix(in srgb, #16a34a 11%, var(--surface));
-  color: #15803d;
+  background: var(--success-muted-bg);
+  color: var(--success-strong);
 }
 .mastery-evidence {
   display: flex;
@@ -149,6 +149,6 @@ const sourceLabel = computed(
 .mastery-actions :deep(.primary) {
   border-color: var(--blue-2);
   background: var(--blue-2);
-  color: white;
+  color: var(--on-accent);
 }
 </style>

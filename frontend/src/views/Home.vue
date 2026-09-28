@@ -243,7 +243,7 @@ useStudyTimer(() => store.userInfo?.id)
   color: var(--blue-2);
   box-shadow:
     0 1px 0 var(--line),
-    0 1px 3px oklch(0.5 0.04 235 / 0.08);
+    var(--control-shadow);
 }
 .right-panel {
   flex: 1;
@@ -300,7 +300,7 @@ useStudyTimer(() => store.userInfo?.id)
   .mobile-pane-tabs button.active {
     background: var(--surface);
     color: var(--blue-2);
-    box-shadow: 0 1px 3px oklch(0.5 0.04 235 / 0.08);
+    box-shadow: var(--control-shadow);
   }
   .dialogue-col,
   .right-col {

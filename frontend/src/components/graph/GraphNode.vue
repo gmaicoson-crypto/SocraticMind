@@ -36,7 +36,7 @@
       <path
         d="M-5 0 L-1 4 L6 -4"
         fill="none"
-        stroke="white"
+        stroke="var(--on-accent)"
         stroke-width="2.2"
         stroke-linecap="round"
         stroke-linejoin="round"
@@ -151,10 +151,10 @@ const styles = computed(() => {
 @keyframes pulseGlow {
   0%,
   100% {
-    filter: drop-shadow(0 0 0 oklch(0.72 0.085 235 / 0));
+    filter: drop-shadow(0 0 0 var(--graph-glow-transparent));
   }
   50% {
-    filter: drop-shadow(0 0 6px oklch(0.72 0.085 235 / 0.6));
+    filter: drop-shadow(0 0 6px var(--graph-glow));
   }
 }
 </style>

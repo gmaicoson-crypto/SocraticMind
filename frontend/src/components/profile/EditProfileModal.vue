@@ -31,7 +31,7 @@
                   <svg
                     viewBox="0 0 24 24"
                     fill="none"
-                    stroke="white"
+                    stroke="var(--on-accent)"
                     stroke-width="2.5"
                     stroke-linecap="round"
                   >
@@ -240,7 +240,7 @@
               height="13"
               viewBox="0 0 24 24"
               fill="none"
-              stroke="white"
+              stroke="var(--on-accent)"
               stroke-width="2.5"
               stroke-linecap="round"
             >
@@ -252,7 +252,7 @@
               height="13"
               viewBox="0 0 24 24"
               fill="none"
-              stroke="white"
+              stroke="var(--on-accent)"
               stroke-width="2.5"
               stroke-linecap="round"
             >
@@ -496,7 +496,7 @@ async function handleDeleteAccount(payload: { password: string; confirm: string 
 .overlay {
   position: fixed;
   inset: 0;
-  background: rgba(30, 28, 26, 0.5);
+  background: var(--overlay-bg);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -513,7 +513,7 @@ async function handleDeleteAccount(payload: { password: string; confirm: string 
   border: 1px solid var(--line);
   border-radius: 18px;
   overflow: hidden;
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.18);
+  box-shadow: var(--modal-shadow);
   max-height: 90vh;
   display: flex;
   flex-direction: column;
@@ -525,7 +525,7 @@ async function handleDeleteAccount(payload: { password: string; confirm: string 
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: linear-gradient(180deg, var(--bg-2), var(--surface));
+  background: var(--modal-header-bg);
   flex-shrink: 0;
 }
 
@@ -592,7 +592,7 @@ async function handleDeleteAccount(payload: { password: string; confirm: string 
   height: 64px;
   border-radius: 16px;
   flex-shrink: 0;
-  color: white;
+  color: var(--on-accent);
   font-size: 24px;
   font-weight: 700;
   display: flex;
@@ -619,7 +619,7 @@ async function handleDeleteAccount(payload: { password: string; confirm: string 
   padding: 5px 10px;
   border-radius: 7px;
   background: var(--blue-2);
-  color: white;
+  color: var(--on-accent);
   border: none;
   cursor: pointer;
   font-family: var(--font-sans);
@@ -654,10 +654,10 @@ async function handleDeleteAccount(payload: { password: string; confirm: string 
 }
 .pwd-msg {
   font-size: 11.5px;
-  color: #e24b4a;
+  color: var(--danger-ink);
 }
 .pwd-msg.ok {
-  color: #1d9e75;
+  color: var(--green);
 }
 .pwd-actions {
   display: flex;
@@ -720,7 +720,7 @@ async function handleDeleteAccount(payload: { password: string; confirm: string 
   transition: all 0.15s;
 }
 .field-input.readonly {
-  background: var(--bg-3);
+  background: var(--surface-inset);
   cursor: not-allowed;
 }
 .field-input input:disabled {
@@ -755,7 +755,7 @@ async function handleDeleteAccount(payload: { password: string; confirm: string 
 
 .seg {
   display: flex;
-  background: var(--bg-2);
+  background: var(--surface-inset);
   border-radius: 9px;
   padding: 3px;
   border: 1px solid var(--line);
@@ -776,7 +776,7 @@ async function handleDeleteAccount(payload: { password: string; confirm: string 
 .seg-btn.active {
   background: var(--surface);
   color: var(--ink);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  box-shadow: var(--control-shadow);
 }
 
 .toggle-list {
@@ -827,8 +827,8 @@ async function handleDeleteAccount(payload: { password: string; confirm: string 
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  background: white;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+  background: var(--on-accent);
+  box-shadow: var(--control-shadow);
   transition: left 0.2s;
 }
 .toggle.on .toggle-thumb {
@@ -885,12 +885,12 @@ async function handleDeleteAccount(payload: { password: string; confirm: string 
   background: var(--bg-2);
 }
 .danger-btn.red {
-  background: #fcebeb;
-  border: 1px solid #f7c1c1;
-  color: #e24b4a;
+  background: var(--danger-button-bg);
+  border: 1px solid var(--danger-button-border);
+  color: var(--danger-button-text);
 }
 .danger-btn.red:hover {
-  background: #f7c1c1;
+  background: var(--danger-button-hover-bg);
 }
 
 .modal-footer {
@@ -900,7 +900,7 @@ async function handleDeleteAccount(payload: { password: string; confirm: string 
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
-  background: linear-gradient(0deg, var(--bg-2), var(--surface));
+  background: var(--modal-footer-bg);
   flex-shrink: 0;
 }
 
@@ -925,8 +925,8 @@ async function handleDeleteAccount(payload: { password: string; confirm: string 
   border-radius: 9px;
   font-size: 13px;
   font-weight: 600;
-  background: linear-gradient(135deg, var(--blue), var(--blue-2));
-  color: white;
+  background: var(--accent-gradient);
+  color: var(--on-accent);
   border: none;
   cursor: pointer;
   font-family: var(--font-sans);
@@ -943,15 +943,15 @@ async function handleDeleteAccount(payload: { password: string; confirm: string 
   cursor: not-allowed;
 }
 .save-btn.saved {
-  background: linear-gradient(135deg, #1d9e75, #0f6e56);
+  background: var(--success-gradient);
 }
 
 .spinner {
   width: 13px;
   height: 13px;
   border-radius: 50%;
-  border: 2px solid rgba(255, 255, 255, 0.4);
-  border-top-color: white;
+  border: 2px solid var(--on-accent-border);
+  border-top-color: var(--on-accent);
   animation: spin 0.7s linear infinite;
 }
 @keyframes spin {

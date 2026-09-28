@@ -85,7 +85,7 @@ const tabs: Array<{ key: 'md' | 'canvas'; label: string; icon: any }> = [
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: linear-gradient(180deg, var(--bg-2), var(--surface));
+  background: var(--header-gradient);
   flex-shrink: 0;
   gap: 8px;
 }

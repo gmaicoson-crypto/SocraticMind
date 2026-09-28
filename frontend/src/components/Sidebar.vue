@@ -249,10 +249,9 @@ function getBarStyle(i: number) {
   }
 
   const ratio = i / 31
-  const l = 0.78 - ratio * 0.25
-  const c = 0.07 + ratio * 0.08
+  const intensity = Math.round(55 + ratio * 45)
   return {
-    background: `oklch(${l.toFixed(2)} ${c.toFixed(2)} 235)`,
+    background: `color-mix(in oklch, var(--blue) ${intensity}%, var(--surface))`,
     opacity: '1',
   }
 }
@@ -406,7 +405,7 @@ onBeforeUnmount(() => {
 }
 .emoji-active {
   background: var(--blue-2);
-  color: white;
+  color: var(--on-accent);
 }
 
 .topic-info {
@@ -548,8 +547,8 @@ onBeforeUnmount(() => {
   bottom: 24px;
   left: 50%;
   transform: translateX(-50%);
-  background: oklch(0.22 0.012 250);
-  color: white;
+  background: var(--toast-bg);
+  color: var(--on-accent);
   font-size: 13px;
   font-weight: 500;
   padding: 10px 16px;
@@ -559,7 +558,7 @@ onBeforeUnmount(() => {
   gap: 8px;
   z-index: 999;
   white-space: nowrap;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+  box-shadow: var(--toast-shadow);
   font-family: var(--font-sans);
 }
 

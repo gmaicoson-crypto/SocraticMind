@@ -7,14 +7,14 @@
           height="18"
           viewBox="0 0 24 24"
           fill="none"
-          stroke="white"
+          stroke="var(--on-accent)"
           stroke-width="2"
           stroke-linecap="round"
           stroke-linejoin="round"
         >
-          <circle cx="12" cy="6" r="2.5" fill="white" stroke="none" />
-          <circle cx="6" cy="16" r="2" fill="white" stroke="none" />
-          <circle cx="18" cy="16" r="2" fill="white" stroke="none" />
+          <circle cx="12" cy="6" r="2.5" fill="var(--on-accent)" stroke="none" />
+          <circle cx="6" cy="16" r="2" fill="var(--on-accent)" stroke="none" />
+          <circle cx="18" cy="16" r="2" fill="var(--on-accent)" stroke="none" />
           <path d="M12 8 L6 14 M12 8 L18 14 M8 16 H16" />
         </svg>
       </div>
@@ -249,8 +249,8 @@ onMounted(async () => {
   gap: 16px;
   padding: 0 18px;
   height: 60px;
-  background: var(--surface);
-  border-bottom: 1px solid var(--line);
+  background: var(--topbar-bg);
+  border-bottom: 1px solid var(--topbar-border);
   flex-shrink: 0;
   position: relative;
   z-index: 100;
@@ -266,9 +266,9 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, var(--blue), var(--blue-2));
+  background: var(--logo-bg);
   border-radius: 9px;
-  box-shadow: 0 2px 8px oklch(0.72 0.085 235 / 0.3);
+  box-shadow: var(--logo-shadow);
 }
 .logo-text {
   font-size: 15px;
@@ -312,8 +312,8 @@ onMounted(async () => {
 }
 .search-wrap.focused {
   border-color: var(--blue);
-  box-shadow: 0 0 0 3px oklch(0.72 0.085 235 / 0.15);
-  background: var(--surface);
+  box-shadow: var(--search-focus-shadow);
+  background: var(--search-focus-bg);
 }
 .search-wrap input {
   flex: 1;
@@ -360,7 +360,7 @@ onMounted(async () => {
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 12px;
-  box-shadow: 0 8px 30px oklch(0.5 0.04 235 / 0.12);
+  box-shadow: var(--dropdown-shadow);
   overflow: hidden;
   z-index: 200;
 }
@@ -429,8 +429,8 @@ onMounted(async () => {
   text-overflow: ellipsis;
 }
 .item-title :deep(mark) {
-  background: oklch(0.72 0.085 235 / 0.2);
-  color: var(--blue-2);
+  background: var(--highlight-bg);
+  color: var(--highlight-text);
   border-radius: 2px;
   padding: 0 1px;
 }
@@ -495,7 +495,7 @@ onMounted(async () => {
 }
 .progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, var(--blue), var(--blue-2));
+  background: var(--progress-gradient);
   border-radius: 999px;
   transition: width 0.4s ease;
 }
@@ -529,8 +529,8 @@ onMounted(async () => {
 .avatar {
   width: 36px;
   height: 36px;
-  background: linear-gradient(135deg, oklch(0.85 0.06 60), oklch(0.7 0.1 35));
-  color: white;
+  background: var(--avatar-bg);
+  color: var(--on-accent);
   font-size: 13px;
   font-weight: 700;
   display: flex;

@@ -9,13 +9,13 @@
               height="20"
               viewBox="0 0 24 24"
               fill="none"
-              stroke="white"
+              stroke="var(--on-accent)"
               stroke-width="2"
               stroke-linecap="round"
             >
-              <circle cx="12" cy="6" r="2.5" fill="white" stroke="none" />
-              <circle cx="6" cy="16" r="2" fill="white" stroke="none" />
-              <circle cx="18" cy="16" r="2" fill="white" stroke="none" />
+              <circle cx="12" cy="6" r="2.5" fill="var(--on-accent)" stroke="none" />
+              <circle cx="6" cy="16" r="2" fill="var(--on-accent)" stroke="none" />
+              <circle cx="18" cy="16" r="2" fill="var(--on-accent)" stroke="none" />
               <path d="M12 8L6 14M12 8L18 14M8 16H16" />
             </svg>
           </div>
@@ -269,7 +269,7 @@
                 height="14"
                 viewBox="0 0 24 24"
                 fill="none"
-                stroke="white"
+                stroke="var(--on-accent)"
                 stroke-width="2.5"
                 stroke-linecap="round"
               >
@@ -426,10 +426,10 @@ const strengthPct = computed(() => {
 })
 
 const strengthColor = computed(() => {
-  if (strengthPct.value <= 25) return '#E24B4A'
-  if (strengthPct.value <= 50) return '#EF9F27'
-  if (strengthPct.value <= 75) return '#5BA3D9'
-  return '#1D9E75'
+  if (strengthPct.value <= 25) return 'var(--danger-button-text)'
+  if (strengthPct.value <= 50) return 'var(--timeline-start)'
+  if (strengthPct.value <= 75) return 'var(--blue)'
+  return 'var(--timeline-chat)'
 })
 
 const strengthLabel = computed(() => {
@@ -514,13 +514,13 @@ const features = [
           height: 15,
           viewBox: '0 0 24 24',
           fill: 'none',
-          stroke: '#2E7FBB',
+          stroke: 'var(--blue-2)',
           'stroke-width': 2,
         },
         [
           h('path', {
             d: 'M12 2L13.5 8.5L20 10L13.5 11.5L12 18L10.5 11.5L4 10L10.5 8.5Z',
-            fill: '#EBF4FD',
+            fill: 'var(--blue-soft)',
           }),
         ],
       ),
@@ -536,7 +536,7 @@ const features = [
           height: 15,
           viewBox: '0 0 24 24',
           fill: 'none',
-          stroke: '#2E7FBB',
+          stroke: 'var(--blue-2)',
           'stroke-width': 2,
           'stroke-linecap': 'round',
         },
@@ -559,7 +559,7 @@ const features = [
           height: 15,
           viewBox: '0 0 24 24',
           fill: 'none',
-          stroke: '#2E7FBB',
+          stroke: 'var(--blue-2)',
           'stroke-width': 2,
           'stroke-linecap': 'round',
         },
@@ -590,7 +590,7 @@ const features = [
   border: 1px solid var(--line);
   border-radius: 20px;
   overflow: hidden;
-  box-shadow: 0 8px 40px oklch(0.5 0.04 235 / 0.1);
+  box-shadow: var(--shadow-auth);
 }
 
 .brand {
@@ -613,11 +613,11 @@ const features = [
   width: 36px;
   height: 36px;
   border-radius: 10px;
-  background: linear-gradient(135deg, var(--blue), var(--blue-2));
+  background: var(--accent-gradient);
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 2px 8px oklch(0.72 0.085 235 / 0.3);
+  box-shadow: var(--brand-shadow);
 }
 
 .brand-name {
@@ -741,7 +741,7 @@ const features = [
 .ftab.active {
   background: var(--surface);
   color: var(--ink);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  box-shadow: var(--control-shadow);
 }
 
 .form-header {
@@ -864,7 +864,7 @@ const features = [
 
 .field-error {
   font-size: 11px;
-  color: #e24b4a;
+  color: var(--danger-button-text);
   font-family: var(--font-mono);
 }
 
@@ -872,8 +872,8 @@ const features = [
   height: 44px;
   border-radius: 10px;
   border: none;
-  background: linear-gradient(135deg, var(--blue), var(--blue-2));
-  color: white;
+  background: var(--accent-gradient);
+  color: var(--on-accent);
   font-size: 13.5px;
   font-weight: 600;
   cursor: pointer;
@@ -896,8 +896,8 @@ const features = [
 .spinner {
   width: 16px;
   height: 16px;
-  border: 2px solid rgba(255, 255, 255, 0.4);
-  border-top-color: white;
+  border: 2px solid var(--spinner-track);
+  border-top-color: var(--spinner-head);
   border-radius: 50%;
   animation: spin 0.7s linear infinite;
 }
@@ -957,7 +957,7 @@ const features = [
 
 .field-success {
   font-size: 11px;
-  color: #1f6f4a;
+  color: var(--success-ink);
   font-family: var(--font-mono);
 }
 

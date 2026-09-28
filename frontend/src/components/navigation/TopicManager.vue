@@ -128,7 +128,7 @@ async function doDelete() {
   position: fixed;
   inset: 0;
   z-index: 200;
-  background: rgba(0, 0, 0, 0.3);
+  background: var(--overlay-bg);
   backdrop-filter: blur(2px);
 }
 
@@ -142,7 +142,7 @@ async function doDelete() {
   border-right: 1px solid var(--line);
   display: flex;
   flex-direction: column;
-  box-shadow: 4px 0 24px rgba(0, 0, 0, 0.12);
+  box-shadow: var(--panel-shadow);
 }
 
 .panel-header {
@@ -151,7 +151,7 @@ async function doDelete() {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: linear-gradient(180deg, var(--bg-2), var(--surface));
+  background: var(--header-gradient);
   flex-shrink: 0;
 }
 
@@ -203,7 +203,7 @@ async function doDelete() {
   padding: 12px;
   border-radius: 10px;
   border: 1px solid var(--line);
-  background: var(--surface);
+  background: var(--surface-raised);
   transition: all 0.15s;
 }
 .topic-item:hover {
@@ -285,9 +285,9 @@ async function doDelete() {
   transition: all 0.15s;
 }
 .delete-btn:hover {
-  background: #fcebeb;
-  border-color: #f7c1c1;
-  color: #e24b4a;
+  background: var(--danger-button-bg);
+  border-color: var(--danger-button-border);
+  color: var(--danger-button-text);
 }
 .delete-btn:disabled {
   opacity: 0.5;
@@ -322,13 +322,13 @@ async function doDelete() {
 .confirm-bar {
   padding: 12px 16px;
   border-top: 1px solid var(--line);
-  background: #fcebeb;
+  background: var(--confirm-bg);
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
   font-size: 12.5px;
-  color: #a32d2d;
+  color: var(--confirm-text);
   flex-shrink: 0;
 }
 
@@ -340,9 +340,9 @@ async function doDelete() {
 .confirm-cancel {
   padding: 5px 12px;
   border-radius: 7px;
-  border: 1px solid #f7c1c1;
-  background: white;
-  color: #a32d2d;
+  border: 1px solid var(--danger-button-border);
+  background: var(--surface);
+  color: var(--confirm-text);
   font-size: 12px;
   cursor: pointer;
   font-family: var(--font-sans);
@@ -352,8 +352,8 @@ async function doDelete() {
   padding: 5px 12px;
   border-radius: 7px;
   border: none;
-  background: #e24b4a;
-  color: white;
+  background: var(--danger-button-text);
+  color: var(--on-accent);
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;

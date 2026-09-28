@@ -298,7 +298,7 @@ defineExpose({ reset, focus })
   display: inline-block;
   height: 24px;
   width: 80px;
-  background: linear-gradient(90deg, var(--bg-2), var(--bg-3), var(--bg-2));
+  background: var(--loading-gradient);
   background-size: 200% 100%;
   border-radius: 999px;
   animation: shimmer 1.4s infinite;
@@ -355,7 +355,7 @@ defineExpose({ reset, focus })
 .mode-btn.active {
   background: var(--surface);
   color: var(--blue-2);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+  box-shadow: var(--control-shadow);
 }
 .mode-badge {
   display: inline-flex;
@@ -365,7 +365,7 @@ defineExpose({ reset, focus })
   height: 16px;
   padding: 0 4px;
   background: var(--blue-2);
-  color: white;
+  color: var(--on-accent);
   border-radius: 999px;
   font-size: 9.5px;
   font-family: var(--font-mono);
@@ -398,7 +398,7 @@ defineExpose({ reset, focus })
 .style-btn.active {
   background: var(--surface);
   color: var(--blue-2);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+  box-shadow: var(--control-shadow);
 }
 
 .fade-slide-enter-active,
@@ -427,7 +427,7 @@ defineExpose({ reset, focus })
 }
 .input-box:focus-within {
   border-color: var(--blue);
-  box-shadow: 0 0 0 3px oklch(0.72 0.085 235 / 0.15);
+  box-shadow: 0 0 0 3px var(--focus-ring);
 }
 .input-box textarea {
   flex: 1;
@@ -452,8 +452,8 @@ defineExpose({ reset, focus })
   align-items: center;
   gap: 6px;
   padding: 6px 14px;
-  background: var(--blue-2);
-  color: white;
+  background: var(--send-bg);
+  color: var(--send-text);
   border: none;
   border-radius: 8px;
   font-size: 12.5px;
@@ -471,9 +471,9 @@ defineExpose({ reset, focus })
   cursor: not-allowed;
 }
 .abort-btn {
-  background: oklch(0.62 0.14 25);
+  background: var(--abort-bg);
 }
 .abort-btn:hover {
-  background: oklch(0.55 0.15 25);
+  background: var(--abort-hover-bg);
 }
 </style>

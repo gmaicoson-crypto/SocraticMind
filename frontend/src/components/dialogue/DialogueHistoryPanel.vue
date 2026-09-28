@@ -307,7 +307,7 @@ watch(
   color: var(--ink);
 }
 .history-action-btn.delete:hover {
-  color: #c14545;
+  color: var(--danger-hover-ink);
 }
 
 .history-new-btn {
@@ -318,7 +318,7 @@ watch(
   margin: 8px;
   padding: 8px 12px;
   background: var(--blue-2);
-  color: white;
+  color: var(--on-accent);
   border: none;
   border-radius: 8px;
   font-size: 12.5px;

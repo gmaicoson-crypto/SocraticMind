@@ -23,7 +23,7 @@
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
             <path
               d="M12 2 L13.5 8.5 L20 10 L13.5 11.5 L12 18 L10.5 11.5 L4 10 L10.5 8.5 Z"
-              fill="white"
+              fill="var(--on-accent)"
             />
           </svg>
           <span v-if="isThinking" class="thinking-dot" />
@@ -1421,7 +1421,7 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: linear-gradient(180deg, var(--bg-2), var(--surface));
+  background: var(--header-gradient);
   flex-shrink: 0;
 }
 .dlg-header-left {
@@ -1434,7 +1434,7 @@ onBeforeUnmount(() => {
   height: 32px;
   flex-shrink: 0;
   border-radius: 10px;
-  background: linear-gradient(135deg, var(--blue), var(--blue-2));
+  background: var(--ai-avatar-bg);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1447,7 +1447,7 @@ onBeforeUnmount(() => {
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  background: oklch(0.72 0.12 145);
+  background: var(--green);
   border: 2px solid var(--surface);
 }
 .dlg-title {
@@ -1492,9 +1492,9 @@ onBeforeUnmount(() => {
   align-self: center;
   gap: 7px;
   padding: 14px 16px;
-  border: 1px solid color-mix(in srgb, #dc2626 35%, var(--line));
+  border: 1px solid var(--danger-line);
   border-radius: 8px;
-  background: color-mix(in srgb, #dc2626 7%, var(--surface));
+  background: var(--danger-soft);
   color: var(--ink);
   font-size: 12px;
 }

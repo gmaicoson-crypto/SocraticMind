@@ -45,7 +45,7 @@
             :key="c"
             class="color-dot"
             :style="{
-              background: c,
+              background: `var(${c})`,
               borderColor: activeColor === c && tool === 'pen' ? 'var(--ink)' : 'var(--surface)',
             }"
             @click="
@@ -146,12 +146,13 @@
 <script setup lang="ts">
 // CanvasSketch 组件，封装局部界面和交互逻辑。
 import { ref, computed, onMounted } from 'vue'
+import { themeColor } from '../../utils/theme'
 
 const canvasRef = ref<HTMLCanvasElement | null>(null)
 const containerRef = ref<HTMLElement | null>(null)
 const ctxRef = ref<CanvasRenderingContext2D | null>(null)
 const tool = ref<'pen' | 'eraser'>('pen')
-const activeColor = ref('oklch(0.62 0.10 235)')
+const activeColor = ref('--canvas-color-2')
 const brushSize = ref(2.5)
 const isDrawing = ref(false)
 const lastPos = ref({ x: 0, y: 0 })
@@ -162,11 +163,11 @@ const MIN_SCALE = 0.5
 const MAX_SCALE = 3
 
 const colors = [
-  'oklch(0.22 0.012 250)',
-  'oklch(0.62 0.10 235)',
-  'oklch(0.65 0.14 25)',
-  'oklch(0.65 0.14 145)',
-  'oklch(0.7 0.15 60)',
+  '--canvas-color-1',
+  '--canvas-color-2',
+  '--canvas-color-3',
+  '--canvas-color-4',
+  '--canvas-color-5',
 ]
 
 const cursorStyle = computed(() => {
@@ -228,7 +229,7 @@ function drawHint() {
   const W = c.width / dpr
   const H = c.height / dpr
   ctx.save()
-  ctx.fillStyle = 'oklch(0.6 0.014 250)'
+  ctx.fillStyle = themeColor('--canvas-hint')
   ctx.font = "13px 'JetBrains Mono', monospace"
   ctx.textAlign = 'center'
   ctx.fillText('// 在这里画图、写公式、做思维导图…', W / 2, H / 2)
@@ -262,7 +263,7 @@ function onMove(e: MouseEvent | TouchEvent) {
   const p = getPos(e)
   const ctx = ctxRef.value
   ctx.globalCompositeOperation = tool.value === 'eraser' ? 'destination-out' : 'source-over'
-  ctx.strokeStyle = activeColor.value
+  ctx.strokeStyle = themeColor(activeColor.value)
   ctx.lineWidth = tool.value === 'eraser' ? brushSize.value * 4 : brushSize.value
   ctx.beginPath()
   ctx.moveTo(lastPos.value.x, lastPos.value.y)
@@ -413,10 +414,10 @@ function downloadCanvas() {
 .canvas-action-btn {
   font-size: 11.5px;
   padding: 5px 10px;
-  background: var(--surface);
-  border: 1px solid var(--line);
+  background: var(--canvas-action-bg);
+  border: 1px solid var(--canvas-action-border);
   border-radius: 6px;
-  color: var(--ink-2);
+  color: var(--canvas-action-text);
   cursor: pointer;
   font-weight: 500;
   font-family: var(--font-sans);
@@ -426,7 +427,7 @@ function downloadCanvas() {
   transition: background 0.15s;
 }
 .canvas-action-btn:hover {
-  background: var(--bg-3);
+  background: var(--canvas-action-hover-bg);
 }
 
 .canvas-container {

@@ -65,7 +65,7 @@ const titleId = `confirm-title-${Math.random().toString(36).slice(2)}`
   align-items: center;
   justify-content: center;
   padding: 24px;
-  background: rgba(0, 0, 0, 0.4);
+  background: var(--overlay-medium);
   backdrop-filter: blur(4px);
 }
 .ui-confirm-dialog {
@@ -74,7 +74,7 @@ const titleId = `confirm-title-${Math.random().toString(36).slice(2)}`
   border: 1px solid var(--line);
   border-radius: 12px;
   background: var(--surface);
-  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.2);
+  box-shadow: var(--shadow-modal-sm);
 }
 .ui-confirm-dialog__title {
   margin: 0;

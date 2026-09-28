@@ -204,7 +204,7 @@ onBeforeUnmount(() => {
   position: fixed;
   inset: 0;
   z-index: 340;
-  background: rgba(0, 0, 0, 0.36);
+  background: var(--overlay-medium);
   backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
@@ -218,7 +218,7 @@ onBeforeUnmount(() => {
   width: min(440px, 100%);
   display: flex;
   flex-direction: column;
-  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.18);
+  box-shadow: var(--shadow-modal-sm);
   overflow: hidden;
 }
 .fp-header {
@@ -271,7 +271,7 @@ onBeforeUnmount(() => {
 .fp-field input:focus {
   border-color: var(--blue);
   background: var(--surface);
-  box-shadow: 0 0 0 3px oklch(0.72 0.085 235 / 0.12);
+  box-shadow: 0 0 0 3px var(--focus-ring);
 }
 
 .fp-code-row {
@@ -306,11 +306,11 @@ onBeforeUnmount(() => {
 
 .fp-success {
   padding: 8px 12px;
-  background: #e8f5ee;
-  border: 1px solid #b6d9c6;
+  background: var(--success-soft);
+  border: 1px solid var(--success-line);
   border-radius: 8px;
   font-size: 12px;
-  color: #1f6f4a;
+  color: var(--success-ink);
 }
 
 .fp-submit {
@@ -318,8 +318,8 @@ onBeforeUnmount(() => {
   height: 42px;
   border-radius: 10px;
   border: none;
-  background: linear-gradient(135deg, var(--blue), var(--blue-2));
-  color: white;
+  background: var(--accent-gradient);
+  color: var(--on-accent);
   font-size: 13.5px;
   font-weight: 600;
   cursor: pointer;

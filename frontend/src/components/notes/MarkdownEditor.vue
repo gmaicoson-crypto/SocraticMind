@@ -190,7 +190,7 @@ function handleDownload() {
   color: var(--ink);
   box-shadow:
     0 1px 0 var(--line),
-    0 1px 2px oklch(0.7 0.014 78 / 0.06);
+    var(--control-shadow);
 }
 
 .md-meta {
@@ -274,7 +274,7 @@ function handleDownload() {
 }
 .md-editor:focus {
   border-color: var(--blue);
-  box-shadow: 0 0 0 3px oklch(0.72 0.085 235 / 0.15);
+  box-shadow: 0 0 0 3px var(--focus-ring);
   background: var(--surface);
 }
 .md-editor::placeholder {
@@ -343,7 +343,7 @@ function handleDownload() {
   color: var(--ink-3);
 }
 .md-preview :deep(mark) {
-  background: oklch(0.94 0.1 90);
+  background: var(--highlight-bg);
   padding: 0 3px;
   border-radius: 2px;
 }
@@ -362,20 +362,20 @@ function handleDownload() {
   border-radius: 8px;
   overflow: hidden;
   border: 1px solid var(--line);
-  background: #1e1e2e;
+  background: var(--code-bg);
 }
 .md-preview :deep(.md-code-header) {
   display: flex;
   justify-content: flex-end;
   padding: 4px 12px;
-  background: #2a2a3e;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--code-header-bg);
+  border-bottom: 1px solid var(--code-border);
   min-height: 16px;
 }
 .md-preview :deep(.md-code-lang) {
   font-size: 10.5px;
   font-family: var(--font-mono);
-  color: #888;
+  color: var(--code-muted);
   text-transform: lowercase;
   letter-spacing: 0.05em;
 }
@@ -383,7 +383,7 @@ function handleDownload() {
   margin: 0;
   padding: 12px 14px;
   overflow-x: auto;
-  background: #1e1e2e;
+  background: var(--code-bg);
   border: none;
   border-radius: 0;
 }
@@ -393,7 +393,7 @@ function handleDownload() {
   line-height: 1.65;
   background: transparent;
   padding: 0;
-  color: #cdd6f4;
+  color: var(--code-text);
 }
 
 .md-preview :deep(ul),

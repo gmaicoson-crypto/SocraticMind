@@ -220,7 +220,7 @@ select {
 }
 .form-error {
   margin: 10px 0 0;
-  color: #b91c1c;
+  color: var(--danger-strong);
   font-size: 12px;
   overflow-wrap: anywhere;
 }
@@ -242,7 +242,7 @@ select {
 .tool-actions :deep(.primary) {
   border-color: var(--blue-2);
   background: var(--blue-2);
-  color: white;
+  color: var(--on-accent);
 }
 @media (max-width: 640px) {
   .agent-tool {

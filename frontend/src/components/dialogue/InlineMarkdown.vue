@@ -171,8 +171,8 @@ onBeforeUnmount(() => {
   margin: 10px 0;
   border-radius: 10px;
   overflow: hidden;
-  border: 1px solid var(--line);
-  background: #1e1e2e;
+  background: var(--code-bg);
+  border: 1px solid var(--code-border);
 }
 
 .md-inline .code-header {
@@ -180,14 +180,14 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: space-between;
   padding: 6px 14px;
-  background: #2a2a3e;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--code-header-bg);
+  border-bottom: 1px solid var(--code-border);
 }
 
 .md-inline .code-lang {
   font-size: 11px;
   font-family: var(--font-mono);
-  color: #888;
+  color: var(--code-muted);
   text-transform: lowercase;
   letter-spacing: 0.05em;
 }
@@ -195,24 +195,24 @@ onBeforeUnmount(() => {
 .md-inline .code-copy {
   font-size: 11px;
   font-family: var(--font-sans);
-  color: #888;
+  color: var(--code-muted);
   background: transparent;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid var(--line-2);
   border-radius: 5px;
   padding: 2px 8px;
   cursor: pointer;
   transition: all 0.15s;
 }
 .md-inline .code-copy:hover {
-  color: #fff;
-  border-color: rgba(255, 255, 255, 0.3);
+  color: var(--ink);
+  border-color: var(--line-3);
 }
 
 .md-inline pre {
   margin: 0;
   padding: 14px 16px;
   overflow-x: auto;
-  background: #1e1e2e;
+  background: var(--code-bg);
 }
 
 .md-inline pre code {
@@ -221,7 +221,7 @@ onBeforeUnmount(() => {
   line-height: 1.65;
   background: transparent;
   padding: 0;
-  color: #cdd6f4;
+  color: var(--code-text);
 }
 
 .md-inline table {

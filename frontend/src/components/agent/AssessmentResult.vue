@@ -142,8 +142,8 @@ dd {
 .review-notice {
   padding: 8px 10px;
   border-radius: 6px;
-  background: color-mix(in srgb, #d97706 10%, var(--surface));
-  color: #92400e;
+  background: var(--warning-muted-bg);
+  color: var(--warning-ink);
 }
 .score-list {
   display: grid;
@@ -184,7 +184,7 @@ dd {
 .result-actions :deep(.primary) {
   border-color: var(--blue-2);
   background: var(--blue-2);
-  color: white;
+  color: var(--on-accent);
 }
 @media (max-width: 580px) {
   .result-summary {

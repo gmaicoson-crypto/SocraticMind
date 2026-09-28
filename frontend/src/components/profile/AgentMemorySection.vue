@@ -346,11 +346,11 @@ function formatDate(value: string) {
 }
 .error-state,
 .dialog-error {
-  color: #b91c1c;
+  color: var(--danger-strong);
 }
 .memory-inline-error {
   margin: 9px 0 0;
-  color: #b91c1c;
+  color: var(--danger-strong);
   font-size: 11px;
   overflow-wrap: anywhere;
 }
@@ -361,7 +361,7 @@ function formatDate(value: string) {
   display: grid;
   place-items: center;
   padding: 20px;
-  background: rgba(0, 0, 0, 0.4);
+  background: var(--overlay-medium);
   backdrop-filter: blur(4px);
 }
 .memory-dialog {
@@ -372,7 +372,7 @@ function formatDate(value: string) {
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--surface);
-  box-shadow: 0 14px 44px rgba(0, 0, 0, 0.2);
+  box-shadow: var(--shadow-modal-sm);
 }
 .memory-dialog header {
   display: flex;
@@ -416,7 +416,7 @@ function formatDate(value: string) {
 .dialog-actions :deep(.primary) {
   border-color: var(--blue-2);
   background: var(--blue-2);
-  color: white;
+  color: var(--on-accent);
 }
 @media (max-width: 1100px) {
   .memory-groups {

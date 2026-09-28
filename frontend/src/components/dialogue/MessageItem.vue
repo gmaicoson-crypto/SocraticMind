@@ -9,7 +9,7 @@
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
         <path
           d="M12 2 L13.5 8.5 L20 10 L13.5 11.5 L12 18 L10.5 11.5 L4 10 L10.5 8.5 Z"
-          fill="white"
+          fill="var(--on-accent)"
         />
       </svg>
     </div>

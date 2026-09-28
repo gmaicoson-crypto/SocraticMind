@@ -209,7 +209,7 @@ dd {
   line-height: 1.5;
 }
 .risk {
-  background: color-mix(in srgb, #d97706 10%, var(--surface));
+  background: var(--warning-muted-bg);
   color: var(--ink-2);
 }
 .delay {
@@ -310,7 +310,7 @@ small {
 .tool-actions .primary {
   border-color: var(--blue-2);
   background: var(--blue-2);
-  color: white;
+  color: var(--on-accent);
 }
 button:disabled {
   cursor: not-allowed;

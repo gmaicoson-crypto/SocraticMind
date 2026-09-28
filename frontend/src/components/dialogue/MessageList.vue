@@ -55,7 +55,7 @@
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
           <path
             d="M12 2 L13.5 8.5 L20 10 L13.5 11.5 L12 18 L10.5 11.5 L4 10 L10.5 8.5 Z"
-            fill="white"
+            fill="var(--on-accent)"
           />
         </svg>
       </div>
@@ -82,7 +82,7 @@
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
           <path
             d="M12 2 L13.5 8.5 L20 10 L13.5 11.5 L12 18 L10.5 11.5 L4 10 L10.5 8.5 Z"
-            fill="white"
+            fill="var(--on-accent)"
           />
         </svg>
       </div>
@@ -205,7 +205,7 @@ defineExpose({ scrollToBottom })
   border: 1px solid var(--line);
   border-radius: 50%;
   background: var(--surface);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  box-shadow: var(--control-shadow);
   color: var(--ink-2);
   cursor: pointer;
   transition:

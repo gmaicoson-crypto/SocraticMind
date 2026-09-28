@@ -1,25 +1,48 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 
-function getInitialTheme() {
+export const THEME_NAMES = ['light', 'dark'] as const
+export type ThemeName = (typeof THEME_NAMES)[number]
+
+function isThemeName(value: string | null): value is ThemeName {
+  return value !== null && (THEME_NAMES as readonly string[]).includes(value)
+}
+
+function getInitialTheme(): ThemeName {
   const stored = localStorage.getItem('sm_theme')
-  if (stored !== null) return stored === 'dark'
-  return window.matchMedia('(prefers-color-scheme: dark)').matches
+  if (isThemeName(stored)) return stored
+  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
 }
 
-function applyTheme(dark: boolean) {
-  document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light')
+function applyTheme(theme: ThemeName) {
+  const root = document.documentElement
+  root.classList.add('theme-switching')
+  root.setAttribute('data-theme', theme)
+  if (themeSwitchFrame !== null) cancelAnimationFrame(themeSwitchFrame)
+  themeSwitchFrame = requestAnimationFrame(() => {
+    themeSwitchFrame = requestAnimationFrame(() => {
+      root.classList.remove('theme-switching')
+      themeSwitchFrame = null
+    })
+  })
 }
+
+let themeSwitchFrame: number | null = null
 
 export const useUiStore = defineStore('ui', () => {
-  const isDark = ref(getInitialTheme())
-  applyTheme(isDark.value)
+  const theme = ref<ThemeName>(getInitialTheme())
+  const isDark = computed(() => theme.value === 'dark')
+  applyTheme(theme.value)
 
-  function toggleTheme() {
-    isDark.value = !isDark.value
-    localStorage.setItem('sm_theme', isDark.value ? 'dark' : 'light')
-    applyTheme(isDark.value)
+  function setTheme(nextTheme: ThemeName) {
+    theme.value = nextTheme
+    localStorage.setItem('sm_theme', nextTheme)
+    applyTheme(nextTheme)
   }
 
-  return { isDark, toggleTheme }
+  function toggleTheme() {
+    setTheme(isDark.value ? 'light' : 'dark')
+  }
+
+  return { theme, isDark, setTheme, toggleTheme }
 })

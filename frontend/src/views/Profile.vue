@@ -176,7 +176,14 @@ const todayStudyMinutes = computed(() => {
   return loadTodayProgress(store.userInfo.id).study_minutes
 })
 
-const topicColors = ['#2E7FBB', '#1D9E75', '#BA7517', '#993556', '#5B4BB5', '#BB572E']
+const topicColors = [
+  'var(--topic-color-1)',
+  'var(--topic-color-2)',
+  'var(--topic-color-3)',
+  'var(--topic-color-4)',
+  'var(--topic-color-5)',
+  'var(--topic-color-6)',
+]
 function topicColor(index: number) {
   return topicColors[index % topicColors.length]
 }
@@ -250,7 +257,7 @@ function topicColor(index: number) {
 }
 .topic-card:hover {
   border-color: var(--blue-line);
-  box-shadow: 0 2px 12px oklch(0.5 0.04 235 / 0.08);
+  box-shadow: var(--shadow-card);
 }
 .tc-top {
   display: flex;
@@ -378,10 +385,10 @@ function topicColor(index: number) {
   background: var(--blue-2);
 }
 .tl-dot.chat {
-  background: #1d9e75;
+  background: var(--timeline-chat);
 }
 .tl-dot.start {
-  background: #ef9f27;
+  background: var(--timeline-start);
 }
 .tl-content {
   flex: 1;

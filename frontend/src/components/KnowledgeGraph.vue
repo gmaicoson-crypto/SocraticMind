@@ -27,8 +27,8 @@
           />
         </pattern>
         <radialGradient id="masteredGlow" cx="50%" cy="50%" r="50%">
-          <stop offset="0%" stop-color="oklch(0.72 0.085 235 / 0.18)" />
-          <stop offset="100%" stop-color="oklch(0.72 0.085 235 / 0)" />
+          <stop offset="0%" stop-color="var(--graph-glow)" />
+          <stop offset="100%" stop-color="var(--graph-glow-transparent)" />
         </radialGradient>
       </defs>
 
@@ -140,6 +140,7 @@ import { useGraphViewport } from '../composables/useGraphViewport'
 import GraphNode from './graph/GraphNode.vue'
 import GraphEdge from './graph/GraphEdge.vue'
 import GraphLegend from './graph/GraphLegend.vue'
+import { themeColors } from '../utils/theme'
 
 const store = useLearningStore()
 const containerRef = ref<HTMLElement | null>(null)
@@ -232,7 +233,13 @@ function fireConfettiAt(node: KNode) {
     spread: 65,
     startVelocity: 24,
     origin: pos,
-    colors: ['#9CC8E8', '#C7DFF1', '#E8DFC9', '#F4ECD8', '#7AB0D6'],
+    colors: themeColors([
+      '--confetti-color-1',
+      '--confetti-color-2',
+      '--confetti-color-3',
+      '--confetti-color-4',
+      '--confetti-color-5',
+    ]),
     gravity: 0.9,
     scalar: 0.75,
     ticks: 120,
@@ -245,7 +252,15 @@ function fireCelebration() {
     particleCount: 100,
     spread: 120,
     origin: { x: 0.5, y: 0.3 },
-    colors: ['#9CC8E8', '#C7DFF1', '#E8DFC9', '#F4ECD8', '#7AB0D6', '#FAC775', '#F09595'],
+    colors: themeColors([
+      '--confetti-color-1',
+      '--confetti-color-2',
+      '--confetti-color-3',
+      '--confetti-color-4',
+      '--confetti-color-5',
+      '--confetti-color-6',
+      '--confetti-color-7',
+    ]),
     startVelocity: 35,
     gravity: 0.8,
     scalar: 0.9,
@@ -256,7 +271,7 @@ function fireCelebration() {
       particleCount: 60,
       spread: 80,
       origin: { x: 0.2, y: 0.4 },
-      colors: ['#9CC8E8', '#FAC775', '#9FE1CB'],
+      colors: themeColors(['--confetti-color-1', '--confetti-color-6', '--confetti-color-8']),
       startVelocity: 28,
       gravity: 0.8,
       scalar: 0.75,
@@ -268,7 +283,7 @@ function fireCelebration() {
       particleCount: 60,
       spread: 80,
       origin: { x: 0.8, y: 0.4 },
-      colors: ['#C7DFF1', '#F09595', '#AFA9EC'],
+      colors: themeColors(['--confetti-color-2', '--confetti-color-7', '--confetti-color-9']),
       startVelocity: 28,
       gravity: 0.8,
       scalar: 0.75,
@@ -342,13 +357,13 @@ function handleClick(node: KNode) {
 .graph-wrap {
   position: relative;
   flex: 1;
-  background: linear-gradient(180deg, var(--bg-2), var(--bg));
+  background: var(--graph-bg);
   border: 1px solid var(--line);
   border-radius: var(--radius);
   overflow: hidden;
   box-shadow:
     0 1px 0 var(--line),
-    0 6px 20px -8px oklch(0.5 0.04 235 / 0.12);
+    var(--graph-shadow);
 }
 
 .graph-header {
@@ -361,7 +376,7 @@ function handleClick(node: KNode) {
   align-items: center;
   justify-content: space-between;
   z-index: 5;
-  background: linear-gradient(180deg, var(--bg-2) 60%, transparent);
+  background: var(--graph-header-bg);
 }
 
 .graph-label {
@@ -433,8 +448,8 @@ function handleClick(node: KNode) {
   position: absolute;
   bottom: 56px;
   right: 14px;
-  background: oklch(0.22 0.012 250);
-  color: white;
+  background: var(--toast-bg);
+  color: var(--on-accent);
   font-size: 12px;
   font-weight: 600;
   font-family: var(--font-mono);

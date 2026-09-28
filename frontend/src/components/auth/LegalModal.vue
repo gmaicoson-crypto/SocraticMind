@@ -101,7 +101,7 @@
 
             <h3>五、第三方服务</h3>
             <p>
-              本服务调用大语言模型 API（如 DeepSeek）以生成对话。您发送给 AI
+              本服务调用大语言模型 API 以生成对话。您发送给 AI
               的内容会以请求形式经过该服务商；他们的隐私政策独立适用，请您知悉。除此之外，我们不接入广告或行为分析
               SDK。
             </p>
@@ -146,7 +146,7 @@ defineEmits<{ (e: 'close'): void }>()
   position: fixed;
   inset: 0;
   z-index: 350;
-  background: rgba(0, 0, 0, 0.36);
+  background: var(--overlay-medium);
   backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
@@ -161,7 +161,7 @@ defineEmits<{ (e: 'close'): void }>()
   height: min(640px, 100%);
   display: flex;
   flex-direction: column;
-  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.18);
+  box-shadow: var(--shadow-modal-sm);
   overflow: hidden;
 }
 .legal-header {
@@ -236,8 +236,8 @@ defineEmits<{ (e: 'close'): void }>()
   padding: 0 18px;
   border-radius: 8px;
   border: none;
-  background: linear-gradient(135deg, var(--blue), var(--blue-2));
-  color: white;
+  background: var(--accent-gradient);
+  color: var(--on-accent);
   font-size: 12.5px;
   font-weight: 600;
   cursor: pointer;

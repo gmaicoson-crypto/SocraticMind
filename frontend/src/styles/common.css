@@ -1,3 +1,4 @@
+/* Shared layout contracts consume semantic values supplied by themes/*.css. */
 :root {
   --radius: 14px;
   --radius-sm: 10px;
@@ -11,6 +12,13 @@
   box-sizing: border-box;
 }
 
+/* Theme variables change together; keep the update visually atomic. */
+html.theme-switching *,
+html.theme-switching *::before,
+html.theme-switching *::after {
+  transition: none !important;
+}
+
 html,
 body,
 #app {
@@ -19,6 +27,7 @@ body,
   padding: 0;
   overflow: hidden;
   background: var(--bg);
+  background-image: var(--page-decoration);
   color: var(--ink);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
@@ -31,7 +40,7 @@ body,
 ::-webkit-scrollbar-thumb {
   border: 2px solid var(--bg);
   border-radius: 8px;
-  background: var(--line-2);
+  background: var(--scrollbar-thumb);
 }
 
 ::-webkit-scrollbar-track {
@@ -102,7 +111,7 @@ body,
   padding: 0 12px;
   border: 1px solid var(--line);
   border-radius: 9px;
-  background: var(--bg-2);
+  background: var(--surface-inset);
 }
 
 .field-input.focused {
@@ -261,13 +270,13 @@ body,
 }
 
 .dlg-messages .ai-avatar.sm {
-  background: linear-gradient(135deg, var(--blue), var(--blue-2));
+  background: var(--message-ai-avatar-bg);
 }
 
 .dlg-messages .user-avatar {
   overflow: hidden;
-  background: var(--bg-3);
-  color: var(--ink-2);
+  background: var(--message-user-avatar-bg);
+  color: var(--message-user-avatar-text);
   font-size: 12px;
   font-weight: 600;
 }
@@ -315,14 +324,14 @@ body,
 }
 
 .dlg-messages .bubble.ai {
-  border: 1px solid var(--line);
-  background: var(--surface);
-  color: var(--ink);
+  border: 1px solid var(--bubble-ai-border);
+  background: var(--bubble-ai-bg);
+  color: var(--bubble-ai-text);
 }
 
 .dlg-messages .bubble.user {
-  background: var(--blue-2);
-  color: var(--on-accent);
+  background: var(--bubble-user-bg);
+  color: var(--bubble-user-text);
 }
 
 .dlg-messages .msg-actions {

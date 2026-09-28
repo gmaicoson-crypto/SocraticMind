@@ -360,7 +360,7 @@ function resetToDefault() {
   position: fixed;
   inset: 0;
   z-index: 300;
-  background: rgba(0, 0, 0, 0.3);
+  background: var(--overlay-soft);
   backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
@@ -371,7 +371,7 @@ function resetToDefault() {
   border: 1px solid var(--line);
   border-radius: 16px;
   width: 380px;
-  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.15);
+  box-shadow: var(--shadow-auth);
   display: flex;
   flex-direction: column;
 }
@@ -510,10 +510,10 @@ function resetToDefault() {
   height: 14px;
   left: 2px;
   top: 2px;
-  background: white;
+  background: var(--on-accent);
   border-radius: 50%;
   transition: 0.2s;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  box-shadow: var(--control-shadow);
 }
 .goal-toggle input:checked + .goal-toggle-slider {
   background: var(--blue-2);
@@ -545,7 +545,7 @@ function resetToDefault() {
   border-radius: 8px;
   border: none;
   background: var(--blue-2);
-  color: white;
+  color: var(--on-accent);
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
