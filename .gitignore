@@ -50,6 +50,5 @@ Thumbs.db
 
 # Doc
 docs/*
-!docs/P0-learning-agent-acceptance-report.md
 
 plan/
