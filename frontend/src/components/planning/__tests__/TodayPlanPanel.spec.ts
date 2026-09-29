@@ -80,7 +80,7 @@ describe('TodayPlanPanel', () => {
     plans.todayPlan = { ...groupedPlan(), overdue: [], upcoming: [] }
     vi.spyOn(plans, 'fetchToday').mockResolvedValue(plans.todayPlan)
     const learning = useLearningStore()
-    const select = vi.spyOn(learning, 'setActiveNode')
+    const requestDialogue = vi.spyOn(learning, 'requestNodeDialogue')
     vi.spyOn(learning, 'setActiveTopic').mockImplementation(async () => {
       learning.nodes = [
         { id: 'arrays', label: '数组', sub: '', x: 0, y: 0, state: 'available', dbId: 20 },
@@ -92,7 +92,7 @@ describe('TodayPlanPanel', () => {
     await flushPromises()
 
     expect(learning.setActiveTopic).toHaveBeenCalledWith('2')
-    expect(select).toHaveBeenCalledWith(expect.objectContaining({ dbId: 20 }))
+    expect(requestDialogue).toHaveBeenCalledWith(expect.objectContaining({ dbId: 20 }))
     expect(wrapper.emitted('navigated')).toHaveLength(1)
   })
 

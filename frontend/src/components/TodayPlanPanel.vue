@@ -124,7 +124,7 @@ async function navigateToTask(item: TodayPlanItem) {
     await learning.setActiveTopic(String(item.topic_id))
     const node = learning.nodes.find((candidate) => candidate.dbId === item.node_id)
     if (node) {
-      learning.setActiveNode(node)
+      learning.requestNodeDialogue(node)
       emit('navigated')
     }
   } finally {

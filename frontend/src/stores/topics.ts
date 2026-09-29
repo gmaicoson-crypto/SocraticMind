@@ -10,6 +10,7 @@ export const useTopicsStore = defineStore('topics', () => {
   const topics = shallowRef<Topic[]>([])
   const activeTopicId = ref('')
   const activeNode = shallowRef<KNode | null>(null)
+  const nodeDialogueRequest = ref(0)
   const lastMasteredId = ref<string | null>(null)
   const recommendations = shallowRef<{ title: string; emoji: string; reason: string }[]>([])
   const masteredCount = computed(
@@ -107,6 +108,10 @@ export const useTopicsStore = defineStore('topics', () => {
   function setActiveNode(node: KNode | null) {
     activeNode.value = node
   }
+  function requestNodeDialogue(node: KNode) {
+    activeNode.value = node
+    nodeDialogueRequest.value += 1
+  }
   function clearGraph() {
     nodes.value = []
     edges.value = []
@@ -124,6 +129,7 @@ export const useTopicsStore = defineStore('topics', () => {
     topics,
     activeTopicId,
     activeNode,
+    nodeDialogueRequest,
     lastMasteredId,
     recommendations,
     masteredCount,
@@ -135,6 +141,7 @@ export const useTopicsStore = defineStore('topics', () => {
     fetchRecommendations,
     setActiveTopic,
     setActiveNode,
+    requestNodeDialogue,
     notifyMastery,
     clearGraph,
   }

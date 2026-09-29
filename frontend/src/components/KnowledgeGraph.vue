@@ -2,7 +2,6 @@
   <div class="graph-wrap">
     <div class="graph-header">
       <div>
-        <div class="graph-label">Knowledge Graph</div>
         <div class="graph-title">
           {{ currentTopicTitle }}
           <span class="graph-count">· {{ store.totalCount }} 节点</span>
@@ -22,6 +21,7 @@
       :selected-id="store.activeNode?.id"
       :theme-key="store.isDark ? 'dark' : 'light'"
       @select="handleClick"
+      @activate="handleActivate"
     />
 
     <div v-if="store.totalCount === 0" class="empty-graph">
@@ -44,43 +44,31 @@
 
     <canvas ref="confettiCanvasRef" class="confetti-canvas" />
 
+    <Transition name="toast">
+      <div v-if="showLockedToast" class="graph-toast" role="status" aria-live="polite">
+        <LockKeyhole :size="14" aria-hidden="true" />
+        请先掌握前置节点
+      </div>
+    </Transition>
+
     <div class="controls">
-      <button class="ctrl-btn" title="居中" @click="resetView">
-        <svg
-          width="14"
-          height="14"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-        >
-          <circle cx="12" cy="12" r="3" />
-          <path d="M3 12h3M18 12h3M12 3v3M12 18v3" />
-        </svg>
+      <button class="ctrl-btn" type="button" title="居中" aria-label="居中" @click="resetView">
+        <Focus :size="14" aria-hidden="true" />
       </button>
-      <button class="ctrl-btn" title="放大" @click="zoomIn">
-        <svg
-          width="14"
-          height="14"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-        >
-          <path d="M12 5v14M5 12h14" />
-        </svg>
+      <button
+        class="ctrl-btn"
+        type="button"
+        title="复原初始布局"
+        aria-label="复原初始布局"
+        @click="restoreLayout"
+      >
+        <RotateCcw :size="14" aria-hidden="true" />
       </button>
-      <button class="ctrl-btn" title="缩小" @click="zoomOut">
-        <svg
-          width="14"
-          height="14"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-        >
-          <path d="M5 12h14" />
-        </svg>
+      <button class="ctrl-btn" type="button" title="放大" aria-label="放大" @click="zoomIn">
+        <Plus :size="14" aria-hidden="true" />
+      </button>
+      <button class="ctrl-btn" type="button" title="缩小" aria-label="缩小" @click="zoomOut">
+        <Minus :size="14" aria-hidden="true" />
       </button>
     </div>
   </div>
@@ -89,6 +77,7 @@
 <script setup lang="ts">
 // KnowledgeGraph 组件，封装局部界面和交互逻辑。
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
+import { Focus, RotateCcw, Plus, Minus, LockKeyhole } from '@lucide/vue'
 import { useLearningStore } from '../stores/learning'
 import type { KNode } from '../types'
 import ThreeGraphCanvas from './graph/ThreeGraphCanvas.vue'
@@ -98,10 +87,12 @@ import { themeColors } from '../utils/theme'
 const store = useLearningStore()
 const graphRef = ref<InstanceType<typeof ThreeGraphCanvas> | null>(null)
 const confettiCanvasRef = ref<HTMLCanvasElement | null>(null)
+const showLockedToast = ref(false)
+let lockedToastTimer: ReturnType<typeof setTimeout> | null = null
 
 const currentTopicTitle = computed(() => {
   const t = store.topics.find((t) => t.id === store.activeTopicId)
-  return t?.title ?? 'Knowledge Graph'
+  return t?.title ?? '知识图谱'
 })
 
 let confettiInstance: any = null
@@ -114,6 +105,10 @@ function getNodeScreenPos(node: KNode) {
 
 function resetView() {
   graphRef.value?.resetView()
+}
+
+function restoreLayout() {
+  graphRef.value?.restoreLayout()
 }
 
 function zoomIn() {
@@ -212,6 +207,7 @@ const pendingConfettiTimers: ReturnType<typeof setTimeout>[] = []
 
 onBeforeUnmount(() => {
   if (initialConfettiTimer) clearTimeout(initialConfettiTimer)
+  if (lockedToastTimer) clearTimeout(lockedToastTimer)
   pendingConfettiTimers.forEach(clearTimeout)
 })
 
@@ -250,6 +246,18 @@ watch(
 function handleClick(node: KNode) {
   store.setActiveNode(node)
 }
+
+function handleActivate(node: KNode) {
+  if (node.state === 'locked') {
+    showLockedToast.value = true
+    if (lockedToastTimer) clearTimeout(lockedToastTimer)
+    lockedToastTimer = setTimeout(() => {
+      showLockedToast.value = false
+    }, 2500)
+    return
+  }
+  store.requestNodeDialogue(node)
+}
 </script>
 
 <style scoped>
@@ -278,18 +286,9 @@ function handleClick(node: KNode) {
   background: var(--graph-header-bg);
 }
 
-.graph-label {
-  font-size: 11px;
-  font-family: var(--font-mono);
-  color: var(--ink-3);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
 .graph-title {
   font-size: 15px;
   font-weight: 600;
-  margin-top: 2px;
 }
 
 .graph-count {
@@ -331,6 +330,44 @@ function handleClick(node: KNode) {
   pointer-events: none;
   width: 100%;
   height: 100%;
+}
+
+.graph-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  z-index: 999;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  transform: translateX(-50%);
+  border-radius: 10px;
+  background: var(--toast-bg);
+  box-shadow: var(--toast-shadow);
+  color: var(--on-accent);
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+@media (max-width: 620px) {
+  .graph-toast {
+    bottom: 64px;
+  }
+}
+
+.toast-enter-active,
+.toast-leave-active {
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s ease;
+}
+
+.toast-enter-from,
+.toast-leave-to {
+  opacity: 0;
+  transform: translateX(-50%) translateY(10px);
 }
 
 .controls {

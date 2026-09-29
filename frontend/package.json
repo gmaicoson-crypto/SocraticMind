@@ -13,6 +13,7 @@
     "format:check:all": "node ../scripts/format.mjs --check --all"
   },
   "dependencies": {
+    "@lucide/vue": "^1.48.0",
     "@vue-flow/background": "^1.3.2",
     "@vue-flow/core": "^1.48.2",
     "axios": "^1.15.2",

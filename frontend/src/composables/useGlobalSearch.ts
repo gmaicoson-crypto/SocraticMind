@@ -80,7 +80,7 @@ export function useGlobalSearch() {
     if (store.activeTopicId !== String(item.topic_id))
       await store.setActiveTopic(String(item.topic_id))
     const localNode = store.nodes.find((node) => node.id === item.node_key)
-    if (localNode) store.setActiveNode(localNode)
+    if (localNode) store.requestNodeDialogue(localNode)
   }
   async function selectTopic(topic: Topic) {
     closeSearch()

@@ -1336,11 +1336,14 @@ function streamOverview(kind: 'topic' | 'node', identifier: string): Promise<voi
 }
 
 watch(
-  () => store.activeNode?.id,
-  async (id) => {
-    if (!id) return
-    if (chatMode.value !== 'socratic') return
-    const node = store.activeNode!
+  () => store.nodeDialogueRequest,
+  async () => {
+    const node = store.activeNode
+    if (!node) return
+    if (chatMode.value !== 'socratic') {
+      chatMode.value = 'socratic'
+      await nextTick()
+    }
 
     if (node.state === 'mastered') {
       isThinking.value = true

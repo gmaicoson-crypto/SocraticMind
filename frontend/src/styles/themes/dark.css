@@ -17,6 +17,7 @@
   --blue-soft: rgba(74, 111, 165, 0.14);
   --blue-tint: rgba(74, 111, 165, 0.08);
   --blue-line: rgba(255, 255, 255, 0.12);
+  --graph-edge: #74787d;
 
   --locked: #21262d;
   --locked-ink: #6e7681;
@@ -49,8 +50,8 @@
   --code-property: #f38ba8;
   --graph-node-mastered-bg: #1a2d3f;
   --graph-node-mastered-stroke: rgba(74, 111, 165, 0.35);
-  --graph-node-mastered-label: #8aa9c6;
-  --graph-node-mastered-sub: rgba(138, 169, 198, 0.6);
+  --graph-node-mastered-label: #ffffff;
+  --graph-node-mastered-sub: rgba(255, 255, 255, 0.78);
   --graph-node-mastered-icon: #4a6fa5;
   --graph-node-available-bg: #161b22;
   --graph-node-available-stroke: rgba(255, 255, 255, 0.15);

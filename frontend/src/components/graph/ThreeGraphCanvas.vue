@@ -24,13 +24,19 @@ import { Line2 } from 'three/examples/jsm/lines/Line2.js'
 import { LineGeometry } from 'three/examples/jsm/lines/LineGeometry.js'
 import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js'
 import type { KEdge, KNode } from '../../types'
+import {
+  graphCameraFrame,
+  graphDesktopPositions,
+  graphLayoutScale,
+  type GraphViewport,
+} from './graphFit'
 
-const NODE_WIDTH = 120
-const NODE_HEIGHT = 52
+const NODE_WIDTH = 190
+const NODE_HEIGHT = 82
 const NODE_RADIUS = 14
 const EDGE_SAMPLES = 32
-const GRAPH_FIT_RATIO = 0.86
-const GRAPH_VIEW_PADDING = 64
+const GRAPH_VIEW_PADDING = 32
+const MOBILE_NODE_SCALE = 0.6
 
 const props = defineProps<{
   nodes: KNode[]
@@ -41,6 +47,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   select: [node: KNode]
+  activate: [node: KNode]
 }>()
 
 const hostRef = ref<HTMLDivElement | null>(null)
@@ -50,6 +57,7 @@ const activeId = ref<string | null>(props.selectedId ?? null)
 
 const world = { width: 1100, height: 720, centerX: 0, centerY: 0 }
 const mobilePositions = new Map<string, { x: number; y: number }>()
+const desktopPositions = new Map<string, { x: number; y: number }>()
 const nodeObjects = new Map<string, THREE.Group>()
 const edgeObjects: EdgeObject[] = []
 const scene = new THREE.Scene()
@@ -59,6 +67,7 @@ const raycaster = new THREE.Raycaster()
 const renderer = ref<THREE.WebGLRenderer | null>(null)
 const viewScale = ref(1)
 const viewOffset = { x: 0, y: 0 }
+let viewCenterY = 0
 const layoutScale = { x: 1, y: 1 }
 const hoveredId = ref<string | null>(null)
 const layoutMode = ref<'desktop' | 'mobile'>('desktop')
@@ -67,6 +76,8 @@ let resizeObserver: ResizeObserver | null = null
 let animationFrame: number | null = null
 let dragMode: 'node' | 'pan' | null = null
 let draggedNodeId: string | null = null
+let nodeWasDragged = false
+const clickSequence: string[] = []
 let dragStart = { x: 0, y: 0 }
 let dragStartWorld: THREE.Vector3 | null = null
 let nodeStart: { x: number; y: number } | null = null
@@ -77,9 +88,7 @@ let prefersReducedMotion: MediaQueryList | null = null
 interface EdgeObject {
   source: string
   target: string
-  line: THREE.Line
-  active: boolean
-  baseOpacity: number
+  line: Line2
   maxLength: number
 }
 
@@ -118,7 +127,7 @@ function palette(): GraphPalette {
     background: color('--bg', '#f7f4ef'),
     blue: color('--blue', '#5ba3d9'),
     blue2: color('--blue-2', '#2e7fbb'),
-    line: color('--blue-line', '#b5d4f4'),
+    line: color('--graph-edge', '#a79986'),
     locked: color('--locked', '#c8c4bc'),
     surface: color('--graph-node-available-bg', '#ffffff'),
     mastered: color('--graph-node-mastered-bg', '#5ba3d9'),
@@ -198,30 +207,44 @@ function makeSelectionRing(paletteValue: GraphPalette) {
 function nodeWorldPosition(node: KNode) {
   if (layoutMode.value === 'mobile') {
     const mobilePosition = mobilePositions.get(node.id)
-    if (mobilePosition) return { x: mobilePosition.x - 195, y: 400 - mobilePosition.y }
+    if (mobilePosition)
+      return { x: mobilePosition.x - world.centerX, y: world.centerY - mobilePosition.y }
   }
+  const position = desktopPositions.get(node.id) ?? node
   return {
-    x: (node.x - world.centerX) * layoutScale.x,
-    y: (world.centerY - node.y) * layoutScale.y,
+    x: (position.x - world.centerX) * layoutScale.x,
+    y: (world.centerY - position.y) * layoutScale.y,
   }
 }
 
 function setWorldBounds() {
+  desktopPositions.clear()
   if (layoutMode.value === 'mobile') {
     const levels = [...new Set(props.nodes.map((node) => node.y))].sort((a, b) => a - b)
     mobilePositions.clear()
-    levels.forEach((level, levelIndex) => {
+    const rows: KNode[][] = []
+    levels.forEach((level) => {
       const levelNodes = props.nodes.filter((node) => node.y === level).sort((a, b) => a.x - b.x)
-      const xStep = levelNodes.length > 1 ? 294 / (levelNodes.length - 1) : 0
-      const y = levels.length > 1 ? 140 + (520 * levelIndex) / (levels.length - 1) : 400
-      levelNodes.forEach((node, index) => {
-        mobilePositions.set(node.id, { x: levelNodes.length > 1 ? 48 + xStep * index : 195, y })
+      const rowCount = Math.ceil(levelNodes.length / 3)
+      for (let rowIndex = 0; rowIndex < rowCount; rowIndex += 1) {
+        rows.push(levelNodes.filter((_, index) => index % rowCount === rowIndex))
+      }
+    })
+    const rowSpacing = rows.length > 1 ? Math.max(100, 520 / (rows.length - 1)) : 0
+    rows.forEach((row, rowIndex) => {
+      const y = rows.length > 1 ? 140 + rowSpacing * rowIndex : 400
+      row.forEach((node, index) => {
+        mobilePositions.set(node.id, {
+          x: row.length > 1 ? 65 + (260 * index) / (row.length - 1) : 195,
+          y,
+        })
       })
     })
+    const lastY = rows.length > 1 ? 140 + rowSpacing * (rows.length - 1) : 400
     world.width = 390
-    world.height = 800
+    world.height = Math.max(800, lastY - 140 + 280)
     world.centerX = 195
-    world.centerY = 400
+    world.centerY = rows.length > 1 ? (140 + lastY) / 2 : 400
     return
   }
   if (props.nodes.length === 0) {
@@ -231,8 +254,12 @@ function setWorldBounds() {
     world.centerY = 0
     return
   }
-  const xs = props.nodes.map((node) => node.x)
-  const ys = props.nodes.map((node) => node.y)
+  graphDesktopPositions(props.nodes, props.edges).forEach((position, id) =>
+    desktopPositions.set(id, position),
+  )
+  const positions = props.nodes.map((node) => desktopPositions.get(node.id) ?? node)
+  const xs = positions.map((node) => node.x)
+  const ys = positions.map((node) => node.y)
   const minX = Math.min(...xs)
   const maxX = Math.max(...xs)
   const minY = Math.min(...ys)
@@ -243,21 +270,16 @@ function setWorldBounds() {
   world.height = Math.max(720, maxY - minY + 240)
 }
 
-function updateLayoutScale(aspect: number) {
-  const nextScale = { x: 1, y: 1 }
-  if (layoutMode.value === 'desktop' && props.nodes.length > 1) {
-    const xs = props.nodes.map((node) => node.x)
-    const ys = props.nodes.map((node) => node.y)
-    const rawWidth = Math.max(...xs) - Math.min(...xs) + NODE_WIDTH + GRAPH_VIEW_PADDING * 2
-    const rawHeight = Math.max(...ys) - Math.min(...ys) + NODE_HEIGHT + GRAPH_VIEW_PADDING * 2
-    const targetAspect = clamp(aspect * 1.08, 0.95, 1.45)
-    const rawAspect = rawWidth / Math.max(rawHeight, 1)
-
-    if (rawAspect > targetAspect) {
-      nextScale.x = Math.max(0.72, targetAspect / rawAspect)
-      nextScale.y = Math.min(1.9, (rawAspect * nextScale.x) / targetAspect)
-    }
-  }
+function updateLayoutScale(viewport: GraphViewport, minimumVisibleWidth: number) {
+  const nextScale =
+    layoutMode.value === 'desktop'
+      ? graphLayoutScale(
+          props.nodes.map((node) => desktopPositions.get(node.id) ?? node),
+          viewport,
+          { width: NODE_WIDTH, height: NODE_HEIGHT, padding: GRAPH_VIEW_PADDING },
+          minimumVisibleWidth,
+        )
+      : { x: 1, y: 1 }
 
   const changed =
     Math.abs(layoutScale.x - nextScale.x) > 0.01 || Math.abs(layoutScale.y - nextScale.y) > 0.01
@@ -319,6 +341,7 @@ function makeNode(node: KNode, colors: GraphPalette) {
   group.userData.nodeId = node.id
   group.userData.baseX = position.x
   group.userData.baseY = position.y
+  group.userData.homeX = position.x
   group.userData.homeY = position.y
   group.userData.phase = node.id.length * 0.73
   group.userData.state = node.state
@@ -384,13 +407,17 @@ function makeEdge(source: string, target: string, colors: GraphPalette) {
     new THREE.Vector3(end.x, end.y, -0.2),
   )
   const points = curve.getPoints(EDGE_SAMPLES)
-  const baseOpacity = to.state === 'locked' ? 0.35 : 0.78
-  const line = new THREE.Line(
-    new THREE.BufferGeometry().setFromPoints(points),
-    new THREE.LineBasicMaterial({
-      color: from.state === 'mastered' && to.state === 'mastered' ? colors.blue : colors.line,
-      transparent: true,
-      opacity: baseOpacity,
+  const geometry = new LineGeometry()
+  geometry.setPositions(points.flatMap((point) => [point.x, point.y, point.z]))
+  const positionBuffer = (
+    geometry.getAttribute('instanceStart') as THREE.InterleavedBufferAttribute
+  ).data
+  positionBuffer.setUsage(THREE.DynamicDrawUsage)
+  const line = new Line2(
+    geometry,
+    new LineMaterial({
+      color: colors.line,
+      linewidth: 3,
     }),
   )
   scene.add(line)
@@ -398,8 +425,6 @@ function makeEdge(source: string, target: string, colors: GraphPalette) {
     source,
     target,
     line,
-    active: from.state === 'mastered' && to.state === 'mastered',
-    baseOpacity,
     maxLength: 0,
   })
 }
@@ -416,25 +441,34 @@ function updateEdge(edge: EdgeObject) {
     new THREE.Vector3(to.x - dx * 0.1, to.y - dy * 0.55, -0.2),
     new THREE.Vector3(to.x, to.y, -0.2),
   )
-  const positions = edge.line.geometry.getAttribute('position')
-  curve
-    .getPoints(EDGE_SAMPLES)
-    .forEach((point, index) => positions.setXYZ(index, point.x, point.y, point.z))
-  positions.needsUpdate = true
+  const points = curve.getPoints(EDGE_SAMPLES)
+  const buffer = (
+    edge.line.geometry.getAttribute('instanceStart') as THREE.InterleavedBufferAttribute
+  ).data
+  for (let index = 0; index < EDGE_SAMPLES; index += 1) {
+    const offset = index * 6
+    const start = points[index]
+    const end = points[index + 1]
+    buffer.array.set([start.x, start.y, start.z, end.x, end.y, end.z], offset)
+  }
+  buffer.needsUpdate = true
   edge.line.geometry.computeBoundingSphere()
 }
 
-function resetLayout() {
+function resetLayout(preserveOffsets = false) {
   const mobile = layoutMode.value === 'mobile'
   nodeObjects.forEach((group, id) => {
     const node = props.nodes.find((item) => item.id === id)
     if (!node) return
     const position = nodeWorldPosition(node)
-    group.userData.baseX = position.x
-    group.userData.baseY = position.y
+    const offsetX = preserveOffsets ? group.userData.baseX - group.userData.homeX : 0
+    const offsetY = preserveOffsets ? group.userData.baseY - group.userData.homeY : 0
+    group.userData.homeX = position.x
     group.userData.homeY = position.y
-    group.position.set(position.x, position.y, 0)
-    group.scale.setScalar(mobile ? 0.75 : 1)
+    group.userData.baseX = position.x + offsetX
+    group.userData.baseY = position.y + offsetY
+    group.position.set(group.userData.baseX, group.userData.baseY, 0)
+    group.scale.setScalar(mobile ? MOBILE_NODE_SCALE : 1)
   })
   edgeObjects.forEach((edge) => {
     const from = nodeObjects.get(edge.source)?.position
@@ -460,19 +494,29 @@ function syncScene() {
 function resize() {
   if (!hostRef.value || !renderer.value) return
   const rect = hostRef.value.getBoundingClientRect()
+  if (rect.width <= 0 || rect.height <= 0) return
   const aspect = rect.width / Math.max(rect.height, 1)
   const nextLayout = rect.width <= 620 ? 'mobile' : 'desktop'
-  if (layoutMode.value !== nextLayout) {
+  const modeChanged = layoutMode.value !== nextLayout
+  if (modeChanged) {
     layoutMode.value = nextLayout
     setWorldBounds()
   }
-  if (updateLayoutScale(aspect)) syncScene()
-  resetLayout()
+  const header = hostRef.value.parentElement?.querySelector('.graph-header')
+  const viewport = {
+    width: rect.width,
+    height: rect.height,
+    top: (header?.getBoundingClientRect().height ?? 72) + 24,
+    bottom: 68,
+    side: nextLayout === 'mobile' ? 16 : 28,
+  }
+  const nodeScale = nextLayout === 'mobile' ? MOBILE_NODE_SCALE : 1
+  const maxNodeWidth = nextLayout === 'mobile' ? 120 : 220
+  const minimumVisibleWidth = (NODE_WIDTH * nodeScale * rect.width) / maxNodeWidth
+  if (updateLayoutScale(viewport, minimumVisibleWidth) || modeChanged) resetLayout(true)
   const bounds = graphContentBounds()
-  const visibleWidth = Math.max(
-    bounds.width / GRAPH_FIT_RATIO,
-    (bounds.height / GRAPH_FIT_RATIO) * aspect,
-  )
+  const { visibleWidth, centerY } = graphCameraFrame(bounds, viewport, minimumVisibleWidth)
+  viewCenterY = centerY
   const visibleHeight = visibleWidth / Math.max(aspect, 0.01)
   const base = visibleHeight / 2
   camera.top = base
@@ -484,6 +528,7 @@ function resize() {
   nodeObjects.forEach((group) =>
     group.userData.selectionRing.material.resolution.set(rect.width, rect.height),
   )
+  edgeObjects.forEach((edge) => edge.line.material.resolution.set(rect.width, rect.height))
 }
 
 function updateLabels() {
@@ -536,8 +581,8 @@ function applyTheme() {
     group.userData.selectionRing.material.color.copy(colors.blue)
   })
   edgeObjects.forEach((edge) => {
-    const material = edge.line.material as THREE.LineBasicMaterial
-    material.color.copy(edge.active ? colors.blue : colors.line)
+    const material = edge.line.material as LineMaterial
+    material.color.copy(colors.line)
   })
 }
 
@@ -572,7 +617,7 @@ function boundedPosition(id: string, x: number, y: number) {
   const group = nodeObjects.get(id)
   if (!group) return { x, y }
   const mobile = layoutMode.value === 'mobile'
-  const halfWidth = mobile ? 45 : 60
+  const halfWidth = (NODE_WIDTH * (mobile ? MOBILE_NODE_SCALE : 1)) / 2
   const tierRange = mobile ? 46 : 58
   const minSeparation = mobile ? 85 : 92
   let minY = group.userData.homeY - tierRange
@@ -602,11 +647,15 @@ function boundedPosition(id: string, x: number, y: number) {
 }
 
 function isClear(id: string, x: number, y: number) {
-  const halfWidth = layoutMode.value === 'mobile' ? 45 : 60
-  const minDistance = layoutMode.value === 'mobile' ? 84 : 92
+  const scale = layoutMode.value === 'mobile' ? MOBILE_NODE_SCALE : 1
+  const minWidth = NODE_WIDTH * scale + 4
+  const minHeight = NODE_HEIGHT * scale + 4
   for (const [otherId, other] of nodeObjects) {
     if (otherId === id) continue
-    if (Math.hypot(x - other.userData.baseX, y - other.userData.baseY) < minDistance + halfWidth)
+    if (
+      Math.abs(x - other.userData.baseX) < minWidth &&
+      Math.abs(y - other.userData.baseY) < minHeight
+    )
       return false
   }
   return true
@@ -639,6 +688,7 @@ function onPointerDown(event: PointerEvent) {
   if (event.button !== 0 || !renderer.value) return
   draggedNodeId = connectedNode(event.clientX, event.clientY)
   dragMode = draggedNodeId ? 'node' : 'pan'
+  nodeWasDragged = false
   dragStart = { x: event.clientX, y: event.clientY }
   dragStartWorld = screenToWorld(event.clientX, event.clientY)
   offsetStart = { ...viewOffset }
@@ -646,10 +696,6 @@ function onPointerDown(event: PointerEvent) {
     const group = nodeObjects.get(draggedNodeId)
     if (!group) return
     nodeStart = { x: group.userData.baseX, y: group.userData.baseY }
-    activeId.value = draggedNodeId
-    const node = props.nodes.find((item) => item.id === draggedNodeId)
-    if (node) emit('select', node)
-    updateFocus()
   }
   renderer.value.domElement.setPointerCapture(event.pointerId)
 }
@@ -661,6 +707,9 @@ function onPointerMove(event: PointerEvent) {
   renderer.value.domElement.style.cursor =
     dragMode === 'node' ? 'grabbing' : id ? 'move' : dragMode === 'pan' ? 'grabbing' : 'grab'
   if (dragMode === 'node' && draggedNodeId && nodeStart && dragStartWorld) {
+    if (Math.hypot(event.clientX - dragStart.x, event.clientY - dragStart.y) >= 4)
+      nodeWasDragged = true
+    if (!nodeWasDragged) return
     const current = screenToWorld(event.clientX, event.clientY)
     moveNode(
       draggedNodeId,
@@ -677,20 +726,41 @@ function onPointerMove(event: PointerEvent) {
 
 function onPointerUp(event: PointerEvent) {
   if (!renderer.value || !dragMode) return
-  const wasNode = dragMode === 'node'
+  const clickedNodeId = dragMode === 'node' && !nodeWasDragged ? draggedNodeId : null
   dragMode = null
   draggedNodeId = null
+  nodeWasDragged = false
   nodeStart = null
   dragStartWorld = null
   if (renderer.value.domElement.hasPointerCapture(event.pointerId))
     renderer.value.domElement.releasePointerCapture(event.pointerId)
-  if (!wasNode) updateHover(connectedNode(event.clientX, event.clientY))
+  if (clickedNodeId) {
+    clickSequence.push(clickedNodeId)
+    if (clickSequence.length > 2) clickSequence.shift()
+    activeId.value = clickedNodeId
+    const node = props.nodes.find((item) => item.id === clickedNodeId)
+    if (node) emit('select', node)
+    updateFocus()
+  } else clickSequence.length = 0
+  updateHover(connectedNode(event.clientX, event.clientY))
   renderer.value.domElement.style.cursor = hoveredId.value ? 'move' : 'grab'
+}
+
+function onDoubleClick(event: MouseEvent) {
+  if (event.button !== 0) return
+  const nodeId = connectedNode(event.clientX, event.clientY)
+  if (nodeId && clickSequence.length === 2 && clickSequence.every((id) => id === nodeId)) {
+    const node = props.nodes.find((item) => item.id === nodeId)
+    if (node) emit('activate', node)
+  }
+  clickSequence.length = 0
 }
 
 function onPointerCancel() {
   dragMode = null
   draggedNodeId = null
+  nodeWasDragged = false
+  clickSequence.length = 0
   nodeStart = null
   dragStartWorld = null
   updateHover(null)
@@ -709,6 +779,11 @@ function resetView() {
   viewScale.value = 1
   viewOffset.x = 0
   viewOffset.y = 0
+}
+
+function restoreLayout() {
+  resetLayout()
+  resetView()
 }
 
 function zoomIn() {
@@ -736,10 +811,10 @@ function animate() {
   const activeMotion = !document.hidden && !(prefersReducedMotion?.matches ?? false)
   camera.zoom = viewScale.value
   camera.position.x += (viewOffset.x - camera.position.x) * 0.1
-  camera.position.y += (viewOffset.y - camera.position.y) * 0.1
+  camera.position.y += (viewCenterY + viewOffset.y - camera.position.y) * 0.1
   camera.updateProjectionMatrix()
   nodeObjects.forEach((group, id) => {
-    const baseScale = layoutMode.value === 'mobile' ? 0.75 : 1
+    const baseScale = layoutMode.value === 'mobile' ? MOBILE_NODE_SCALE : 1
     const breath = activeMotion ? Math.sin(time * 1.4 + group.userData.phase) * 0.012 : 0
     const emphasis = id === activeId.value || id === hoveredId.value ? 0.055 : 0
     const targetScale = baseScale * (1 + emphasis + breath)
@@ -771,11 +846,14 @@ function initialize() {
   canvasRef.value.addEventListener('pointerdown', onPointerDown)
   canvasRef.value.addEventListener('pointermove', onPointerMove)
   canvasRef.value.addEventListener('pointerup', onPointerUp)
+  canvasRef.value.addEventListener('dblclick', onDoubleClick)
   canvasRef.value.addEventListener('pointercancel', onPointerCancel)
   canvasRef.value.addEventListener('pointerleave', onPointerLeave)
   canvasRef.value.addEventListener('wheel', onWheel, { passive: false })
   resizeObserver = new ResizeObserver(resize)
   resizeObserver.observe(hostRef.value)
+  const header = hostRef.value.parentElement?.querySelector('.graph-header')
+  if (header) resizeObserver.observe(header)
   syncScene()
   resize()
   animate()
@@ -823,6 +901,7 @@ onBeforeUnmount(() => {
   canvasRef.value?.removeEventListener('pointerdown', onPointerDown)
   canvasRef.value?.removeEventListener('pointermove', onPointerMove)
   canvasRef.value?.removeEventListener('pointerup', onPointerUp)
+  canvasRef.value?.removeEventListener('dblclick', onDoubleClick)
   canvasRef.value?.removeEventListener('pointercancel', onPointerCancel)
   canvasRef.value?.removeEventListener('pointerleave', onPointerLeave)
   canvasRef.value?.removeEventListener('wheel', onWheel)
@@ -831,7 +910,7 @@ onBeforeUnmount(() => {
   renderer.value = null
 })
 
-defineExpose({ resetView, zoomIn, zoomOut, getNodeScreenPos })
+defineExpose({ resetView, restoreLayout, zoomIn, zoomOut, getNodeScreenPos })
 </script>
 
 <style scoped>
@@ -868,8 +947,8 @@ defineExpose({ resetView, zoomIn, zoomOut, getNodeScreenPos })
 .graph-node-label {
   --label-scale: 1;
   position: absolute;
-  width: 80px;
-  height: 40px;
+  width: 174px;
+  height: 64px;
   padding: 0 2px;
   display: flex;
   flex-direction: column;
@@ -889,14 +968,14 @@ defineExpose({ resetView, zoomIn, zoomOut, getNodeScreenPos })
 }
 
 .graph-node-label strong {
-  font-size: 11px;
+  font-size: 16px;
   font-weight: 650;
 }
 
 .graph-node-label small {
-  margin-top: 3px;
+  margin-top: 5px;
   color: var(--graph-node-available-sub);
-  font: 9px/1 var(--font-mono);
+  font: 12px/1 var(--font-mono);
 }
 
 .graph-node-label.mastered {
@@ -908,12 +987,12 @@ defineExpose({ resetView, zoomIn, zoomOut, getNodeScreenPos })
 }
 
 .graph-node-label.locked {
-  color: var(--graph-node-locked-label);
-  opacity: 0.65;
+  color: var(--ink-2);
+  opacity: 0.8;
 }
 
 .graph-node-label.locked small {
-  color: var(--graph-node-locked-sub);
+  color: var(--ink-3);
 }
 
 .graph-node-label.dimmed {
@@ -925,11 +1004,11 @@ defineExpose({ resetView, zoomIn, zoomOut, getNodeScreenPos })
 }
 
 .graph-node-label.mastered.dimmed {
-  color: var(--ink-2);
+  color: var(--graph-node-mastered-label);
 }
 
 .graph-node-label.mastered.dimmed small {
-  color: var(--ink-3);
+  color: var(--graph-node-mastered-sub);
 }
 
 .graph-node-label.active strong {
