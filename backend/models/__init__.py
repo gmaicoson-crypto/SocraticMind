@@ -8,6 +8,7 @@ from .learner_memory import LearnerMemory
 from .study_plan import StudyPlan, StudyPlanItem
 from .assessment import AssessmentAttempt
 from .mastery_event import MasteryEvent
+from .user_llm_profile import UserLLMProfile
 
 __all__ = [
     "AgentRun",
@@ -22,4 +23,5 @@ __all__ = [
     "StudyPlanItem",
     "Topic",
     "User",
+    "UserLLMProfile",
 ]

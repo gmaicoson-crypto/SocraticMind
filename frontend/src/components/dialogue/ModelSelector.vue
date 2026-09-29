@@ -1,33 +1,68 @@
 <template>
   <select
+    ref="selectorRef"
     class="model-selector"
-    :value="models.selectedModelId ?? ''"
-    :disabled="models.loading || models.models.length === 0"
+    :value="models.selectedModel?.id ?? ''"
+    :disabled="models.loading"
     aria-label="选择模型"
     title="选择模型"
     @change="selectModel"
   >
-    <option v-if="models.models.length === 0" value="">
-      {{ models.loading ? '加载模型…' : '暂无模型' }}
+    <option value="" disabled>
+      {{ models.loading ? '加载模型中' : models.error ? '模型加载失败' : '选择模型' }}
     </option>
-    <option v-for="model in models.models" :key="model.id" :value="model.id">
-      {{ model.name }}
+    <optgroup v-if="models.environmentModels.length" label="系统模型">
+      <option v-for="model in models.environmentModels" :key="model.id" :value="model.id">
+        {{ model.name }}
+      </option>
+    </optgroup>
+    <optgroup v-if="models.customModels.length" label="我的模型">
+      <option v-for="model in models.customModels" :key="model.id" :value="model.id">
+        {{ model.name }}
+      </option>
+    </optgroup>
+    <option value="__add__">添加模型</option>
+    <option v-if="models.selectedModel?.source === 'custom'" value="__manage__">
+      编辑或删除当前模型
     </option>
   </select>
+  <ModelEditorModal v-model="showEditorModal" :model="editingModel" />
 </template>
 
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { nextTick, onMounted, ref, watch } from 'vue'
+import type { CustomModelOption } from '../../api/models'
+import ModelEditorModal from '../models/ModelEditorModal.vue'
 import { useModelsStore } from '../../stores/models'
 
 const models = useModelsStore()
+const showEditorModal = ref(false)
+const editingModel = ref<CustomModelOption | null>(null)
+const selectorRef = ref<HTMLSelectElement | null>(null)
 
 onMounted(() => {
   if (!models.models.length) models.fetchModels()
 })
 
+watch(showEditorModal, async (open) => {
+  if (!open) {
+    await nextTick()
+    selectorRef.value?.focus()
+  }
+})
+
 function selectModel(event: Event) {
-  models.setSelectedModel((event.target as HTMLSelectElement).value || null)
+  const target = event.target as HTMLSelectElement
+  if (target.value === '__add__' || target.value === '__manage__') {
+    editingModel.value =
+      target.value === '__manage__' && models.selectedModel?.source === 'custom'
+        ? models.selectedModel
+        : null
+    target.value = models.selectedModel?.id ?? ''
+    showEditorModal.value = true
+    return
+  }
+  models.setSelectedModel(target.value || null)
 }
 </script>
 
@@ -55,7 +90,6 @@ function selectModel(event: Event) {
   cursor: wait;
   opacity: 0.7;
 }
-
 @container (max-width: 400px) {
   .model-selector {
     width: clamp(100px, 32cqw, 132px);

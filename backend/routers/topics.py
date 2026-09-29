@@ -8,6 +8,7 @@ from core.database import get_db
 from core.deps import get_current_user
 from core.ai_client import get_ai_client, resolve_llm_profile, resolve_model_id
 from core.errors import ApiError
+from core.user_llm import load_user_profiles
 from models.user import User
 from models.topic import Topic
 from models.node import Node
@@ -150,6 +151,7 @@ def recommend_topics(
     AI 调用失败时不阻塞首页加载，返回空列表即可，前端做降级处理。
     """
     topics = db.query(Topic).filter(Topic.user_id == current_user.id).all()
+    load_user_profiles(db, current_user.id)
 
     if topics:
         prompt = build_recommend_prompt([t.title for t in topics])
@@ -157,7 +159,7 @@ def recommend_topics(
         prompt = "该用户还没有学习任何主题，请推荐 3 个适合初学者的热门技术学习主题。"
 
     try:
-        profile = resolve_llm_profile(resolve_model_id(model))
+        profile = resolve_llm_profile(resolve_model_id(model, user_id=current_user.id))
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
 

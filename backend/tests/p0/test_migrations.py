@@ -35,6 +35,7 @@ def test_empty_database_upgrades_to_head(tmp_path):
         "study_plan_items",
         "assessment_attempts",
         "mastery_events",
+        "user_llm_profiles",
     }.issubset(set(inspector.get_table_names()))
     assert {"estimated_minutes", "mastery_source", "mastery_confidence"}.issubset(
         {column["name"] for column in inspector.get_columns("nodes")}
@@ -44,6 +45,9 @@ def test_empty_database_upgrades_to_head(tmp_path):
     )
     assert "ix_chat_user_session_type_id" in {
         index["name"] for index in inspector.get_indexes("chat_messages")
+    }
+    assert "config_id" not in {
+        column["name"] for column in inspector.get_columns("user_llm_profiles")
     }
 
 
@@ -92,6 +96,42 @@ def test_legacy_data_is_preserved_and_backfilled(tmp_path):
             text("SELECT avatar_grad, bio, daily_goal, ai_style FROM users WHERE id = 1")
         ).one()
         assert all(value is not None for value in profile)
+
+
+def test_existing_user_model_survives_config_id_removal(tmp_path):
+    database_url = f"sqlite:///{tmp_path / 'user-model.sqlite'}"
+    config = alembic_config(database_url)
+    command.upgrade(config, "0004_user_llm_profiles")
+    engine = create_engine(database_url)
+
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO users (id, username, email, hashed_password, is_active) "
+                "VALUES (1, 'model-user', 'model@example.com', 'hash', 1)"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO user_llm_profiles "
+                "(id, user_id, config_id, name, api_key_encrypted, base_url, model) "
+                "VALUES ('profile-1', 1, 'legacy-id', 'My model', 'ciphertext', "
+                "'https://example.test/v1', 'official-model')"
+            )
+        )
+
+    command.upgrade(config, "head")
+
+    with engine.connect() as connection:
+        assert connection.execute(
+            text("SELECT id, name, api_key_encrypted, base_url, model FROM user_llm_profiles")
+        ).one() == (
+            "profile-1",
+            "My model",
+            "ciphertext",
+            "https://example.test/v1",
+            "official-model",
+        )
 
 
 def test_p0_downgrade_keeps_legacy_tables(tmp_path):

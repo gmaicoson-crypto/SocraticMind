@@ -1,7 +1,12 @@
 import { computed, ref, shallowRef } from 'vue'
 import { defineStore } from 'pinia'
-import { getLLMModels } from '../api/models'
-import type { LLMModelOption } from '../api/models'
+import {
+  createCustomModel,
+  deleteCustomModel,
+  getLLMModels,
+  updateCustomModel,
+} from '../api/models'
+import type { CustomModelOption, LLMModelOption } from '../api/models'
 import { getSelectedModelId, saveSelectedModelId } from '../utils/modelSelection'
 
 export const useModelsStore = defineStore('models', () => {
@@ -11,6 +16,12 @@ export const useModelsStore = defineStore('models', () => {
   const error = ref<string | null>(null)
   const selectedModel = computed(
     () => models.value.find((model) => model.id === selectedModelId.value) ?? null,
+  )
+  const environmentModels = computed(() =>
+    models.value.filter((model) => model.source === 'environment'),
+  )
+  const customModels = computed(() =>
+    models.value.filter((model): model is CustomModelOption => model.source === 'custom'),
   )
   let fetchPromise: Promise<void> | null = null
 
@@ -41,13 +52,39 @@ export const useModelsStore = defineStore('models', () => {
     saveSelectedModelId(modelId)
   }
 
+  async function addCustomModel(input: Parameters<typeof createCustomModel>[0]) {
+    const created = await createCustomModel(input)
+    models.value = [...models.value, created]
+    setSelectedModel(created.id)
+    return created
+  }
+
+  async function editCustomModel(modelId: string, input: Parameters<typeof updateCustomModel>[1]) {
+    const updated = await updateCustomModel(modelId, input)
+    models.value = models.value.map((model) => (model.id === modelId ? updated : model))
+    return updated
+  }
+
+  async function removeCustomModel(modelId: string) {
+    await deleteCustomModel(modelId)
+    models.value = models.value.filter((model) => model.id !== modelId)
+    if (selectedModelId.value === modelId) {
+      setSelectedModel(models.value[0]?.id ?? null)
+    }
+  }
+
   return {
     models,
+    environmentModels,
+    customModels,
     selectedModelId,
     selectedModel,
     loading,
     error,
     fetchModels,
     setSelectedModel,
+    addCustomModel,
+    editCustomModel,
+    removeCustomModel,
   }
 })

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { getLLMModels } from '../../api/models'
+import type { LLMModelOption } from '../../api/models'
 import { getRecommendations } from '../../api/topic'
 import { useModelsStore } from '../models'
 import { useTopicsStore } from '../topics'
@@ -17,9 +18,8 @@ describe('recommendation model selection', () => {
   })
 
   it('waits for an in-flight model load before using a saved selection', async () => {
-    localStorage.setItem('sm_llm_model', 'default')
-    let finishLoad: (models: { id: string; name: string; model: string }[]) => void = () =>
-      undefined
+    localStorage.setItem('sm_llm_model', 'env:current')
+    let finishLoad: (models: LLMModelOption[]) => void = () => undefined
     vi.mocked(getLLMModels).mockReturnValue(
       new Promise((resolve) => {
         finishLoad = resolve
@@ -33,11 +33,25 @@ describe('recommendation model selection', () => {
     expect(getLLMModels).toHaveBeenCalledTimes(1)
     expect(getRecommendations).not.toHaveBeenCalled()
 
-    finishLoad([{ id: 'current', name: 'Current', model: 'current-model' }])
+    finishLoad([
+      {
+        id: 'env:current',
+        name: 'Configured',
+        model: 'configured-model',
+        source: 'environment',
+      },
+      {
+        id: 'custom:current',
+        name: 'Current',
+        model: 'current-model',
+        base_url: 'https://current.example/v1',
+        source: 'custom',
+      },
+    ])
     await Promise.all([loading, recommending])
 
-    expect(getRecommendations).toHaveBeenCalledWith('current')
-    expect(localStorage.getItem('sm_llm_model')).toBe('current')
+    expect(getRecommendations).toHaveBeenCalledWith('env:current')
+    expect(localStorage.getItem('sm_llm_model')).toBe('env:current')
   })
 
   it('omits an unverified saved model if the model list cannot load', async () => {
@@ -50,7 +64,7 @@ describe('recommendation model selection', () => {
   })
 
   it('clears a saved model when the server has no configured options', async () => {
-    localStorage.setItem('sm_llm_model', 'removed')
+    localStorage.setItem('sm_llm_model', 'custom:removed')
     vi.mocked(getLLMModels).mockResolvedValue([])
 
     await useModelsStore().fetchModels()

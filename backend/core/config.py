@@ -1,3 +1,4 @@
+import hashlib
 import json
 import re
 from io import StringIO
@@ -5,7 +6,7 @@ from pathlib import Path
 from typing import Mapping
 
 from dotenv import dotenv_values
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from pydantic_settings import BaseSettings, DotEnvSettingsSource, PydanticBaseSettingsSource
 from pydantic_settings.sources import parse_env_vars
 
@@ -60,12 +61,23 @@ class LLMProfile(BaseModel):
     model: str
 
 
+class LLMConfig(BaseModel):
+    """用户填写的四项服务配置；运行时 ID 由服务地址和模型生成。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    model: str
+    api_key: str
+    base_url: str
+    name: str
+
+
 class Settings(BaseSettings):
     # 保留旧变量，未配置 LLM_MODELS 时继续支持单模型部署。
     llm_api_key: str = ""
     llm_base_url: str = ""
     llm_model: str = ""
-    # JSON 数组，例如：[{"id":"deepseek","name":"DeepSeek","api_key":"...","base_url":"https://api.deepseek.com/v1","model":"deepseek-chat"}]
+    # JSON 数组中的模型只需 MODEL、API_KEY、BASE_URL、NAME。
     llm_models: str = ""
     llm_default_model_id: str = ""
     secret_key: str
@@ -125,7 +137,21 @@ class Settings(BaseSettings):
                 raise ValueError("LLM_MODELS 必须是合法的 JSON 数组") from error
             if not isinstance(raw_profiles, list) or not raw_profiles:
                 raise ValueError("LLM_MODELS 必须是非空 JSON 数组")
-            profiles = [LLMProfile.model_validate(profile) for profile in raw_profiles]
+            profiles = []
+            for raw_profile in raw_profiles:
+                if not isinstance(raw_profile, dict):
+                    raise ValueError("LLM_MODELS 中的每项必须是对象")
+                values = {key.lower(): value for key, value in raw_profile.items()}
+                legacy_id = values.pop("id", None)
+                config = LLMConfig.model_validate(values)
+                profile_id = (
+                    legacy_id
+                    or "env:"
+                    + hashlib.sha256(
+                        f"{config.base_url.rstrip('/')}\0{config.model}".encode()
+                    ).hexdigest()[:16]
+                )
+                profiles.append(LLMProfile(id=profile_id, **config.model_dump()))
         else:
             if not all((self.llm_api_key, self.llm_base_url, self.llm_model)):
                 raise ValueError(
@@ -148,9 +174,14 @@ class Settings(BaseSettings):
 
     @property
     def default_llm_profile_id(self) -> str:
-        profile_ids = {profile.id for profile in self.llm_profiles}
-        if self.llm_default_model_id and self.llm_default_model_id in profile_ids:
-            return self.llm_default_model_id
+        if self.llm_default_model_id:
+            matches = [
+                profile
+                for profile in self.llm_profiles
+                if self.llm_default_model_id in (profile.id, profile.name, profile.model)
+            ]
+            if len(matches) == 1:
+                return matches[0].id
         return self.llm_profiles[0].id
 
     class Config:

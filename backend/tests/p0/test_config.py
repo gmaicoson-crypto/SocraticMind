@@ -14,30 +14,40 @@ def test_multiline_llm_models_load_from_env_file(tmp_path, monkeypatch):
     env_file.write_text(
         """LLM_MODELS=[
   {
-    "id": "first",
-    "name": "First",
-    "api_key": "first-key",
-    "base_url": "https://first.example/v1",
-    "model": "first-model"
+    "MODEL": "first-model",
+    "API_KEY": "first-key",
+    "BASE_URL": "https://first.example/v1",
+    "NAME": "First"
   },
   {
-    "id": "second",
-    "name": "Second",
-    "api_key": "second-key",
-    "base_url": "https://second.example/v1",
-    "model": "second-model"
+    "MODEL": "second-model",
+    "API_KEY": "second-key",
+    "BASE_URL": "https://second.example/v1",
+    "NAME": "Second"
   }
 ]
-LLM_DEFAULT_MODEL_ID=second
 """,
         encoding="utf-8",
     )
 
     settings = Settings(_env_file=env_file)
 
-    assert [profile.id for profile in settings.llm_profiles] == ["first", "second"]
-    assert settings.default_llm_profile_id == "second"
+    assert all(profile.id.startswith("env:") for profile in settings.llm_profiles)
+    assert settings.default_llm_profile_id == settings.llm_profiles[0].id
+    assert settings.llm_profiles[0].model == "first-model"
     assert settings.llm_profiles[1].api_key == "second-key"
+
+
+def test_env_profile_id_does_not_change_with_display_name():
+    config = {"MODEL": "same-model", "API_KEY": "key", "BASE_URL": "https://same.example/v1"}
+    first = Settings(
+        _env_file=None, secret_key="test", llm_models=json.dumps([{**config, "NAME": "A"}])
+    )
+    second = Settings(
+        _env_file=None, secret_key="test", llm_models=json.dumps([{**config, "NAME": "B"}])
+    )
+
+    assert first.llm_profiles[0].id == second.llm_profiles[0].id
 
 
 def test_single_line_llm_models_still_load_from_env_file(tmp_path, monkeypatch):

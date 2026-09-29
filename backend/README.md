@@ -59,22 +59,18 @@ copy .env.example .env
 ```env
 LLM_MODELS=[
   {
-    "id": "deepseek",
-    "name": "DeepSeek",
-    "api_key": "your_deepseek_key",
-    "base_url": "https://api.deepseek.com/v1",
-    "model": "deepseek-chat"
+    "MODEL": "deepseek-chat",
+    "API_KEY": "your_deepseek_key",
+    "BASE_URL": "https://api.deepseek.com/v1",
+    "NAME": "DeepSeek"
   },
   {
-    "id": "openai",
-    "name": "OpenAI",
-    "api_key": "your_openai_key",
-    "base_url": "https://api.openai.com/v1",
-    "model": "gpt-4o-mini"
+    "MODEL": "gpt-4o-mini",
+    "API_KEY": "your_openai_key",
+    "BASE_URL": "https://api.openai.com/v1",
+    "NAME": "OpenAI"
   }
 ]
-LLM_DEFAULT_MODEL_ID=deepseek
-
 SECRET_KEY=change_me_to_a_random_secret_string
 
 DATABASE_URL=mysql+pymysql://root:your_password@localhost:3306/socraticmind
@@ -110,11 +106,7 @@ http://127.0.0.1:8000/health
 
 | 变量 | 必填 | 说明 | 示例 |
 | --- | --- | --- | --- |
-| `LLM_MODELS` | 与旧配置二选一 | 多个 OpenAI 兼容服务的 JSON 数组，包含 `id`、`name`、`api_key`、`base_url`、`model` | 见 `.env.example` |
-| `LLM_DEFAULT_MODEL_ID` | 否 | 默认 profile 的 `id`；未设置时使用数组第一项 | `deepseek` |
-| `LLM_API_KEY` | 与 `LLM_MODELS` 二选一 | 兼容旧版的单模型 API Key | 服务商提供的密钥 |
-| `LLM_BASE_URL` | 与 `LLM_MODELS` 二选一 | 兼容旧版的 OpenAI 兼容 API 地址 | 服务商提供的地址 |
-| `LLM_MODEL` | 与 `LLM_MODELS` 二选一 | 兼容旧版的模型 ID | 服务商提供的模型 ID |
+| `LLM_MODELS` | 是 | OpenAI 兼容服务的 JSON 数组；每项只需 `MODEL`、`API_KEY`、`BASE_URL`、`NAME`，第一项为默认模型 | 见 `.env.example` |
 | `SECRET_KEY` | 是 | JWT 签名密钥 | `a-long-random-string` |
 | `DATABASE_URL` | 是 | SQLAlchemy 数据库连接 URL | `mysql+pymysql://root:pass@localhost:3306/socraticmind` |
 | `CORS_ORIGINS` | 否 | 允许访问 API 的前端来源，多个值用逗号分隔 | `http://localhost:5173` |
@@ -125,6 +117,10 @@ http://127.0.0.1:8000/health
 | `SMTP_FROM` | 否 | 发件人地址 | `SocraticMind <user@example.com>` |
 | `SMTP_USE_TLS` | 否 | 是否使用 TLS | `true` |
 | `APP_NAME` | 否 | 邮件模板中的应用名称 | `SocraticMind` |
+
+同一个 `BASE_URL` 与 `MODEL` 组合只能配置一次，以保持内部 ID 稳定。旧版 `.env` 中的小写字段、`id`、`LLM_DEFAULT_MODEL_ID` 和单模型 `LLM_API_KEY`、`LLM_BASE_URL`、`LLM_MODEL` 仍可读取，便于现有部署逐步迁移。
+
+登录后，用户可以在首页对话区的模型下拉框中添加自己的四项配置；选中用户模型后，可从同一下拉框编辑或删除。用户模型保存在 `user_llm_profiles` 表中，API Key 使用服务端 `SECRET_KEY` 加密；内部 ID 自动生成，与环境模型互不冲突。对话下拉框显示环境模型和用户模型，个人页不展示模型配置。模型列表接口不返回环境模型的 API Key 或请求地址。
 
 如果未配置 SMTP，验证码发送逻辑会按 `core/email.py` 中的实现进行降级处理，适合本地调试时查看控制台输出。
 

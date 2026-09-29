@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from core.ai_client import resolve_model_id
 from core.database import get_db
 from core.deps import get_current_user
+from core.user_llm import load_user_profiles
 from models import AgentRun, User
 from schemas.agent import (
     AgentAnswerRequest,
@@ -46,9 +47,9 @@ def get_agent_generator():
     return generate_structured
 
 
-def selected_model(model_id: str | None) -> str:
+def selected_model(model_id: str | None, user_id: int | None = None) -> str:
     try:
-        return resolve_model_id(model_id)
+        return resolve_model_id(model_id, user_id=user_id)
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
 
@@ -84,6 +85,7 @@ def create_assessment(
     db: Session = Depends(get_db),
     generator: Any = Depends(get_agent_generator),
 ):
+    load_user_profiles(db, current_user.id)
     return serialize_and_sync(
         db,
         start_assessment(
@@ -93,7 +95,7 @@ def create_assessment(
             request_id=request.request_id,
             session_id=request.session_id,
             generator=generator,
-            model_id=selected_model(request.model),
+            model_id=selected_model(request.model, current_user.id),
         ),
     )
 
@@ -140,6 +142,7 @@ def create_onboarding_run(
     db: Session = Depends(get_db),
     generator: Any = Depends(get_agent_generator),
 ):
+    load_user_profiles(db, current_user.id)
     return serialize_and_sync(
         db,
         start_onboarding(
@@ -147,7 +150,7 @@ def create_onboarding_run(
             user_id=current_user.id,
             request=request,
             generator=generator,
-            model_id=selected_model(request.model),
+            model_id=selected_model(request.model, current_user.id),
         ),
     )
 
@@ -164,6 +167,7 @@ def create_topic_plan_run(
     db: Session = Depends(get_db),
     generator: Any = Depends(get_agent_generator),
 ):
+    load_user_profiles(db, current_user.id)
     return serialize_and_sync(
         db,
         start_topic_plan(
@@ -172,7 +176,7 @@ def create_topic_plan_run(
             topic_id=topic_id,
             request=request,
             generator=generator,
-            model_id=selected_model(request.model),
+            model_id=selected_model(request.model, current_user.id),
         ),
     )
 
@@ -194,6 +198,7 @@ def answer_run(
     db: Session = Depends(get_db),
     generator: Any = Depends(get_agent_generator),
 ):
+    load_user_profiles(db, current_user.id)
     run = get_run(db, user_id=current_user.id, run_id=run_id)
     submit = submit_assessment_answer if run.run_type == "assessment" else submit_answer
     completed = submit(
@@ -224,6 +229,7 @@ def patch_run(
     db: Session = Depends(get_db),
     generator: Any = Depends(get_agent_generator),
 ):
+    load_user_profiles(db, current_user.id)
     return serialize_and_sync(
         db,
         update_run_parameters(
@@ -260,6 +266,7 @@ def cancel_agent_run(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    load_user_profiles(db, current_user.id)
     run = get_run(db, user_id=current_user.id, run_id=run_id)
     cancel = cancel_assessment if run.run_type == "assessment" else cancel_run
     return serialize_and_sync(db, cancel(db, user_id=current_user.id, run_id=run_id))
@@ -272,6 +279,7 @@ def retry_agent_run(
     db: Session = Depends(get_db),
     generator: Any = Depends(get_agent_generator),
 ):
+    load_user_profiles(db, current_user.id)
     run = get_run(db, user_id=current_user.id, run_id=run_id)
     retry = retry_assessment if run.run_type == "assessment" else retry_run
     return serialize_and_sync(

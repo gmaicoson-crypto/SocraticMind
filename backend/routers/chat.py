@@ -14,6 +14,7 @@ from ai.util import extract_json_from_markdown
 from core.database import get_db
 from core.deps import get_current_user
 from core.ai_client import get_ai_client, resolve_llm_profile, resolve_model_id
+from core.user_llm import load_user_profiles
 from models.progress import ChatMessage
 from models.node import Node
 from models.topic import Topic
@@ -62,9 +63,9 @@ class ChatRequest(BaseModel):
         return self
 
 
-def selected_model(model_id: str | None) -> str:
+def selected_model(model_id: str | None, user_id: int | None = None) -> str:
     try:
-        return resolve_model_id(model_id)
+        return resolve_model_id(model_id, user_id=user_id)
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
 
@@ -90,6 +91,7 @@ def chat_stream_endpoint(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    load_user_profiles(db, current_user.id)
     # topic_overview 模式下 node_key 承载的是主题名，不需要查节点表
     if req.kind == "topic_overview":
         topic = (
@@ -124,7 +126,7 @@ def chat_stream_endpoint(
         node_label = node.label
         node_sub = node.sub
 
-    model_id = selected_model(req.model)
+    model_id = selected_model(req.model, current_user.id)
 
     # 请求携带的 history 仅为旧客户端兼容字段，事实上下文始终从数据库读取。
     history = load_recent_chat_history(
@@ -323,6 +325,7 @@ def get_suggestions(
     db: Session = Depends(get_db),
 ):
     """根据当前聊天模式，让 AI 生成快捷回复建议；生成失败时返回兜底的静态建议列表。"""
+    load_user_profiles(db, current_user.id)
     if mode == "socratic":
         # 取用户当前可学习的节点作为上下文，让建议更贴合学习进度
         recent_nodes = (
@@ -340,7 +343,7 @@ def get_suggestions(
     else:
         prompt = NORMAL_SUGGESTIONS_PROMPT
 
-    profile = resolve_llm_profile(selected_model(model))
+    profile = resolve_llm_profile(selected_model(model, current_user.id))
     try:
         response = get_ai_client(profile.id).chat.completions.create(
             model=profile.model,

@@ -34,3 +34,6 @@ class User(Base):
     mastery_events = relationship(
         "MasteryEvent", back_populates="user", cascade="all, delete-orphan"
     )
+    llm_profiles = relationship(
+        "UserLLMProfile", back_populates="user", cascade="all, delete-orphan"
+    )
