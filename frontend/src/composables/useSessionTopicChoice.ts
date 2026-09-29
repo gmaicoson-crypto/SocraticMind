@@ -1,6 +1,7 @@
 import type { ComputedRef } from 'vue'
 import type { DialogueSession, Message, Topic } from '../types'
 import { isNewTopicIntent, now } from '../utils/chat'
+import { randomAiAvatar } from '../utils/avatarPresets'
 
 interface SessionTopicChoiceOptions {
   currentSession: ComputedRef<DialogueSession | undefined>
@@ -8,6 +9,7 @@ interface SessionTopicChoiceOptions {
   pushMessage: (message: Message) => void
   saveSessions: () => void
   setActiveTopic: (id: string) => Promise<void>
+  inheritTopicAvatar: (session: DialogueSession, topicId: number) => void
 }
 
 function clearTopicChoice(session: DialogueSession) {
@@ -17,10 +19,12 @@ function clearTopicChoice(session: DialogueSession) {
 }
 
 export function useSessionTopicChoice(options: SessionTopicChoiceOptions) {
-  const { currentSession, topics, pushMessage, saveSessions, setActiveTopic } = options
+  const { currentSession, topics, pushMessage, saveSessions, setActiveTopic, inheritTopicAvatar } =
+    options
 
   function prepareTopicChoice(session: DialogueSession, previous?: DialogueSession) {
     if (previous?.topicId == null) return
+    inheritTopicAvatar(session, previous.topicId)
     const title =
       previous.topicTitle ??
       topics().find((topic) => Number(topic.id) === previous.topicId)?.title ??
@@ -60,6 +64,7 @@ export function useSessionTopicChoice(options: SessionTopicChoiceOptions) {
         return true
       }
 
+      inheritTopicAvatar(session, Number(topic.id))
       session.topicId = Number(topic.id)
       session.topicTitle = topic.title
       session.name = topic.title.slice(0, 12)
@@ -75,6 +80,7 @@ export function useSessionTopicChoice(options: SessionTopicChoiceOptions) {
     }
 
     if (chooseNew) {
+      if (!session.aiAvatarSelected) session.aiAvatarUrl = randomAiAvatar('socratic')
       clearTopicChoice(session)
       saveSessions()
       if (/^B[.、\s]/i.test(value) || /^(创建|重新创建)?新(的)?主题(对话)?$/.test(value.trim())) {

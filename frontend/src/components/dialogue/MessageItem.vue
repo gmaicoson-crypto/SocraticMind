@@ -5,23 +5,23 @@
     @mouseenter="hovered = true"
     @mouseleave="hovered = false"
   >
-    <div v-if="message.role === 'ai'" class="ai-avatar sm">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-        <path
-          d="M12 2 L13.5 8.5 L20 10 L13.5 11.5 L12 18 L10.5 11.5 L4 10 L10.5 8.5 Z"
-          fill="var(--on-accent)"
-        />
-      </svg>
-    </div>
-    <div v-else class="user-avatar" :style="avatarUrl ? {} : { background: avatarGrad }">
+    <button
+      v-if="message.role === 'ai'"
+      type="button"
+      class="ai-avatar sm"
+      title="更改此对话的 AI 头像"
+      aria-label="更改此对话的 AI 头像"
+      @click="emit('change-ai-avatar')"
+    >
+      <img :src="avatarSrc(aiAvatarUrl)" alt="" class="ui-avatar-image ai-avatar-image" />
+    </button>
+    <div v-else class="user-avatar">
       <img
-        v-if="avatarUrl"
-        :src="avatarSrc(avatarUrl)"
+        :src="avatarSrc(avatarUrl ?? defaultUserAvatar)"
         alt="avatar"
         class="user-avatar-img"
         decoding="async"
       />
-      <template v-else>{{ userInitial }}</template>
     </div>
 
     <div class="msg-content" :class="message.role">
@@ -143,6 +143,7 @@
 import { onBeforeUnmount, ref } from 'vue'
 import type { Message } from '../../types'
 import { avatarSrc } from '../../utils/avatar'
+import { defaultUserAvatar } from '../../utils/avatarPresets'
 import InlineMarkdown from './InlineMarkdown.vue'
 
 const props = defineProps<{
@@ -150,15 +151,15 @@ const props = defineProps<{
   index: number
   isLast: boolean
   isThinking: boolean
-  userInitial: string
   avatarUrl: string | null
-  avatarGrad: string
+  aiAvatarUrl: string
 }>()
 
 const emit = defineEmits<{
   delete: []
   retry: []
   quote: []
+  'change-ai-avatar': []
   'select-choice': [text: string]
 }>()
 

@@ -46,6 +46,8 @@ export type ChatMode = 'socratic' | 'normal'
 export interface DialogueSession {
   id: string
   name: string
+  aiAvatarUrl?: string
+  aiAvatarSelected?: boolean
   messages: Message[]
   updatedAt: string
   topicId?: number

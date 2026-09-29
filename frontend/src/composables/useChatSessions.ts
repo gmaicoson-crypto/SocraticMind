@@ -1,6 +1,7 @@
 import { ref } from 'vue'
 import type { ChatMode, DialogueSession } from '../types'
 import { genId, now, nowDate } from '../utils/chat'
+import { normalizeAiAvatarUrl, randomAiAvatar } from '../utils/avatarPresets'
 
 //本地存储的 key
 const STORAGE_KEYS = {
@@ -15,6 +16,7 @@ export function createDefaultSession(mode: ChatMode): DialogueSession {
   return {
     id: genId(),
     name: mode === 'socratic' ? '新学习对话' : '新普通对话',
+    aiAvatarUrl: randomAiAvatar(mode),
     messages: [
       {
         role: 'ai',
@@ -34,7 +36,30 @@ function loadSessions(key: string, mode: ChatMode): DialogueSession[] {
     const raw = localStorage.getItem(key)
     if (raw) {
       const sessions = JSON.parse(raw) as DialogueSession[]
-      if (Array.isArray(sessions) && sessions.length > 0) return sessions
+      if (Array.isArray(sessions) && sessions.length > 0) {
+        let migrated = false
+        for (const session of sessions) {
+          if (session.aiAvatarUrl) {
+            const normalized = normalizeAiAvatarUrl(session.aiAvatarUrl)
+            const nextUrl =
+              mode === 'normal' && !session.aiAvatarSelected && normalized.includes('/AI/study/')
+                ? randomAiAvatar('normal')
+                : normalized
+            if (nextUrl !== session.aiAvatarUrl) {
+              session.aiAvatarUrl = nextUrl
+              migrated = true
+            }
+          }
+        }
+        if (migrated) {
+          try {
+            localStorage.setItem(key, JSON.stringify(sessions))
+          } catch (error) {
+            console.warn(`本地会话 ${key} 头像迁移保存失败`, error)
+          }
+        }
+        return sessions
+      }
     }
   } catch (err) {
     console.warn(`本地会话 ${key} 解析失败，回退到默认会话`, err)
@@ -59,14 +84,18 @@ export function useChatSessions() {
   const normalCurrentId = ref(loadCurrentId(STORAGE_KEYS.normalCurrent, normalSessions.value))
   let saveTimer: ReturnType<typeof setTimeout> | null = null
 
-  function saveSessions() {
+  function persistSessions() {
+    localStorage.setItem(STORAGE_KEYS.socratic, JSON.stringify(socraticSessions.value))
+    localStorage.setItem(STORAGE_KEYS.normal, JSON.stringify(normalSessions.value))
+    localStorage.setItem(STORAGE_KEYS.socraticCurrent, socraticCurrentId.value)
+    localStorage.setItem(STORAGE_KEYS.normalCurrent, normalCurrentId.value)
+  }
+
+  function saveSessions(immediate = false) {
     if (saveTimer) clearTimeout(saveTimer)
-    saveTimer = setTimeout(() => {
-      localStorage.setItem(STORAGE_KEYS.socratic, JSON.stringify(socraticSessions.value))
-      localStorage.setItem(STORAGE_KEYS.normal, JSON.stringify(normalSessions.value))
-      localStorage.setItem(STORAGE_KEYS.socraticCurrent, socraticCurrentId.value)
-      localStorage.setItem(STORAGE_KEYS.normalCurrent, normalCurrentId.value)
-    }, 300)
+    saveTimer = null
+    if (immediate) persistSessions()
+    else saveTimer = setTimeout(persistSessions, 300)
   }
 
   function disposeSessionPersistence() {

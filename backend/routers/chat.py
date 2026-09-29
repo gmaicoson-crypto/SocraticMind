@@ -1,9 +1,11 @@
 from datetime import datetime
+import hashlib
 import json
 import logging
+import uuid
 from typing import Any, List, Literal, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -12,6 +14,8 @@ from ai.agent import chat_stream
 from ai.prompts import build_socratic_suggestions_prompt, NORMAL_SUGGESTIONS_PROMPT
 from ai.util import extract_json_from_markdown
 from core.database import get_db
+from core.avatar_uploads import UPLOAD_DIR, read_avatar_upload
+from core import rate_limit
 from core.deps import get_current_user
 from core.ai_client import get_ai_client, resolve_llm_profile, resolve_model_id
 from core.user_llm import load_user_profiles
@@ -29,6 +33,24 @@ from services.progress_archive import archive_and_delete_messages, delete_agent_
 
 router = APIRouter(prefix="/api/chat", tags=["对话"])
 log = logging.getLogger(__name__)
+
+
+def _chat_avatar_prefix(user_id: int, session_id: str) -> str:
+    session_hash = hashlib.sha256(session_id.encode("utf-8")).hexdigest()[:24]
+    return f"ai_{user_id}_{session_hash}_"
+
+
+def _delete_chat_avatar_files(user_id: int, session_id: str, *, except_name: str = "") -> int:
+    deleted = 0
+    for image in UPLOAD_DIR.glob(f"{_chat_avatar_prefix(user_id, session_id)}*"):
+        if image.name == except_name:
+            continue
+        try:
+            image.unlink()
+            deleted += 1
+        except OSError:
+            log.warning("Failed to remove chat avatar %s", image)
+    return deleted
 
 
 class MessageItem(BaseModel):
@@ -289,7 +311,42 @@ def delete_messages_endpoint(
 
 
 class DeleteSessionRequest(BaseModel):
-    session_id: str
+    session_id: str = Field(min_length=1, max_length=100)
+
+    @field_validator("session_id")
+    @classmethod
+    def strip_session_id(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("session_id must not be blank")
+        return value
+
+
+@router.post("/avatar")
+async def upload_chat_avatar(
+    session_id: str = Form(min_length=1, max_length=100),
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+):
+    session_id = session_id.strip()
+    if not session_id:
+        raise HTTPException(status_code=422, detail="会话 ID 不能为空")
+    if not rate_limit.hit(f"chat-avatar:{current_user.id}", max_calls=30, window_seconds=3600):
+        raise HTTPException(status_code=429, detail="头像上传过于频繁，请稍后再试")
+    suffix, data = await read_avatar_upload(file)
+    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    filename = f"{_chat_avatar_prefix(current_user.id, session_id)}{uuid.uuid4().hex}{suffix}"
+    (UPLOAD_DIR / filename).write_bytes(data)
+    _delete_chat_avatar_files(current_user.id, session_id, except_name=filename)
+    return {"avatar_url": f"/static/avatars/{filename}"}
+
+
+@router.delete("/avatar")
+def delete_chat_avatar(
+    req: DeleteSessionRequest,
+    current_user: User = Depends(get_current_user),
+):
+    return {"deleted": _delete_chat_avatar_files(current_user.id, req.session_id)}
 
 
 @router.delete("/session")
@@ -302,6 +359,7 @@ def delete_session_endpoint(
     deleted = archive_and_delete_messages(db, user_id=current_user.id, session_id=req.session_id)
     delete_agent_runs(db, user_id=current_user.id, session_id=req.session_id)
     db.commit()
+    _delete_chat_avatar_files(current_user.id, req.session_id)
     return {"deleted": deleted}
 
 

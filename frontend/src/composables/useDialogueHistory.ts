@@ -2,6 +2,7 @@ import type { Ref } from 'vue'
 import { getAllMessages } from '../api/chat'
 import type { DialogueSession, Message, Topic } from '../types'
 import { genId, now, nowDate } from '../utils/chat'
+import { randomAiAvatar } from '../utils/avatarPresets'
 
 interface DialogueHistoryOptions {
   socraticSessions: Ref<DialogueSession[]>
@@ -17,9 +18,36 @@ interface DialogueHistoryOptions {
 }
 
 function sessionUpdatedTimestamp(session: DialogueSession): number | null {
+  const localDate = /^(\d{1,2})\/(\d{1,2})\s+(\d{1,2}):(\d{2})$/.exec(session.updatedAt)
+  if (localDate) {
+    const [, month, day, hour, minute] = localDate
+    const currentDate = new Date()
+    let timestamp = new Date(
+      currentDate.getFullYear(),
+      Number(month) - 1,
+      Number(day),
+      Number(hour),
+      Number(minute),
+    ).getTime()
+    if (timestamp > currentDate.getTime() + 24 * 60 * 60 * 1000) {
+      timestamp = new Date(
+        currentDate.getFullYear() - 1,
+        Number(month) - 1,
+        Number(day),
+        Number(hour),
+        Number(minute),
+      ).getTime()
+    }
+    return Math.max(timestamp, sessionCreatedTimestamp(session) ?? timestamp)
+  }
   const normalized = session.updatedAt.replace(' ', 'T').replaceAll('/', '-')
   const timestamp = Date.parse(normalized)
   return Number.isNaN(timestamp) ? null : timestamp
+}
+
+function sessionCreatedTimestamp(session: DialogueSession): number | null {
+  const match = /^s_(\d{13})_/.exec(session.id)
+  return match ? Number(match[1]) : null
 }
 
 function structuredMessageSignature(message: Message): string | null {
@@ -47,9 +75,12 @@ export function useDialogueHistory(options: DialogueHistoryOptions) {
     inferSelectedChoices,
   } = options
 
-  function latestTopicSession(topicId: number): DialogueSession | undefined {
+  function latestTopicSession(
+    topicId: number,
+    excludeSessionId?: string,
+  ): DialogueSession | undefined {
     return socraticSessions.value
-      .filter((session) => session.topicId === topicId)
+      .filter((session) => session.topicId === topicId && session.id !== excludeSessionId)
       .reduce<DialogueSession | undefined>((latest, candidate) => {
         if (!latest) return candidate
         const latestTime = sessionUpdatedTimestamp(latest)
@@ -58,6 +89,11 @@ export function useDialogueHistory(options: DialogueHistoryOptions) {
           return candidate
         }
         if (candidateTime === latestTime) {
+          const latestCreated = sessionCreatedTimestamp(latest)
+          const candidateCreated = sessionCreatedTimestamp(candidate)
+          if (latestCreated != null && candidateCreated != null) {
+            return candidateCreated > latestCreated ? candidate : latest
+          }
           const latestMessageId = Math.max(
             0,
             ...latest.messages.map((message) => message.db_id ?? 0),
@@ -72,6 +108,12 @@ export function useDialogueHistory(options: DialogueHistoryOptions) {
       }, undefined)
   }
 
+  function inheritTopicAvatar(session: DialogueSession, topicId: number, fallbackUrl: string) {
+    if (session.aiAvatarSelected) return
+    const previous = latestTopicSession(topicId, session.id)
+    if (previous) session.aiAvatarUrl = previous.aiAvatarUrl ?? fallbackUrl
+  }
+
   function findOrCreateTopicSession(topicId: number): DialogueSession {
     const existing = latestTopicSession(topicId)
     if (existing) return existing
@@ -81,6 +123,7 @@ export function useDialogueHistory(options: DialogueHistoryOptions) {
     const session: DialogueSession = {
       id: genId(),
       name: title.slice(0, 12),
+      aiAvatarUrl: randomAiAvatar('socratic'),
       messages: [
         {
           role: 'ai',
@@ -173,6 +216,8 @@ export function useDialogueHistory(options: DialogueHistoryOptions) {
           const topic = topics().find((item) => Number(item.id) === topicId)
           return {
             id: sessionId,
+            aiAvatarUrl: existing?.aiAvatarUrl ?? randomAiAvatar(mode),
+            aiAvatarSelected: existing?.aiAvatarSelected,
             name:
               existing?.name ??
               topic?.title?.slice(0, 12) ??
@@ -199,5 +244,5 @@ export function useDialogueHistory(options: DialogueHistoryOptions) {
     }
   }
 
-  return { findOrCreateTopicSession, rebuildFromBackend }
+  return { findOrCreateTopicSession, inheritTopicAvatar, rebuildFromBackend }
 }

@@ -270,15 +270,24 @@ body,
 }
 
 .dlg-messages .ai-avatar.sm {
+  border: 0;
+  padding: 0;
   background: var(--message-ai-avatar-bg);
+  cursor: pointer;
+}
+
+.dlg-messages .ai-avatar.sm:focus-visible {
+  outline: 2px solid var(--blue-2);
+  outline-offset: 2px;
+}
+
+.dlg-messages .ai-avatar-image {
+  border-radius: inherit;
 }
 
 .dlg-messages .user-avatar {
   overflow: hidden;
-  background: var(--message-user-avatar-bg);
-  color: var(--message-user-avatar-text);
-  font-size: 12px;
-  font-weight: 600;
+  background: var(--bg-3);
 }
 
 .dlg-messages .user-avatar-img {

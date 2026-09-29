@@ -4,6 +4,7 @@
       :show="showHistory"
       :chat-mode="chatMode"
       :sessions="currentSessions"
+      :fallback-avatar-url="chatMode === 'normal' ? defaultNormalAiAvatar : defaultAiAvatar"
       :current-session-id="currentSessionId"
       :editing-session-id="editingSessionId"
       :editing-name="editingName"
@@ -19,15 +20,17 @@
 
     <div class="dlg-header">
       <div class="dlg-header-left">
-        <div class="ai-avatar" :class="{ thinking: isThinking }">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-            <path
-              d="M12 2 L13.5 8.5 L20 10 L13.5 11.5 L12 18 L10.5 11.5 L4 10 L10.5 8.5 Z"
-              fill="var(--on-accent)"
-            />
-          </svg>
+        <button
+          type="button"
+          class="ai-avatar"
+          :class="{ thinking: isThinking }"
+          title="更改此对话的 AI 头像"
+          aria-label="更改此对话的 AI 头像"
+          @click="openAiAvatarPicker"
+        >
+          <img :src="avatarSrc(aiAvatarUrl)" alt="" class="ui-avatar-image ai-avatar-image" />
           <span v-if="isThinking" class="thinking-dot" />
-        </div>
+        </button>
         <div>
           <div class="dlg-title">
             {{ currentSessionName }}
@@ -83,12 +86,12 @@
       :streaming-text="streamingText"
       :streaming-choices="streamingChoices"
       :is-thinking="isThinking"
-      :user-initial="userInitial"
       :avatar-url="store.userInfo?.avatar_url ?? null"
-      :avatar-grad="store.userInfo?.avatar_grad ?? ''"
+      :ai-avatar-url="aiAvatarUrl"
       @delete="deleteMessage"
       @retry="retryAt"
       @quote="quoteMessage"
+      @change-ai-avatar="openAiAvatarPicker"
       @select-choice="sendChoiceText"
     >
       <template #agent>
@@ -192,6 +195,16 @@
       @clear-quote="quotedText = ''"
       @refresh-chips="loadSuggestions(true)"
     />
+    <AiAvatarPickerModal
+      v-if="avatarPickerSessionId"
+      :mode="chatMode"
+      :current-url="pickerAvatarUrl"
+      :busy="avatarPickerBusy"
+      :error="avatarPickerError"
+      @close="avatarPickerSessionId = null"
+      @select="selectAiAvatar"
+      @upload="uploadAiAvatar"
+    />
     <ConfirmDialog
       :model-value="masteryConfirm !== null"
       :title="masteryConfirm === 'revert' ? '撤销掌握状态？' : '确认自报掌握？'"
@@ -227,9 +240,18 @@ import type {
   AssessmentResult as AssessmentResultData,
   OnboardingInput,
 } from '../types/learningAgent'
-import { chatStream, getSuggestions, deleteMessages, deleteChatSession } from '../api/chat'
+import {
+  chatStream,
+  getSuggestions,
+  deleteMessages,
+  deleteChatSession,
+  uploadChatAvatar,
+  deleteChatAvatar,
+} from '../api/chat'
 import { updateTopicTitle } from '../api/topic'
 import { now, nowDate, extractTopic, isNewTopicIntent } from '../utils/chat'
+import { avatarSrc } from '../utils/avatar'
+import { defaultAiAvatar, defaultNormalAiAvatar } from '../utils/avatarPresets'
 import { useChatSessions } from '../composables/useChatSessions'
 import { useChatStream } from '../composables/useChatStream'
 import { useTopicDialogue } from '../composables/useTopicDialogue'
@@ -241,6 +263,7 @@ import { useAssessment } from '../composables/useAssessment'
 import DialogueHistoryPanel from './dialogue/DialogueHistoryPanel.vue'
 import TopicNameBar from './dialogue/TopicNameBar.vue'
 import MessageList from './dialogue/MessageList.vue'
+import AiAvatarPickerModal from './dialogue/AiAvatarPickerModal.vue'
 import DialogueInputBar from './dialogue/DialogueInputBar.vue'
 import OnboardingForm from './agent/OnboardingForm.vue'
 import AgentStepMessage from './agent/AgentStepMessage.vue'
@@ -277,6 +300,9 @@ const streamingText = ref('')
 const streamingChoices = ref<{ label: string; text: string }[] | null>(null)
 const quotedText = ref('')
 const showHistory = ref(false)
+const avatarPickerSessionId = ref<string | null>(null)
+const avatarPickerBusy = ref(false)
+const avatarPickerError = ref('')
 const editingSessionId = ref<string | null>(null)
 const editingName = ref('')
 const masteryConfirm = ref<'self_report' | 'revert' | null>(null)
@@ -287,7 +313,6 @@ let isHydrated = false
 const editingTopicName = ref(false)
 const editingTopicInput = ref('')
 
-const userInitial = computed(() => (store.userInfo?.username ?? '学').slice(0, 1))
 const currentTopicId = computed(() => Number(store.activeTopicId) || 0)
 const chatMode = ref<'socratic' | 'normal'>('socratic')
 const aiStyleOptions = ['温和', '标准', '严格'] as const
@@ -322,6 +347,21 @@ const currentSession = computed(() =>
   chatMode.value === 'socratic' ? currentSocraticSession.value : currentNormalSession.value,
 )
 
+const aiAvatarUrl = computed(
+  () =>
+    currentSession.value?.aiAvatarUrl ??
+    (chatMode.value === 'normal' ? defaultNormalAiAvatar : defaultAiAvatar),
+)
+const pickerSession = computed(() =>
+  [...socraticSessions.value, ...normalSessions.value].find(
+    (session) => session.id === avatarPickerSessionId.value,
+  ),
+)
+const pickerAvatarUrl = computed(
+  () =>
+    pickerSession.value?.aiAvatarUrl ??
+    (chatMode.value === 'normal' ? defaultNormalAiAvatar : defaultAiAvatar),
+)
 const currentSessionName = computed(() => currentSession.value?.name ?? '苏格拉底式对话')
 const activeAgentRun = computed(() =>
   Boolean(agentStore.run && !['completed', 'cancelled'].includes(agentStore.run.status)),
@@ -424,7 +464,7 @@ function pushMessage(msg: Message) {
   saveSessions()
 }
 
-const { findOrCreateTopicSession, rebuildFromBackend } = useDialogueHistory({
+const { findOrCreateTopicSession, inheritTopicAvatar, rebuildFromBackend } = useDialogueHistory({
   socraticSessions,
   normalSessions,
   topics: () => store.topics,
@@ -434,12 +474,17 @@ const { findOrCreateTopicSession, rebuildFromBackend } = useDialogueHistory({
   inferSelectedChoices,
 })
 
+function inheritCurrentTopicAvatar(session: Session, topicId: number) {
+  inheritTopicAvatar(session, topicId, defaultAiAvatar)
+}
+
 const { prepareTopicChoice, handlePendingTopicChoice } = useSessionTopicChoice({
   currentSession,
   topics: () => store.topics,
   pushMessage,
   saveSessions,
   setActiveTopic: store.setActiveTopic,
+  inheritTopicAvatar: inheritCurrentTopicAvatar,
 })
 
 const onboardingFlow = useOnboardingFlow({
@@ -459,6 +504,7 @@ async function handleOnboardingCompleted(run: AgentRun) {
   const title = run.preview?.topic ?? agentStore.onboardingTopic ?? '学习主题'
   const session = currentSocraticSession.value
   if (session) {
+    inheritCurrentTopicAvatar(session, topicId)
     session.topicId = topicId
     session.topicTitle = title
     session.name = title.slice(0, 12)
@@ -589,6 +635,68 @@ async function confirmMasteryAction() {
 
 function scrollToBottom() {
   messageListRef.value?.scrollToBottom()
+}
+
+function openAiAvatarPicker() {
+  if (!currentSession.value) return
+  avatarPickerError.value = ''
+  avatarPickerSessionId.value = currentSession.value.id
+}
+
+async function selectAiAvatar(url: string) {
+  const session = pickerSession.value
+  if (!session || avatarPickerBusy.value) return
+  avatarPickerBusy.value = true
+  avatarPickerError.value = ''
+  const previousUrl = session.aiAvatarUrl
+  const previousSelected = session.aiAvatarSelected
+  let saved = false
+  try {
+    session.aiAvatarUrl = url
+    session.aiAvatarSelected = true
+    saveSessions(true)
+    saved = true
+    avatarPickerSessionId.value = null
+  } catch (error: any) {
+    session.aiAvatarUrl = previousUrl
+    session.aiAvatarSelected = previousSelected
+    avatarPickerError.value = error?.response?.data?.detail ?? '更改头像失败'
+  } finally {
+    avatarPickerBusy.value = false
+  }
+  if (saved && previousUrl?.startsWith('/static/avatars/')) {
+    try {
+      await deleteChatAvatar(session.id)
+    } catch (error) {
+      console.warn('清理旧对话头像失败', error)
+    }
+  }
+}
+
+async function uploadAiAvatar(file: File) {
+  const session = pickerSession.value
+  if (!session || avatarPickerBusy.value) return
+  avatarPickerError.value = ''
+  if (file.size > 5 * 1024 * 1024) {
+    avatarPickerError.value = '图片大小不能超过 5MB'
+    return
+  }
+  avatarPickerBusy.value = true
+  try {
+    const url = await uploadChatAvatar(session.id, file)
+    if (pickerSession.value?.id === session.id) {
+      session.aiAvatarUrl = url
+      session.aiAvatarSelected = true
+      saveSessions(true)
+      avatarPickerSessionId.value = null
+    } else {
+      await deleteChatAvatar(session.id)
+    }
+  } catch (error: any) {
+    avatarPickerError.value = error?.response?.data?.detail ?? '上传失败，请重试'
+  } finally {
+    avatarPickerBusy.value = false
+  }
 }
 
 function switchSession(id: string) {
@@ -1098,6 +1206,7 @@ async function send() {
     const topicId = currentTopicId.value
     const topic = store.topics.find((t) => Number(t.id) === topicId)
     if (topicId && topic) {
+      inheritCurrentTopicAvatar(currentSession.value, topicId)
       currentSession.value.topicId = topicId
       currentSession.value.topicTitle = topic.title
       currentSession.value.name = topic.title.slice(0, 12)
@@ -1455,6 +1564,17 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   position: relative;
+  overflow: visible;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+.ai-avatar:focus-visible {
+  outline: 2px solid var(--blue-2);
+  outline-offset: 2px;
+}
+.ai-avatar-image {
+  border-radius: inherit;
 }
 .thinking-dot {
   position: absolute;

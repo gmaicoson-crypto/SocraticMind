@@ -170,6 +170,20 @@ export async function deleteChatSession(sessionId: string) {
   })
 }
 
+export async function uploadChatAvatar(sessionId: string, file: File): Promise<string> {
+  const form = new FormData()
+  form.append('session_id', sessionId)
+  form.append('file', file)
+  const res = await api.post<{ avatar_url: string }>('/api/chat/avatar', form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })
+  return res.data.avatar_url
+}
+
+export async function deleteChatAvatar(sessionId: string): Promise<void> {
+  await api.delete('/api/chat/avatar', { data: { session_id: sessionId } })
+}
+
 export async function getSuggestions(mode: 'socratic' | 'normal') {
   const model = getSelectedModelId()
   const res = await api.get(

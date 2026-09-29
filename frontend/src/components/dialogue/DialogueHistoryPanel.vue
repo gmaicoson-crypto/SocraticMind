@@ -15,6 +15,13 @@
           :class="{ active: currentSessionId === session.id }"
           @click="$emit('switch', session.id)"
         >
+          <img
+            class="history-avatar"
+            :src="avatarSrc(session.aiAvatarUrl ?? fallbackAvatarUrl)"
+            alt=""
+            loading="lazy"
+            decoding="async"
+          />
           <div class="history-item-content">
             <div v-if="editingSessionId === session.id" class="history-edit">
               <input
@@ -97,21 +104,14 @@
 <script setup lang="ts">
 // DialogueHistoryPanel 组件，封装局部界面和交互逻辑。
 import { ref, watch, nextTick } from 'vue'
-import type { Message } from '../../types'
-
-interface Session {
-  id: string
-  name: string
-  messages: Message[]
-  updatedAt: string
-  topicId?: number
-  topicTitle?: string
-}
+import type { DialogueSession } from '../../types'
+import { avatarSrc } from '../../utils/avatar'
 
 const props = defineProps<{
   show: boolean
   chatMode: 'socratic' | 'normal'
-  sessions: Session[]
+  sessions: DialogueSession[]
+  fallbackAvatarUrl: string
   currentSessionId: string
   editingSessionId: string | null
   editingName: string
@@ -121,7 +121,7 @@ defineEmits<{
   (e: 'close'): void
   (e: 'switch', id: string): void
   (e: 'newSession'): void
-  (e: 'startEdit', session: Session): void
+  (e: 'startEdit', session: DialogueSession): void
   (e: 'cancelEdit'): void
   (e: 'saveName', id: string): void
   (e: 'delete', id: string): void
@@ -206,6 +206,13 @@ watch(
 .history-item-content {
   flex: 1;
   min-width: 0;
+}
+.history-avatar {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border-radius: 7px;
+  object-fit: cover;
 }
 .history-name-wrap {
   display: flex;
