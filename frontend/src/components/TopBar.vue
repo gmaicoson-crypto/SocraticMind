@@ -1,28 +1,18 @@
 <template>
   <header class="topbar">
-    <div class="logo-wrap" style="cursor: pointer" @click="router.push('/')">
-      <div class="logo-icon">
-        <svg
-          width="18"
-          height="18"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="var(--on-accent)"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-        >
-          <circle cx="12" cy="6" r="2.5" fill="var(--on-accent)" stroke="none" />
-          <circle cx="6" cy="16" r="2" fill="var(--on-accent)" stroke="none" />
-          <circle cx="18" cy="16" r="2" fill="var(--on-accent)" stroke="none" />
-          <path d="M12 8 L6 14 M12 8 L18 14 M8 16 H16" />
-        </svg>
-      </div>
-      <div>
-        <div class="logo-text">Socratic<span>Mind</span></div>
-        <div class="logo-sub">AI Guided Learning</div>
-      </div>
-    </div>
+    <RouterLink class="logo-wrap" to="/">
+      <img
+        class="logo-image"
+        :src="
+          store.isDark
+            ? '/branding/socraticmind-dark-transparent.webp'
+            : '/branding/socraticmind-light-transparent.webp'
+        "
+        alt="SocraticMind"
+        width="2000"
+        height="650"
+      />
+    </RouterLink>
 
     <div class="divider" />
 
@@ -258,34 +248,14 @@ onMounted(async () => {
 .logo-wrap {
   display: flex;
   align-items: center;
-  gap: 10px;
+  flex-shrink: 0;
+  text-decoration: none;
 }
-.logo-icon {
-  width: 30px;
-  height: 30px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--logo-bg);
-  border-radius: 9px;
-  box-shadow: var(--logo-shadow);
-}
-.logo-text {
-  font-size: 15px;
-  font-weight: 700;
-  letter-spacing: -0.01em;
-  color: var(--ink);
-}
-.logo-text span {
-  color: var(--blue-2);
-}
-.logo-sub {
-  font-size: 9.5px;
-  color: var(--ink-3);
-  font-family: var(--font-mono);
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  margin-top: -1px;
+.logo-image {
+  display: block;
+  width: 200px;
+  height: 52px;
+  object-fit: cover;
 }
 .divider {
   width: 1px;
@@ -550,13 +520,10 @@ onMounted(async () => {
     gap: 8px;
     padding: 0 10px;
   }
-  .logo-wrap {
-    min-width: 0;
+  .logo-image {
+    width: 160px;
+    height: 44px;
   }
-  .logo-text {
-    font-size: 13px;
-  }
-  .logo-sub,
   .search-outer,
   .topbar > .divider,
   .topbar :deep(.progress-wrap) {
