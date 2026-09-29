@@ -1,17 +1,12 @@
 <template>
   <div class="hero-card">
-    <div
-      class="big-avatar"
-      :style="userInfo?.avatar_url ? {} : { background: userInfo?.avatar_grad }"
-    >
+    <div class="big-avatar">
       <img
-        v-if="userInfo?.avatar_url"
-        :src="avatarSrc(userInfo.avatar_url)"
+        :src="avatarSrc(userInfo?.avatar_url ?? defaultUserAvatar)"
         alt="avatar"
         class="big-avatar-img ui-avatar-image"
         decoding="async"
       />
-      <template v-else>{{ userName.slice(0, 1) }}</template>
     </div>
     <div class="hero-info">
       <div class="hero-name">{{ userName }}</div>
@@ -62,11 +57,11 @@
 <script setup lang="ts">
 // ProfileHero 页面组件，承载对应页面的主要交互。
 import { avatarSrc } from '../../utils/avatar'
+import { defaultUserAvatar } from '../../utils/avatarPresets'
 
 defineProps<{
   userInfo: {
     avatar_url: string | null
-    avatar_grad: string
   } | null
   userName: string
   userBio: string
@@ -96,7 +91,7 @@ defineEmits<{
   width: 72px;
   height: 72px;
   border-radius: 18px;
-  background: var(--avatar-bg);
+  background: var(--bg-2);
   color: var(--on-accent);
   font-size: 26px;
   font-weight: 700;

@@ -8,7 +8,8 @@ import { RouterView } from 'vue-router'
 import { onMounted } from 'vue'
 import { useLearningStore } from './stores/learning'
 import { useModelsStore } from './stores/models'
-import { getToken } from './utils/token'
+import { getMe } from './api/auth'
+import { getToken, updateUser } from './utils/token'
 
 const store = useLearningStore()
 const models = useModelsStore()
@@ -16,7 +17,13 @@ const models = useModelsStore()
 onMounted(async () => {
   store.loadUserFromStorage()
   if (getToken()) {
-    await Promise.all([store.fetchTopics(), models.fetchModels()])
+    const refreshProfile = getMe()
+      .then((user) => {
+        store.setUserInfo(user)
+        updateUser(user)
+      })
+      .catch(() => {})
+    await Promise.all([refreshProfile, store.fetchTopics(), models.fetchModels()])
 
     await store.recordLearning()
   }

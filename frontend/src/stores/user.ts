@@ -6,8 +6,9 @@ export interface UserInfo {
   id: number
   username: string
   email: string
-  avatar_grad: string
-  avatar_url: string | null
+  avatar_grad?: string
+  avatar_url: string
+  ai_avatar_url: string
   bio: string
   daily_goal: number
   ai_style: string

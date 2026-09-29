@@ -1,12 +1,18 @@
 import re
 import uuid
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Request
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, field_validator
+from core.avatars import (
+    AI_AVATAR_PRESETS,
+    DEFAULT_AI_AVATAR,
+    USER_AVATAR_PRESETS,
+    choose_user_avatar,
+)
 from core.database import get_db
+from core.avatar_uploads import UPLOAD_DIR, read_avatar_upload
 from core.auth import hash_password, verify_password, create_access_token
 from core.deps import get_current_user
 from core.email import generate_code, send_verification_email
@@ -16,10 +22,6 @@ from models.topic import Topic
 from models.node import Node
 from models.email_code import EmailCode
 from models.progress import ChatMessage, LearningRecord
-
-UPLOAD_DIR = Path(__file__).resolve().parent.parent / "uploads" / "avatars"
-ALLOWED_AVATAR_EXT = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
-MAX_AVATAR_SIZE = 5 * 1024 * 1024  # 头像文件上限 5 MB
 
 CODE_TTL_MINUTES = 10
 EMAIL_RE = re.compile(r"^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$")
@@ -102,8 +104,8 @@ class UserResponse(BaseModel):
     id: int
     username: str
     email: str
-    avatar_grad: str
-    avatar_url: str | None = None
+    avatar_url: str
+    ai_avatar_url: str = DEFAULT_AI_AVATAR
     bio: str
     daily_goal: int
     ai_style: str
@@ -121,7 +123,8 @@ class TokenResponse(BaseModel):
 class UpdateProfileRequest(BaseModel):
     username: str | None = None
     bio: str | None = None
-    avatar_grad: str | None = None
+    avatar_url: str | None = None
+    ai_avatar_url: str | None = None
     daily_goal: int | None = None
     ai_style: str | None = None
 
@@ -282,6 +285,7 @@ def register(req: RegisterRequest, request: Request, db: Session = Depends(get_d
         username=req.username,
         email=email,
         hashed_password=hash_password(req.password),
+        avatar_url=choose_user_avatar(),
     )
     db.add(user)
     db.commit()
@@ -361,26 +365,38 @@ def update_me(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    if "avatar_url" in req.model_fields_set:
+        if req.avatar_url not in USER_AVATAR_PRESETS:
+            raise HTTPException(status_code=422, detail="未知的用户头像")
+    if req.ai_avatar_url is not None and req.ai_avatar_url not in AI_AVATAR_PRESETS:
+        raise HTTPException(status_code=422, detail="未知的 AI 头像")
+
+    old_avatar_url = current_user.avatar_url
     if req.username is not None:
         current_user.username = req.username
     if req.bio is not None:
         current_user.bio = req.bio
-    if req.avatar_grad is not None:
-        current_user.avatar_grad = req.avatar_grad
+    if "avatar_url" in req.model_fields_set:
+        if req.avatar_url != current_user.avatar_url:
+            current_user.avatar_url = req.avatar_url
+    if req.ai_avatar_url is not None:
+        current_user.ai_avatar_url = req.ai_avatar_url
     if req.daily_goal is not None:
         current_user.daily_goal = req.daily_goal
     if req.ai_style is not None:
         current_user.ai_style = req.ai_style
     db.commit()
+    if current_user.avatar_url != old_avatar_url:
+        _delete_old_avatar(old_avatar_url)
     db.refresh(current_user)
     return current_user
 
 
-def _delete_old_avatar(user: User):
+def _delete_old_avatar(url: str | None):
     """删除用户当前的头像文件；文件不存在或删除失败时静默忽略，不影响主流程。"""
-    if not user.avatar_url:
+    if not url or not url.startswith("/static/avatars/"):
         return
-    fname = user.avatar_url.rsplit("/", 1)[-1]
+    fname = url.rsplit("/", 1)[-1]
     fpath = UPLOAD_DIR / fname
     if fpath.exists():
         try:
@@ -395,18 +411,10 @@ async def upload_avatar(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    suffix = Path(file.filename or "").suffix.lower()
-    if suffix not in ALLOWED_AVATAR_EXT:
-        raise HTTPException(status_code=400, detail="不支持的图片格式")
-
-    data = await file.read()
-    if len(data) > MAX_AVATAR_SIZE:
-        raise HTTPException(status_code=400, detail="图片大小不能超过 5MB")
-    if not data:
-        raise HTTPException(status_code=400, detail="文件为空")
+    suffix, data = await read_avatar_upload(file)
 
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-    _delete_old_avatar(current_user)
+    _delete_old_avatar(current_user.avatar_url)
 
     # 用用户 ID + UUID 命名，避免文件名冲突
     fname = f"{current_user.id}_{uuid.uuid4().hex}{suffix}"
@@ -424,8 +432,8 @@ def reset_avatar(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    _delete_old_avatar(current_user)
-    current_user.avatar_url = None
+    _delete_old_avatar(current_user.avatar_url)
+    current_user.avatar_url = choose_user_avatar()
     db.commit()
     db.refresh(current_user)
     return current_user
@@ -463,7 +471,12 @@ def delete_account(
     user_email = current_user.email
 
     # 先删磁盘文件：数据库回滚无法恢复文件，所以在校验通过后立即执行
-    _delete_old_avatar(current_user)
+    _delete_old_avatar(current_user.avatar_url)
+    for image in UPLOAD_DIR.glob(f"ai_{user_id}_*"):
+        try:
+            image.unlink()
+        except OSError:
+            pass
 
     # 显式删除 ChatMessage / LearningRecord / EmailCode：
     # 这些模型未在 User 侧声明 cascade，不能依赖 ORM 自动级联

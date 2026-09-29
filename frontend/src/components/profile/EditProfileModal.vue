@@ -14,19 +14,19 @@
           <div>
             <div class="section-label">基本信息</div>
             <div class="avatar-row">
-              <div
+              <button
+                type="button"
                 class="big-avatar"
-                :style="hasImage ? {} : { background: form.avatarGrad }"
+                aria-label="上传用户头像"
+                :disabled="uploading"
                 @click="triggerUpload"
               >
                 <img
-                  v-if="hasImage"
                   :src="avatarPreview"
-                  alt="avatar"
+                  alt=""
                   class="avatar-img ui-avatar-image"
                   decoding="async"
                 />
-                <template v-else>{{ form.name.slice(0, 1) || '李' }}</template>
                 <div class="avatar-edit">
                   <svg
                     viewBox="0 0 24 24"
@@ -38,7 +38,7 @@
                     <path d="M12 20h9M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4 12.5-12.5z" />
                   </svg>
                 </div>
-              </div>
+              </button>
               <input
                 ref="fileInput"
                 type="file"
@@ -46,32 +46,28 @@
                 style="display: none"
                 @change="onFileChange"
               />
-              <div class="avatar-colors">
-                <div class="avatar-actions">
-                  <button class="avatar-action-btn" :disabled="uploading" @click="triggerUpload">
-                    {{ uploading ? '上传中…' : '上传图片' }}
-                  </button>
-                  <button
-                    class="avatar-action-btn ghost"
-                    :disabled="uploading || !hasImage"
-                    @click="handleResetAvatar"
-                  >
-                    使用默认
-                  </button>
-                </div>
-                <div class="avatar-hint">{{ hasImage ? '已使用自定义图片' : '选择头像颜色' }}</div>
-                <div class="color-swatches" :class="{ disabled: hasImage }">
-                  <div
-                    v-for="g in avatarGrads"
-                    :key="g"
-                    class="swatch"
-                    :class="{ active: !hasImage && form.avatarGrad === g }"
-                    :style="{ background: g }"
-                    @click="hasImage ? null : (form.avatarGrad = g)"
-                  />
-                </div>
+              <div class="avatar-actions">
+                <button class="avatar-action-btn" :disabled="uploading" @click="triggerUpload">
+                  {{ uploading ? '上传中…' : '上传图片' }}
+                </button>
+                <button
+                  class="avatar-action-btn ghost"
+                  :disabled="uploading"
+                  @click="selectRandomAvatar"
+                >
+                  随机头像
+                </button>
               </div>
             </div>
+
+            <div class="avatar-hint">用户头像</div>
+            <AvatarPresetPicker
+              label="用户头像"
+              :options="userAvatarPresets"
+              :model-value="avatarUrl"
+              :disabled="uploading"
+              @select="avatarUrl = $event"
+            />
 
             <div class="fields">
               <div class="field ui-field">
@@ -225,12 +221,13 @@
           @confirm="handleDeleteAccount"
         />
 
+        <div v-if="saveError" class="save-error" role="alert">{{ saveError }}</div>
         <div class="modal-footer">
           <button class="cancel-btn" @click="emit('close')">取消</button>
           <button
             class="save-btn"
             :class="{ loading: saving, saved: savedDone }"
-            :disabled="saving"
+            :disabled="saving || uploading"
             @click="handleSave"
           >
             <div v-if="saving" class="spinner" />
@@ -272,11 +269,12 @@
 import { ref, reactive, computed, onBeforeUnmount, defineAsyncComponent } from 'vue'
 import { useRouter } from 'vue-router'
 import { useLearningStore } from '../../stores/learning'
-import { updateMe, uploadAvatar, resetAvatar, changePassword, deleteAccount } from '../../api/auth'
+import { updateMe, uploadAvatar, changePassword, deleteAccount } from '../../api/auth'
 import { avatarSrc } from '../../utils/avatar'
-import { avatarGrads } from '../../utils/avatarGrads'
+import { defaultUserAvatar, userAvatarPresets } from '../../utils/avatarPresets'
 import { clearAuth, updateUser } from '../../utils/token'
 import BaseModal from '../ui/BaseModal.vue'
+import AvatarPresetPicker from './AvatarPresetPicker.vue'
 
 const DeleteAccountModal = defineAsyncComponent(() => import('./DeleteAccountModal.vue'))
 
@@ -286,13 +284,14 @@ const router = useRouter()
 const focusField = ref('')
 const saving = ref(false)
 const savedDone = ref(false)
+const saveError = ref('')
 
 const fileInput = ref<HTMLInputElement | null>(null)
 const uploading = ref(false)
 const localPreview = ref<string | null>(null)
-const avatarUrl = ref<string | null>(null)
+const avatarUrl = ref(defaultUserAvatar)
+const savedAvatarUrl = ref(defaultUserAvatar)
 
-const hasImage = computed(() => !!(localPreview.value || avatarUrl.value))
 const avatarPreview = computed(() => localPreview.value ?? avatarSrc(avatarUrl.value))
 
 function triggerUpload() {
@@ -320,6 +319,7 @@ async function onFileChange(e: Event) {
   try {
     const updated = await uploadAvatar(file)
     avatarUrl.value = updated.avatar_url
+    savedAvatarUrl.value = updated.avatar_url
     localPreview.value = null
     updateUser(updated)
     store.setUserInfo(updated)
@@ -331,20 +331,10 @@ async function onFileChange(e: Event) {
   }
 }
 
-async function handleResetAvatar() {
-  if (!hasImage.value) return
-  uploading.value = true
-  try {
-    const updated = await resetAvatar()
-    avatarUrl.value = null
-    localPreview.value = null
-    updateUser(updated)
-    store.setUserInfo(updated)
-  } catch (err: any) {
-    alert(err?.response?.data?.detail ?? '重置失败')
-  } finally {
-    uploading.value = false
-  }
+function selectRandomAvatar() {
+  const choices = userAvatarPresets.filter((url) => url !== avatarUrl.value)
+  avatarUrl.value = choices[Math.floor(Math.random() * choices.length)]
+  localPreview.value = null
 }
 
 const showPwdPanel = ref(false)
@@ -412,20 +402,26 @@ const form = reactive({
   name: store.userInfo?.username ?? '',
   bio: store.userInfo?.bio ?? '',
   email: store.userInfo?.email ?? '',
-  avatarGrad: store.userInfo?.avatar_grad ?? avatarGrads[0],
 })
 
-avatarUrl.value = store.userInfo?.avatar_url ?? null
+avatarUrl.value = store.userInfo?.avatar_url ?? defaultUserAvatar
+savedAvatarUrl.value = avatarUrl.value
 
 async function handleSave() {
+  saveError.value = ''
   saving.value = true
   try {
+    const avatarChanged = avatarUrl.value !== savedAvatarUrl.value
     const updated = await updateMe({
       username: form.name,
       bio: form.bio,
-      avatar_grad: form.avatarGrad,
+      ...(avatarChanged ? { avatar_url: avatarUrl.value } : {}),
     })
+    if (avatarChanged && updated.avatar_url !== avatarUrl.value) {
+      throw new Error('头像未保存，请刷新页面后重试')
+    }
 
+    savedAvatarUrl.value = updated.avatar_url
     updateUser(updated)
     store.setUserInfo(updated)
     savedDone.value = true
@@ -435,6 +431,7 @@ async function handleSave() {
     }, 1500)
   } catch (err: any) {
     console.error(err)
+    saveError.value = err?.response?.data?.detail ?? err?.message ?? '保存失败，请重试'
   } finally {
     saving.value = false
   }
@@ -583,6 +580,7 @@ async function handleDeleteAccount(payload: { password: string; confirm: string 
 .avatar-row {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 16px;
   margin-bottom: 16px;
 }
@@ -592,13 +590,12 @@ async function handleDeleteAccount(payload: { password: string; confirm: string 
   height: 64px;
   border-radius: 16px;
   flex-shrink: 0;
-  color: var(--on-accent);
-  font-size: 24px;
-  font-weight: 700;
   display: flex;
   align-items: center;
   justify-content: center;
   position: relative;
+  border: 0;
+  padding: 0;
   cursor: pointer;
   transition: filter 0.15s;
 }
@@ -611,8 +608,8 @@ async function handleDeleteAccount(payload: { password: string; confirm: string 
 
 .avatar-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
-  margin-bottom: 6px;
 }
 .avatar-action-btn {
   font-size: 11.5px;
@@ -637,11 +634,6 @@ async function handleDeleteAccount(payload: { password: string; confirm: string 
   color: var(--ink-2);
   border: 1px solid var(--line);
 }
-.color-swatches.disabled {
-  opacity: 0.4;
-  pointer-events: none;
-}
-
 .pwd-panel {
   margin-top: 10px;
   padding: 12px;
@@ -687,26 +679,6 @@ async function handleDeleteAccount(payload: { password: string; confirm: string 
   font-size: 11px;
   color: var(--ink-3);
   margin-bottom: 6px;
-}
-
-.color-swatches {
-  display: flex;
-  gap: 6px;
-}
-
-.swatch {
-  width: 22px;
-  height: 22px;
-  border-radius: 6px;
-  cursor: pointer;
-  border: 2px solid transparent;
-  transition: transform 0.1s;
-}
-.swatch:hover {
-  transform: scale(1.1);
-}
-.swatch.active {
-  border-color: var(--ink);
 }
 
 .fields {
@@ -902,6 +874,12 @@ async function handleDeleteAccount(payload: { password: string; confirm: string 
   gap: 8px;
   background: var(--modal-footer-bg);
   flex-shrink: 0;
+}
+
+.save-error {
+  padding: 8px 24px 0;
+  color: var(--danger-ink);
+  font-size: 12px;
 }
 
 .cancel-btn {

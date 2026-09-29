@@ -178,7 +178,6 @@
     <TopBarProfile
       :username="store.userInfo?.username"
       :avatar-url="store.userInfo?.avatar_url"
-      :avatar-grad="store.userInfo?.avatar_grad"
       :level="userLevel"
       @open="router.push('/profile')"
     />

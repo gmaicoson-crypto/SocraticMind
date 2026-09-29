@@ -4,26 +4,24 @@
       <span class="profile-name">{{ username || '学习者' }}</span>
       <span class="profile-level">LV {{ level }}</span>
     </span>
-    <span class="avatar" :style="avatarUrl ? {} : { background: avatarGrad }">
+    <span class="avatar">
       <img
-        v-if="avatarUrl"
-        :src="avatarSrc(avatarUrl)"
+        :src="avatarSrc(avatarUrl ?? defaultUserAvatar)"
         alt="avatar"
         class="avatar-img ui-avatar-image"
         decoding="async"
       />
-      <template v-else>{{ username?.slice(0, 1) || '学' }}</template>
     </span>
   </button>
 </template>
 
 <script setup lang="ts">
 import { avatarSrc } from '../../utils/avatar'
+import { defaultUserAvatar } from '../../utils/avatarPresets'
 
 defineProps<{
   username?: string
   avatarUrl?: string | null
-  avatarGrad?: string
   level: number
 }>()
 defineEmits<{ open: [] }>()
@@ -70,7 +68,7 @@ defineEmits<{ open: [] }>()
   height: 36px;
   overflow: hidden;
   border-radius: 10px;
-  background: var(--avatar-bg);
+  background: var(--bg-2);
   color: var(--on-accent);
   font-size: 13px;
   font-weight: 700;

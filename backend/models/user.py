@@ -2,6 +2,7 @@ from sqlalchemy import Column, Integer, String, DateTime, Boolean
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from core.database import Base
+from core.avatars import choose_user_avatar
 
 
 class User(Base):
@@ -15,8 +16,9 @@ class User(Base):
     hashed_password = Column(String(255), nullable=False)
     avatar_grad = Column(
         String(255), default="linear-gradient(135deg,#e8c87a,#d4974a)"
-    )  # 渐变色头像
-    avatar_url = Column(String(500), nullable=True)  # 上传自定义头像后的文件路径
+    )  # 历史字段，保留旧数据；头像展示统一使用 avatar_url
+    avatar_url = Column(String(500), nullable=False, default=choose_user_avatar)
+    ai_avatar_url = Column(String(500), default="/avatars/AI/study/AI-male-1.webp", nullable=False)
     bio = Column(String(500), default="每一个问题都是通往掌握的一步")
     daily_goal = Column(Integer, default=5)  # 每日目标对话数
     ai_style = Column(String(50), default="标准")  # AI 教学风格：温和 / 标准 / 严格

@@ -6,6 +6,7 @@ from alembic.config import Config
 from sqlalchemy import create_engine, inspect, text
 
 from core.migrations import assert_database_at_head
+from core.avatars import USER_AVATAR_PRESETS
 
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
@@ -95,9 +96,76 @@ def test_legacy_data_is_preserved_and_backfilled(tmp_path):
             connection.scalar(text("SELECT message_type FROM chat_messages WHERE id = 1")) == "chat"
         )
         profile = connection.execute(
-            text("SELECT avatar_grad, bio, daily_goal, ai_style FROM users WHERE id = 1")
+            text(
+                "SELECT avatar_grad, bio, daily_goal, ai_style, ai_avatar_url FROM users WHERE id = 1"
+            )
         ).one()
         assert all(value is not None for value in profile)
+        assert (
+            connection.scalar(text("SELECT avatar_url FROM users WHERE id = 1"))
+            in USER_AVATAR_PRESETS
+        )
+
+
+def test_legacy_ai_avatar_paths_move_to_grouped_directories(tmp_path):
+    database_url = f"sqlite:///{tmp_path / 'ai-avatars.sqlite'}"
+    config = alembic_config(database_url)
+    command.upgrade(config, "0008_random_user_avatars")
+    engine = create_engine(database_url)
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO users (id, username, email, hashed_password, avatar_url, ai_avatar_url) "
+                "VALUES (1, 'study', 'study@example.test', 'hash', '/avatars/study/boy-read.webp', "
+                "'/avatars/AI/AI-female-2.webp'), "
+                "(2, 'normal', 'normal@example.test', 'hash', '/avatars/study/boy-read.webp', "
+                "'/avatars/AI/AI_normal_3.webp')"
+            )
+        )
+
+    command.upgrade(config, "head")
+    with engine.connect() as connection:
+        urls = (
+            connection.execute(text("SELECT ai_avatar_url FROM users ORDER BY id")).scalars().all()
+        )
+        assert urls == [
+            "/avatars/AI/study/AI-female-2.webp",
+            "/avatars/AI/normal/AI_normal_3.webp",
+        ]
+
+
+def test_avatar_backfill_preserves_uploaded_images(tmp_path):
+    database_url = f"sqlite:///{tmp_path / 'avatars.sqlite'}"
+    config = alembic_config(database_url)
+    command.upgrade(config, "0007_avatar_presets")
+    engine = create_engine(database_url)
+
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO users (id, username, email, hashed_password, avatar_url) VALUES "
+                "(1, 'color', 'color@example.test', 'hash', NULL), "
+                "(2, 'upload', 'upload@example.test', 'hash', '/static/avatars/upload.webp')"
+            )
+        )
+
+    command.upgrade(config, "head")
+
+    with engine.connect() as connection:
+        avatars = {
+            row.id: row.avatar_url
+            for row in connection.execute(text("SELECT id, avatar_url FROM users"))
+        }
+        assert avatars[1] in USER_AVATAR_PRESETS
+        assert avatars[2] == "/static/avatars/upload.webp"
+        assert (
+            next(
+                column
+                for column in inspect(engine).get_columns("users")
+                if column["name"] == "avatar_url"
+            )["nullable"]
+            is False
+        )
 
 
 def test_existing_user_model_survives_config_id_removal(tmp_path):
