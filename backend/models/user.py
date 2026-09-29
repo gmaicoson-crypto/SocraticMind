@@ -37,3 +37,9 @@ class User(Base):
     llm_profiles = relationship(
         "UserLLMProfile", back_populates="user", cascade="all, delete-orphan"
     )
+    archived_chat_activity = relationship(
+        "ArchivedChatActivity", back_populates="user", cascade="all, delete-orphan"
+    )
+    archived_mastery = relationship(
+        "ArchivedMastery", back_populates="user", cascade="all, delete-orphan"
+    )

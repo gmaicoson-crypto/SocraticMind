@@ -21,7 +21,7 @@ from sqlalchemy.pool import StaticPool
 from core.database import Base, get_db
 from core.deps import get_current_user
 from models import User
-from routers import agent, chat, llm, memories, nodes, plans, topics
+from routers import agent, chat, llm, memories, nodes, plans, progress, topics
 
 
 @pytest.fixture()
@@ -66,6 +66,7 @@ def app(db_session, auth_user):
     test_app.include_router(topics.router)
     test_app.include_router(nodes.router)
     test_app.include_router(chat.router)
+    test_app.include_router(progress.router)
     test_app.include_router(agent.router)
     test_app.include_router(plans.router)
     test_app.include_router(memories.router)

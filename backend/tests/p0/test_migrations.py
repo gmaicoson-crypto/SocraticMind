@@ -36,6 +36,8 @@ def test_empty_database_upgrades_to_head(tmp_path):
         "assessment_attempts",
         "mastery_events",
         "user_llm_profiles",
+        "archived_chat_activity",
+        "archived_mastery",
     }.issubset(set(inspector.get_table_names()))
     assert {"estimated_minutes", "mastery_source", "mastery_confidence"}.issubset(
         {column["name"] for column in inspector.get_columns("nodes")}

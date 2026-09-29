@@ -6,7 +6,7 @@
         :user-info="store.userInfo"
         :user-name="userName"
         :user-bio="userBio"
-        :mastered-count="store.masteredCount"
+        :mastered-count="stats.mastered_count"
         :topic-count="store.topics.length"
         :chat-count="stats.chat_count"
         :streak="store.streakData.streak"

@@ -12,7 +12,11 @@ from core.user_llm import load_user_profiles
 from models.user import User
 from models.topic import Topic
 from models.node import Node
-from models.progress import ChatMessage
+from services.progress_archive import (
+    archive_and_delete_messages,
+    archive_topic_mastery,
+    delete_agent_runs,
+)
 from ai.prompts import RECOMMEND_TOPICS_PROMPT, build_recommend_prompt
 from ai.util import extract_json_from_markdown
 
@@ -100,14 +104,9 @@ def delete_topic(
     if not topic:
         raise HTTPException(status_code=404, detail="主题不存在")
 
-    deleted_messages = (
-        db.query(ChatMessage)
-        .filter(
-            ChatMessage.user_id == current_user.id,
-            ChatMessage.topic_id == topic.id,
-        )
-        .delete(synchronize_session=False)
-    )
+    deleted_messages = archive_and_delete_messages(db, user_id=current_user.id, topic_id=topic.id)
+    archive_topic_mastery(db, user_id=current_user.id, topic_id=topic.id, title=topic.title)
+    delete_agent_runs(db, user_id=current_user.id, topic_id=topic.id)
     db.delete(topic)
     db.commit()
     return {"message": "删除成功", "deleted_messages": deleted_messages}

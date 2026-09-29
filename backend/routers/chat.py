@@ -25,6 +25,7 @@ from services.chat_context import (
     start_chat_messages,
 )
 from services.memories import select_relevant_memories
+from services.progress_archive import archive_and_delete_messages, delete_agent_runs
 
 router = APIRouter(prefix="/api/chat", tags=["对话"])
 log = logging.getLogger(__name__)
@@ -282,14 +283,7 @@ def delete_messages_endpoint(
     """批量删除指定 ID 的消息，过滤 user_id 确保只能删除自己的消息。"""
     if not req.ids:
         return {"deleted": 0}
-    deleted = (
-        db.query(ChatMessage)
-        .filter(
-            ChatMessage.id.in_(req.ids),
-            ChatMessage.user_id == current_user.id,
-        )
-        .delete(synchronize_session=False)
-    )
+    deleted = archive_and_delete_messages(db, user_id=current_user.id, ids=req.ids)
     db.commit()
     return {"deleted": deleted}
 
@@ -305,14 +299,8 @@ def delete_session_endpoint(
     db: Session = Depends(get_db),
 ):
     """按稳定的 session_id 删除当前用户的完整会话。"""
-    deleted = (
-        db.query(ChatMessage)
-        .filter(
-            ChatMessage.user_id == current_user.id,
-            ChatMessage.session_id == req.session_id,
-        )
-        .delete(synchronize_session=False)
-    )
+    deleted = archive_and_delete_messages(db, user_id=current_user.id, session_id=req.session_id)
+    delete_agent_runs(db, user_id=current_user.id, session_id=req.session_id)
     db.commit()
     return {"deleted": deleted}
 

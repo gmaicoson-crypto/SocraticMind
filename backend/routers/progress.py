@@ -8,6 +8,7 @@ from models.user import User
 from models.node import Node
 from models.topic import Topic
 from models.progress import LearningRecord, ChatMessage
+from models.progress_archive import ArchivedChatActivity, ArchivedMastery
 
 router = APIRouter(prefix="/api/progress", tags=["进度"])
 
@@ -107,7 +108,7 @@ def get_stats(
     one_year_ago = today - timedelta(days=364)
 
     # 苏格拉底模式下用户发出的消息总数（不含 AI 回复）
-    chat_count = (
+    live_chat_count = (
         db.query(ChatMessage)
         .filter(
             ChatMessage.user_id == current_user.id,
@@ -116,6 +117,12 @@ def get_stats(
         )
         .count()
     )
+    archived_chat_count = (
+        db.query(func.coalesce(func.sum(ArchivedChatActivity.count), 0))
+        .filter(ArchivedChatActivity.user_id == current_user.id)
+        .scalar()
+    )
+    chat_count = live_chat_count + archived_chat_count
 
     # 热力图：单次 GROUP BY 查询替代原先的 365 次独立 COUNT，性能差异显著
     date_expr = func.substr(func.cast(ChatMessage.created_at, String(10)), 1, 10)
@@ -134,6 +141,17 @@ def get_stats(
         .all()
     )
     by_date = {row.d: row.c for row in heatmap_rows}
+    archived_heatmap_rows = (
+        db.query(ArchivedChatActivity.day, func.sum(ArchivedChatActivity.count))
+        .filter(
+            ArchivedChatActivity.user_id == current_user.id,
+            ArchivedChatActivity.day >= one_year_ago.isoformat(),
+        )
+        .group_by(ArchivedChatActivity.day)
+        .all()
+    )
+    for day, count in archived_heatmap_rows:
+        by_date[day] = by_date.get(day, 0) + count
     heatmap = [
         {
             "date": (today - timedelta(days=i)).isoformat(),
@@ -167,7 +185,7 @@ def get_stats(
     week_start = today - timedelta(days=weekday)
     week_start_str = week_start.isoformat()
 
-    week_chats = (
+    live_week_chats = (
         db.query(ChatMessage)
         .filter(
             ChatMessage.user_id == current_user.id,
@@ -177,8 +195,17 @@ def get_stats(
         )
         .count()
     )
+    archived_week_chats = (
+        db.query(func.coalesce(func.sum(ArchivedChatActivity.count), 0))
+        .filter(
+            ArchivedChatActivity.user_id == current_user.id,
+            ArchivedChatActivity.day >= week_start_str,
+        )
+        .scalar()
+    )
+    week_chats = live_week_chats + archived_week_chats
 
-    week_mastered = (
+    live_week_mastered = (
         db.query(Node)
         .join(Topic)
         .filter(
@@ -189,9 +216,20 @@ def get_stats(
         )
         .count()
     )
+    archived_week_mastered = (
+        db.query(ArchivedMastery)
+        .filter(
+            ArchivedMastery.user_id == current_user.id,
+            ArchivedMastery.mastered_at.isnot(None),
+            func.substr(func.cast(ArchivedMastery.mastered_at, String(10)), 1, 10)
+            >= week_start_str,
+        )
+        .count()
+    )
+    week_mastered = live_week_mastered + archived_week_mastered
 
     # 最活跃时段：按小时 GROUP BY，避免全表加载到 Python 再循环统计
-    hour_expr = func.cast(func.date_format(ChatMessage.created_at, "%H"), String(2))
+    hour_expr = func.substr(func.cast(ChatMessage.created_at, String(26)), 12, 2)
     hour_rows = (
         db.query(
             hour_expr.label("h"),
@@ -205,8 +243,17 @@ def get_stats(
         .group_by("h")
         .all()
     )
-    if hour_rows:
-        peak_hour = int(max(hour_rows, key=lambda r: r.c).h)
+    hour_counts = {int(row.h): row.c for row in hour_rows}
+    archived_hour_rows = (
+        db.query(ArchivedChatActivity.hour, func.sum(ArchivedChatActivity.count))
+        .filter(ArchivedChatActivity.user_id == current_user.id)
+        .group_by(ArchivedChatActivity.hour)
+        .all()
+    )
+    for hour, count in archived_hour_rows:
+        hour_counts[hour] = hour_counts.get(hour, 0) + count
+    if hour_counts:
+        peak_hour = max(hour_counts, key=hour_counts.get)
         peak_label = f"{peak_hour:02d}:00 - {(peak_hour + 2) % 24:02d}:00"
     else:
         peak_label = "暂无数据"
@@ -229,18 +276,33 @@ def get_stats(
         .limit(5)
         .all()
     )
+    archived_recent_mastered = (
+        db.query(ArchivedMastery)
+        .filter(
+            ArchivedMastery.user_id == current_user.id,
+            ArchivedMastery.mastered_at.isnot(None),
+        )
+        .order_by(ArchivedMastery.mastered_at.desc())
+        .limit(5)
+        .all()
+    )
+    mastery_timeline = [
+        (node.mastered_at, node.label, node.topic.title if node.topic else "")
+        for node in recent_mastered
+    ] + [(item.mastered_at, item.label, item.topic_title) for item in archived_recent_mastered]
+    mastery_timeline.sort(key=lambda item: item[0].strftime("%Y-%m-%d %H:%M:%S"), reverse=True)
     timeline = [
         {
             "type": "mastered",
-            "title": f"掌握「{n.label}」节点",
-            "sub": n.topic.title if n.topic else "",
-            "time": n.mastered_at.strftime("%m/%d %H:%M") if n.mastered_at else "",
+            "title": f"掌握「{label}」节点",
+            "sub": topic_title,
+            "time": mastered_at.strftime("%m/%d %H:%M"),
         }
-        for n in recent_mastered
+        for mastered_at, label, topic_title in mastery_timeline[:5]
     ]
 
     # 成就徽章：按解锁条件计算，顺序即展示顺序
-    mastered_count = (
+    live_mastered_count = (
         db.query(Node)
         .join(Topic)
         .filter(
@@ -249,6 +311,10 @@ def get_stats(
         )
         .count()
     )
+    archived_mastered_count = (
+        db.query(ArchivedMastery).filter(ArchivedMastery.user_id == current_user.id).count()
+    )
+    mastered_count = live_mastered_count + archived_mastered_count
 
     badges = [
         {"icon": "🚀", "name": "第一步", "unlocked": chat_count >= 1},
