@@ -10,30 +10,38 @@
   </div>
 
   <div v-if="showChips" class="chips-wrap">
-    <template v-if="chipsLoading">
-      <div class="chips-loading">
+    <div ref="chipsContentRef" class="chips-content">
+      <div v-if="chipsLoading" class="chips-list chips-loading">
         <span v-for="i in 4" :key="i" class="chip-skeleton" />
       </div>
-    </template>
-    <template v-else>
-      <button v-for="chip in chips" :key="chip" class="chip" @click="$emit('update:input', chip)">
-        {{ chip }}
-      </button>
-      <button class="chip-refresh" title="换一批" @click="$emit('refreshChips')">
-        <svg
-          width="11"
-          height="11"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
+      <template v-else>
+        <div class="chips-list" :style="{ gap: `${chipGap}px` }">
+          <button
+            v-for="chip in visibleChips"
+            :key="chip"
+            class="chip"
+            :disabled="isThinking || isGenerating || sendDisabled"
+            @click="$emit('sendSuggestion', chip)"
+          >
+            {{ chip }}
+          </button>
+        </div>
+        <button
+          class="chip-refresh"
+          type="button"
+          title="换一批"
+          aria-label="换一批推荐对话"
+          @click="$emit('refreshChips', visibleChips)"
         >
-          <path d="M1 4v6h6M23 20v-6h-6" />
-          <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15" />
-        </svg>
-      </button>
-    </template>
+          <RefreshCcw :size="14" aria-hidden="true" />
+        </button>
+      </template>
+      <div ref="chipsMeasureRef" class="chips-measure" aria-hidden="true">
+        <button v-for="chip in chips" :key="chip" class="chip" tabindex="-1" type="button">
+          {{ chip }}
+        </button>
+      </div>
+    </div>
   </div>
 
   <div class="input-wrap">
@@ -104,6 +112,7 @@
         :value="input"
         rows="1"
         :placeholder="placeholder"
+        aria-label="输入消息"
         @input="onInput"
         @keydown.enter.exact.prevent="requestSend"
       />
@@ -141,7 +150,8 @@
 
 <script setup lang="ts">
 // DialogueInputBar 组件，封装局部界面和交互逻辑。
-import { ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { RefreshCcw } from '@lucide/vue'
 import ModelSelector from './ModelSelector.vue'
 
 const props = withDefaults(
@@ -174,10 +184,61 @@ const emit = defineEmits<{
   (e: 'send'): void
   (e: 'abort'): void
   (e: 'clearQuote'): void
-  (e: 'refreshChips'): void
+  (e: 'refreshChips', visibleChips: string[]): void
+  (e: 'sendSuggestion', val: string): void
 }>()
 
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
+const chipsContentRef = ref<HTMLElement | null>(null)
+const chipsMeasureRef = ref<HTMLElement | null>(null)
+const visibleChipCount = ref(0)
+const chipGap = ref(6)
+const visibleChips = computed(() => props.chips.slice(0, visibleChipCount.value))
+let chipsResizeObserver: ResizeObserver | null = null
+
+function updateVisibleChips() {
+  const content = chipsContentRef.value
+  const measured = chipsMeasureRef.value
+  if (!content || !measured) return
+
+  // Count with minimum spacing so widening the buttons cannot remove a suggestion.
+  const available = content.clientWidth - 26 - 14
+  const minGap = 6
+  let used = 0
+  let count = 0
+  for (const chip of measured.children) {
+    const width = (chip as HTMLElement).getBoundingClientRect().width
+    if (used + width + (count > 0 ? minGap : 0) > available) break
+    used += width + (count > 0 ? minGap : 0)
+    count += 1
+  }
+  visibleChipCount.value = Math.max(1, count)
+  chipGap.value =
+    count > 1 ? minGap + Math.min(4, (Math.max(0, available - used) / (count - 1)) * 0.25) : minGap
+}
+
+onMounted(() => {
+  if (typeof ResizeObserver !== 'undefined') {
+    chipsResizeObserver = new ResizeObserver(updateVisibleChips)
+    if (chipsContentRef.value) chipsResizeObserver.observe(chipsContentRef.value)
+  }
+  nextTick(updateVisibleChips)
+})
+
+onBeforeUnmount(() => chipsResizeObserver?.disconnect())
+watch(
+  chipsContentRef,
+  (content, previous) => {
+    if (previous) chipsResizeObserver?.unobserve(previous)
+    if (content) chipsResizeObserver?.observe(content)
+    nextTick(updateVisibleChips)
+  },
+  { flush: 'post' },
+)
+watch(
+  () => props.chips,
+  () => nextTick(updateVisibleChips),
+)
 
 function onInput(e: Event) {
   const el = e.target as HTMLTextAreaElement
@@ -253,14 +314,28 @@ defineExpose({ reset, focus })
 }
 
 .chips-wrap {
-  display: flex;
-  gap: 6px;
   padding: 8px 14px;
   border-top: 1px solid var(--line);
   flex-shrink: 0;
-  flex-wrap: wrap;
+}
+.chips-content {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  position: relative;
+}
+.chips-list {
+  display: flex;
+  flex: 1 1 0;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
 }
 .chip {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 100%;
   padding: 4px 10px;
   background: var(--bg-2);
   border: 1px solid var(--line);
@@ -269,6 +344,10 @@ defineExpose({ reset, focus })
   color: var(--ink-2);
   cursor: pointer;
   font-family: var(--font-sans);
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   transition: all 0.15s;
 }
 .chip:hover {
@@ -276,8 +355,18 @@ defineExpose({ reset, focus })
   color: var(--blue-2);
   border-color: var(--blue-line);
 }
+.chip:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+.chip:disabled:hover {
+  background: var(--bg-2);
+  color: var(--ink-2);
+  border-color: var(--line);
+}
 .chip-refresh {
   display: inline-flex;
+  flex: 0 0 26px;
   align-items: center;
   justify-content: center;
   width: 26px;
@@ -295,17 +384,28 @@ defineExpose({ reset, focus })
   border-color: var(--line-2);
 }
 .chips-loading {
-  display: flex;
-  gap: 6px;
+  justify-content: center;
 }
 .chip-skeleton {
-  display: inline-block;
+  flex: 1 1 80px;
   height: 24px;
-  width: 80px;
   background: var(--loading-gradient);
   background-size: 200% 100%;
   border-radius: 999px;
   animation: shimmer 1.4s infinite;
+}
+.chips-measure {
+  display: flex;
+  gap: 6px;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: max-content;
+  visibility: hidden;
+  pointer-events: none;
+}
+.chips-measure .chip {
+  max-width: none;
 }
 @keyframes shimmer {
   0% {

@@ -193,8 +193,9 @@
       :placeholder="placeholder"
       @send="send"
       @abort="abortChat"
-      @clear-quote="quotedText = ''"
-      @refresh-chips="loadSuggestions(true)"
+      @clear-quote="clearQuote"
+      @refresh-chips="refreshSuggestions"
+      @send-suggestion="sendSuggestion"
     />
     <AiAvatarPickerModal
       v-if="avatarPickerSessionId"
@@ -300,6 +301,7 @@ const isGenerating = ref(false)
 const streamingText = ref('')
 const streamingChoices = ref<{ label: string; text: string }[] | null>(null)
 const quotedText = ref('')
+const quotedSource = ref<{ dbId?: number; localId?: string } | null>(null)
 const showHistory = ref(false)
 const avatarPickerSessionId = ref<string | null>(null)
 const avatarPickerBusy = ref(false)
@@ -321,6 +323,7 @@ const aiStyle = ref<string>(store.userInfo?.ai_style ?? '标准')
 
 const SK_CHIPS_SOCRATIC = 'sm_chips_socratic'
 const SK_CHIPS_NORMAL = 'sm_chips_normal'
+const CHIP_POOL_SIZE = 12
 const deletingSessionIds = new Set<string>()
 
 const chips = ref<string[]>(loadCachedChips('socratic'))
@@ -392,8 +395,8 @@ const placeholder = computed(() =>
   chatMode.value === 'socratic'
     ? agentStore.run?.step
       ? `${agentStore.run.type === 'assessment' ? '回答评估' : '回答诊断'} ${agentStore.run.step.current}/${agentStore.run.step.total}`
-      : '回答问题，或问我一个反问…  (Enter 发送 · Shift+Enter 换行)'
-    : '随便问我什么…  (Enter 发送 · Shift+Enter 换行)',
+      : '回答问题，或问我一个反问…'
+    : '随便问我点什么…',
 )
 
 const messages = computed({
@@ -417,15 +420,81 @@ const currentStepInHistory = computed(() => {
 })
 
 const defaultChips = {
-  socratic: ['我想学 Python', '教我机器学习', '讲讲数据结构', '学习 Web 开发'],
-  normal: ['今天天气怎么样', '推荐一部电影', '给我讲个笑话', '聊聊最近的新闻'],
+  socratic: [
+    '我想学 Python',
+    '教我机器学习',
+    '讲讲数据结构',
+    '学习 Web 开发',
+    '解释一下算法',
+    '复习编程基础',
+    '练习逻辑思维',
+    '了解神经网络',
+    '帮我制定计划',
+    '讲讲数据库',
+    '学习前端基础',
+    '做一道练习题',
+  ],
+  normal: [
+    '今天天气怎么样',
+    '推荐一部电影',
+    '给我讲个笑话',
+    '聊聊最近的新闻',
+    '推荐一本书',
+    '分享一个冷知识',
+    '有什么旅行建议',
+    '聊聊音乐',
+    '推荐一道菜',
+    '讲个有趣的故事',
+    '如何安排周末',
+    '聊聊科技趋势',
+  ],
+}
+
+const alternateChips = {
+  socratic: [
+    '学习 TypeScript',
+    '理解函数概念',
+    '讲讲递归',
+    '探索操作系统',
+    '了解计算机网络',
+    '练习概率统计',
+    '复习线性代数',
+    '讲讲设计模式',
+    '学习数据分析',
+    '解释排序算法',
+    '练习 SQL 查询',
+    '了解人工智能',
+  ],
+  normal: [
+    '推荐一首歌',
+    '聊聊城市生活',
+    '分享生活技巧',
+    '推荐一款游戏',
+    '有什么运动建议',
+    '聊聊历史',
+    '讲一个谜语',
+    '推荐一部纪录片',
+    '如何缓解压力',
+    '聊聊摄影',
+    '分享一个节日习俗',
+    '推荐一个播客',
+  ],
 }
 
 function loadCachedChips(mode: 'socratic' | 'normal'): string[] {
   const key = mode === 'socratic' ? SK_CHIPS_SOCRATIC : SK_CHIPS_NORMAL
   try {
     const raw = localStorage.getItem(key)
-    if (raw) return JSON.parse(raw)
+    if (raw) {
+      const cached: unknown = JSON.parse(raw)
+      if (
+        Array.isArray(cached) &&
+        cached.length >= CHIP_POOL_SIZE &&
+        cached.every((chip) => typeof chip === 'string')
+      ) {
+        return cached
+      }
+    }
   } catch (err) {
     console.warn(`建议词缓存 ${key} 解析失败`, err)
   }
@@ -437,19 +506,51 @@ function saveCachedChips(mode: 'socratic' | 'normal', list: string[]) {
   localStorage.setItem(key, JSON.stringify(list))
 }
 
-async function loadSuggestions(force = false) {
-  const cached = loadCachedChips(chatMode.value)
+function selectSuggestions(candidates: string[], shown: Set<string>): string[] {
+  const selected = new Set<string>()
+  for (const suggestion of candidates) {
+    const text = suggestion.trim()
+    if (text && !shown.has(text)) selected.add(text)
+    if (selected.size === CHIP_POOL_SIZE) break
+  }
+  return [...selected]
+}
+
+function refreshSuggestions(shown: string[]) {
+  void loadSuggestions(true, shown)
+}
+
+async function loadSuggestions(force = false, shown: string[] = []) {
+  const mode = chatMode.value
+  const cached = loadCachedChips(mode)
   if (cached.length > 0 && !force) {
     chips.value = cached
     return
   }
+  if (chipsLoading.value) return
+  const previous = chips.value
+  const visible = new Set(shown)
   chipsLoading.value = true
   try {
-    const result = await getSuggestions(chatMode.value)
-    chips.value = result
-    saveCachedChips(chatMode.value, result)
+    const result = await getSuggestions(mode, shown)
+    if (chatMode.value !== mode) return
+    const fallback = [...previous, ...defaultChips[mode], ...alternateChips[mode]]
+    chips.value = selectSuggestions(
+      result.source === 'fallback'
+        ? [...fallback, ...result.suggestions]
+        : [...result.suggestions, ...fallback],
+      visible,
+    )
+    if (result.source !== 'fallback' && chips.value.length === CHIP_POOL_SIZE) {
+      saveCachedChips(mode, chips.value)
+    }
   } catch {
-    chips.value = defaultChips[chatMode.value]
+    if (chatMode.value === mode) {
+      chips.value = selectSuggestions(
+        [...previous, ...defaultChips[mode], ...alternateChips[mode]],
+        visible,
+      )
+    }
   } finally {
     chipsLoading.value = false
   }
@@ -946,6 +1047,11 @@ function quoteMessage(msg: Message) {
   nextTick(() => inputBarRef.value?.focus())
 }
 
+function clearQuote() {
+  quotedText.value = ''
+  quotedSource.value = null
+}
+
 function deleteMessage(index: number) {
   if (!currentSession.value) return
   if (index === 0) return // 第一条欢迎消息不允许删除
@@ -1065,6 +1171,11 @@ function sendChoiceText(choiceText: string) {
 
   input.value = choiceText
   send()
+}
+
+function sendSuggestion(text: string) {
+  input.value = text
+  void send()
 }
 
 async function send() {

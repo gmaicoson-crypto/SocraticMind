@@ -5,7 +5,7 @@ import logging
 import uuid
 from typing import Any, List, Literal, Optional
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -367,6 +367,7 @@ def delete_session_endpoint(
 def get_suggestions(
     mode: str = "socratic",
     model: str | None = None,
+    exclude: list[str] = Query(default=[]),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -389,21 +390,63 @@ def get_suggestions(
     else:
         prompt = NORMAL_SUGGESTIONS_PROMPT
 
+    excluded = list(dict.fromkeys(value.strip()[:80] for value in exclude if value.strip()))[:24]
+    if excluded:
+        prompt += f"\n以下建议已经展示过，请不要重复：{json.dumps(excluded, ensure_ascii=False)}"
+
     profile = resolve_llm_profile(selected_model(model, current_user.id))
     try:
         response = get_ai_client(profile.id).chat.completions.create(
             model=profile.model,
             messages=[{"role": "user", "content": prompt}],
-            max_tokens=200,
+            max_tokens=500,
             temperature=0.8,
         )
-        return json.loads(extract_json_from_markdown(response.choices[0].message.content))
+        payload = json.loads(extract_json_from_markdown(response.choices[0].message.content))
+        suggestions = payload.get("suggestions") if isinstance(payload, dict) else None
+        if not isinstance(suggestions, list) or not all(
+            isinstance(value, str) for value in suggestions
+        ):
+            raise ValueError("invalid suggestions response")
+        fresh = list(dict.fromkeys(value.strip() for value in suggestions if value.strip()))
+        return {
+            "suggestions": [value for value in fresh if value not in excluded][:12],
+            "source": "ai",
+        }
     except Exception:
         if mode == "socratic":
             return {
-                "suggestions": ["我想学 Python", "教我机器学习", "讲讲数据结构", "学习 Web 开发"]
+                "suggestions": [
+                    "我想学 Python",
+                    "教我机器学习",
+                    "讲讲数据结构",
+                    "学习 Web 开发",
+                    "解释一下算法",
+                    "复习编程基础",
+                    "练习逻辑思维",
+                    "了解神经网络",
+                    "帮我制定计划",
+                    "讲讲数据库",
+                    "学习前端基础",
+                    "做一道练习题",
+                ],
+                "source": "fallback",
             }
         else:
             return {
-                "suggestions": ["今天天气怎么样", "推荐一部电影", "给我讲个笑话", "聊聊最近的新闻"]
+                "suggestions": [
+                    "今天天气怎么样",
+                    "推荐一部电影",
+                    "给我讲个笑话",
+                    "聊聊最近的新闻",
+                    "推荐一本书",
+                    "分享一个冷知识",
+                    "有什么旅行建议",
+                    "聊聊音乐",
+                    "推荐一道菜",
+                    "讲个有趣的故事",
+                    "如何安排周末",
+                    "聊聊科技趋势",
+                ],
+                "source": "fallback",
             }

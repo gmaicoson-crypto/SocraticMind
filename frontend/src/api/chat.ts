@@ -184,10 +184,19 @@ export async function deleteChatAvatar(sessionId: string): Promise<void> {
   await api.delete('/api/chat/avatar', { data: { session_id: sessionId } })
 }
 
-export async function getSuggestions(mode: 'socratic' | 'normal') {
+export interface SuggestionsResponse {
+  suggestions: string[]
+  source?: 'ai' | 'fallback'
+}
+
+export async function getSuggestions(
+  mode: 'socratic' | 'normal',
+  exclude: string[] = [],
+): Promise<SuggestionsResponse> {
   const model = getSelectedModelId()
-  const res = await api.get(
-    `/api/chat/suggestions?mode=${mode}${model ? `&model=${encodeURIComponent(model)}` : ''}`,
-  )
-  return res.data.suggestions as string[]
+  const params = new URLSearchParams({ mode })
+  if (model) params.set('model', model)
+  for (const value of exclude) params.append('exclude', value)
+  const res = await api.get<SuggestionsResponse>('/api/chat/suggestions', { params })
+  return res.data
 }
