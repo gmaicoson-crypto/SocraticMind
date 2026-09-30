@@ -32,6 +32,13 @@ describe('MessageList actions', () => {
     expect(wrapper.emitted('retry')).toEqual([[4]])
   })
 
+  it('allows deleting the first persisted message after history restoration', async () => {
+    const wrapper = mountList([{ role: 'user', text: '原问题', time: '10:01', db_id: 10 }])
+    await wrapper.get('button[title="删除"]').trigger('click')
+    expect(wrapper.emitted('delete')).toEqual([[0]])
+    wrapper.unmount()
+  })
+
   it('places the quote below the follow-up and jumps to its source', async () => {
     const scrollIntoView = vi.fn()
     HTMLElement.prototype.scrollIntoView = scrollIntoView

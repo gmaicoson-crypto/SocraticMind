@@ -86,7 +86,7 @@ def test_chat_stream_treats_mastered_marker_as_plain_text(
             "topic_id": topic.id,
             "session_id": "legacy-session",
             "user_input": "answer",
-            "history": [{"role": "ai", "content": "question"}],
+            "request_id": "plain-marker-request",
         },
     )
 
@@ -102,6 +102,6 @@ def test_chat_stream_treats_mastered_marker_as_plain_text(
     messages = db_session.query(ChatMessage).order_by(ChatMessage.id).all()
     assert [message.role for message in messages] == ["user", "ai"]
     assert messages[-1].content == "Good work [MASTERED]"
-    assert messages[-1].metadata_json == {"status": "complete"}
+    assert messages[-1].metadata_json["status"] == "complete"
     db_session.refresh(node)
     assert node.state == "available"

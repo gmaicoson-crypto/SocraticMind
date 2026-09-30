@@ -156,18 +156,38 @@ export function useDialogueHistory(options: DialogueHistoryOptions) {
     try {
       const backendMessages = await getAllMessages(500, 0)
       if (!backendMessages.length) return
+      const messagesById = new Map(backendMessages.map((message) => [message.id, message]))
+      const chatRequestFor = (
+        message: (typeof backendMessages)[number],
+      ): Message['chatRequest'] => {
+        const userId = message.metadata?.user_message_id
+        const user = typeof userId === 'number' ? messagesById.get(userId) : undefined
+        if (!user || user.role !== 'user' || user.session_id !== message.session_id)
+          return undefined
+        const kind = message.metadata?.kind
+        return {
+          nodeKey: message.node_key,
+          input: user.content,
+          kind: kind === 'topic_overview' || kind === 'node_overview' ? kind : 'qa',
+          userMessageId: user.id,
+        }
+      }
 
       const convertMessage = (
         message: (typeof backendMessages)[number],
         parseAiChoices: boolean,
       ): Message | null => {
         if (message.role === 'ai') {
+          const chatRequest = chatRequestFor(message)
+          const pairedMessageId = chatRequest?.input === '' ? chatRequest.userMessageId : undefined
           if (!parseAiChoices) {
             return {
               role: 'ai',
               text: message.content,
               time: message.created_at || now(),
               db_id: message.id,
+              chatRequest,
+              paired_db_id: pairedMessageId,
               messageType: message.message_type,
               metadata: message.metadata,
             }
@@ -178,6 +198,8 @@ export function useDialogueHistory(options: DialogueHistoryOptions) {
             text: parsed.cleanText,
             time: message.created_at || now(),
             db_id: message.id,
+            chatRequest,
+            paired_db_id: pairedMessageId,
             choices: parsed.choices ?? undefined,
             messageType: message.message_type,
             metadata: message.metadata,
@@ -222,6 +244,7 @@ export function useDialogueHistory(options: DialogueHistoryOptions) {
               const local = localByDbId.get(message.db_id)
               if (!local) continue
               message.local_id = local.local_id
+              message.chatRequest ??= local.chatRequest
               message.quote ??= local.quote
               message.quote_source_db_id ??= local.quote_source_db_id
               message.quote_source_local_id = local.quote_source_local_id

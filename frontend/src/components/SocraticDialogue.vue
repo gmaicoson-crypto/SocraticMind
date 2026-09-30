@@ -35,7 +35,15 @@
           <div class="dlg-title">
             {{ currentSessionName }}
           </div>
-          <div class="dlg-sub">{{ isThinking ? '正在思考…' : '通过提问引导你发现答案' }}</div>
+          <div class="dlg-sub" role="status">
+            {{
+              isThinking
+                ? contextCompacting
+                  ? '正在整理较早的对话'
+                  : '正在思考…'
+                : '通过提问引导你发现答案'
+            }}
+          </div>
         </div>
       </div>
       <div class="dlg-actions">
@@ -175,6 +183,11 @@
       @revert="requestMasteryAction('revert')"
     />
 
+    <div v-if="chatError" class="chat-error" role="alert">
+      <span>{{ chatError }}</span>
+      <button v-if="retryRequest && !isThinking" type="button" @click="retryRequest()">重试</button>
+    </div>
+
     <DialogueInputBar
       ref="inputBarRef"
       v-model:input="input"
@@ -244,6 +257,9 @@ import type {
 } from '../types/learningAgent'
 import {
   chatStream,
+  cancelChatStream,
+  type ChatKind,
+  type ChatQuote,
   getSuggestions,
   deleteMessages,
   deleteChatSession,
@@ -259,6 +275,7 @@ import {
   extractTopic,
   isNewTopicIntent,
 } from '../utils/chat'
+import { getSelectedModelId } from '../utils/modelSelection'
 import { avatarSrc } from '../utils/avatar'
 import { defaultAiAvatar, defaultNormalAiAvatar } from '../utils/avatarPresets'
 import { useChatSessions } from '../composables/useChatSessions'
@@ -301,9 +318,13 @@ const inputBarRef = ref<InstanceType<typeof DialogueInputBar> | null>(null)
 let streamEpoch = 0
 let activeStreamMessageIds: { user: number; ai: number } | null = null
 let activeStreamUserMessage: Message | null = null
+let activeStream: StreamContext | null = null
+const chatError = ref('')
+const retryRequest = ref<(() => void) | null>(null)
 
 const input = ref('')
 const isThinking = ref(false)
+const contextCompacting = ref(false)
 const isGenerating = ref(false)
 const streamingText = ref('')
 const streamingChoices = ref<{ label: string; text: string }[] | null>(null)
@@ -864,6 +885,9 @@ function newSession() {
 
 function resetSessionInteraction() {
   clearQuote()
+  cancelActiveStream()
+  chatError.value = ''
+  retryRequest.value = null
   streamEpoch += 1
   streamControl.abortRequest()
   activeStreamMessageIds = null
@@ -1037,7 +1061,7 @@ async function deleteSession(id: string) {
     await deleteChatSession(session.id)
   } catch (err) {
     // 后端未确认删除时保留页面数据，避免出现“看起来删了，刷新又回来”。
-    console.error('删除对话失败', err)
+    chatError.value = `删除对话失败：${chatErrorMessage(err)}`
     return
   } finally {
     deletingSessionIds.delete(id)
@@ -1106,27 +1130,82 @@ function clearQuote() {
   quotedSource.value = null
 }
 
-function deleteMessage(index: number) {
-  if (!currentSession.value) return
-  if (index === 0) return // 第一条欢迎消息不允许删除
-  const msg = currentSession.value.messages[index]
-  const ids = [msg.db_id, msg.paired_db_id].filter((id): id is number => id !== undefined)
-  if (ids.length > 0) deleteMessages(ids).catch(() => {})
-  currentSession.value.messages.splice(index, 1)
-  saveSessions()
+function chatErrorMessage(error: unknown): string {
+  if (typeof error === 'string') return error
+  if (error && typeof error === 'object') {
+    const value = error as { message?: string; response?: { data?: { detail?: unknown } } }
+    const detail = value.response?.data?.detail
+    if (typeof detail === 'string') return detail
+    if (detail && typeof detail === 'object' && 'message' in detail) return String(detail.message)
+    if (value.message) return value.message
+  }
+  return '请求失败，请重试。'
+}
+
+const deletingMessages = new Set<Message>()
+async function deleteMessage(index: number) {
+  const session = currentSession.value
+  const message = session?.messages[index]
+  if (!session || !message || deletingMessages.has(message)) return
+  if (index === 0 && message.role === 'ai' && message.db_id == null) return
+  if (isThinking.value) {
+    chatError.value = '请先停止当前回复，再删除消息。'
+    return
+  }
+  deletingMessages.add(message)
+  chatError.value = ''
+  try {
+    const ids = [message.db_id, message.paired_db_id].filter((id): id is number => id != null)
+    if (ids.length) await deleteMessages(ids)
+    const currentIndex = session.messages.indexOf(message)
+    if (currentIndex >= 0) session.messages.splice(currentIndex, 1)
+    retryRequest.value = null
+    saveSessions()
+  } catch (error) {
+    chatError.value = `删除失败：${chatErrorMessage(error)}`
+  } finally {
+    deletingMessages.delete(message)
+  }
 }
 
 interface StreamContext {
   epoch: number
   sessionId: string
+  requestId: string
   controller: AbortController
+  replacing: boolean
+  retry?: () => void
+  onPartial?: (message: Message) => void
+  onCancelled?: (ids?: { user: number; ai: number }) => void
+  cancelled?: boolean
 }
 
-function beginStream(sessionId: string): StreamContext {
+function cancelActiveStream(): Promise<boolean> {
+  const stream = activeStream
+  activeStream = null
+  if (!stream) return Promise.resolve(true)
+  return cancelChatStream(stream.sessionId, stream.requestId)
+    .then((response) => {
+      stream.cancelled = true
+      stream.onCancelled?.(response?.msg_ids)
+      return true
+    })
+    .catch((error) => {
+      chatError.value = `停止请求未确认：${chatErrorMessage(error)}`
+      return false
+    })
+}
+
+function beginStream(sessionId: string, requestId: string = crypto.randomUUID()): StreamContext {
+  cancelActiveStream()
   const controller = streamControl.beginRequest()
-  const context = { epoch: ++streamEpoch, sessionId, controller }
+  const context = { epoch: ++streamEpoch, sessionId, requestId, controller, replacing: false }
   activeStreamMessageIds = null
   activeStreamUserMessage = null
+  activeStream = context
+  chatError.value = ''
+  contextCompacting.value = false
+  retryRequest.value = null
   return context
 }
 
@@ -1141,7 +1220,17 @@ function isCurrentStream(context: StreamContext): boolean {
 function abortChat() {
   const messageIds = activeStreamMessageIds
   const userMessage = activeStreamUserMessage
-  streamEpoch += 1
+  const stoppingStream = activeStream
+  const replacing = stoppingStream?.replacing
+  const onPartial = stoppingStream?.onPartial
+  retryRequest.value = null
+  chatError.value = '回复已停止。'
+  const cancellation = cancelActiveStream()
+  const stoppedEpoch = ++streamEpoch
+  void cancellation.then(() => {
+    if (streamEpoch === stoppedEpoch && !isThinking.value)
+      retryRequest.value = stoppingStream?.retry ?? null
+  })
   streamControl.abortRequest()
   activeStreamMessageIds = null
   activeStreamUserMessage = null
@@ -1149,19 +1238,185 @@ function abortChat() {
   streamingText.value = ''
   streamingChoices.value = null
   isThinking.value = false
-  if (partial) {
+  if (partial && !replacing) {
     const { cleanText, choices } = parseChoices(partial)
     if (messageIds && userMessage) userMessage.db_id = messageIds.user
-    pushMessage({
+    const partialMessage: Message = {
       role: 'ai',
       text: cleanText,
       time: now(),
       choices: choices ?? undefined,
       db_id: messageIds?.ai,
-      paired_db_id: messageIds?.user,
-    })
+      metadata: { status: 'interrupted' },
+      paired_db_id: userMessage ? undefined : messageIds?.user,
+    }
+    pushMessage(partialMessage)
+    onPartial?.(currentSession.value!.messages.at(-1)!)
   }
   scrollToBottom()
+}
+
+interface DialogueRequest {
+  nodeKey: string
+  topicId: number
+  input: string
+  mode: 'normal' | 'socratic'
+  style: string
+  kind?: ChatKind
+  quote?: ChatQuote
+  userMessage?: Message
+  replaceMessage?: Message
+  regenerateMessageId?: number
+  requestId?: string
+  modelId?: string | null
+}
+
+function streamDialogue(request: DialogueRequest): Promise<void> {
+  const session = currentSession.value
+  if (!session) return Promise.resolve()
+  const stream = beginStream(session.id, request.requestId)
+  const modelId = request.modelId !== undefined ? request.modelId : getSelectedModelId()
+  stream.replacing = Boolean(request.replaceMessage)
+  activeStreamUserMessage = request.userMessage ?? null
+  isThinking.value = true
+  streamingText.value = ''
+  streamingChoices.value = null
+  scrollToBottom()
+  return new Promise((resolve) => {
+    stream.controller.signal.addEventListener('abort', () => resolve(), { once: true })
+    let messageIds: { user: number; ai: number } | null = null
+    let replaceMessage = request.replaceMessage
+    stream.onCancelled = (ids) => {
+      if (!ids) return
+      messageIds = ids
+      if (request.userMessage) request.userMessage.db_id = ids.user
+      if (replaceMessage && !request.replaceMessage) {
+        replaceMessage.db_id = ids.ai
+        replaceMessage.chatRequest = requestContext()
+      }
+      saveSessions()
+    }
+    const requestContext = () => ({
+      nodeKey: request.nodeKey,
+      input: request.input,
+      kind: request.kind ?? 'qa',
+      userMessageId: messageIds?.user,
+    })
+    stream.onPartial = (message) => {
+      replaceMessage = message
+      message.chatRequest = requestContext()
+      saveSessions()
+    }
+    stream.retry = () =>
+      void streamDialogue({
+        ...request,
+        replaceMessage,
+        modelId: messageIds || stream.cancelled ? undefined : modelId,
+        requestId: messageIds || stream.cancelled ? undefined : stream.requestId,
+        regenerateMessageId: messageIds?.ai ?? request.regenerateMessageId,
+      })
+    const finish = () => {
+      activeStream = null
+      activeStreamMessageIds = null
+      activeStreamUserMessage = null
+      streamingText.value = ''
+      streamingChoices.value = null
+      isThinking.value = false
+      contextCompacting.value = false
+      scrollToBottom()
+      resolve()
+    }
+    const fail = (error: unknown) => {
+      if (!isCurrentStream(stream)) return resolve()
+      chatError.value = chatErrorMessage(error)
+      const partial = streamingText.value.trim()
+      if (partial && !request.replaceMessage) {
+        const { cleanText, choices } = parseChoices(partial)
+        pushMessage({
+          role: 'ai',
+          text: cleanText,
+          time: now(),
+          choices: choices ?? undefined,
+          db_id: messageIds?.ai,
+          paired_db_id: request.userMessage ? undefined : messageIds?.user,
+          chatRequest: requestContext(),
+          metadata: { status: 'interrupted' },
+        })
+        replaceMessage = session.messages.at(-1)
+      }
+      // An unknown network outcome reuses its key. A persisted failed answer
+      // creates a new generation of the same question instead of submitting it again.
+      const failure = error as { retryable?: boolean; code?: string } | null
+      if (failure?.code === 'AI_OUTPUT_LIMIT') {
+        chatError.value = request.replaceMessage
+          ? '本次重新生成达到回复长度上限，已保留原回答。可以继续提问，或缩小问题范围。'
+          : '回答达到本次生成长度上限，可输入“继续”接着回答。'
+      }
+      retryRequest.value =
+        failure?.retryable === false && failure.code !== 'CHAT_SESSION_BUSY'
+          ? null
+          : (stream.retry ?? null)
+      finish()
+    }
+    void chatStream(
+      request.nodeKey,
+      request.topicId,
+      session.id,
+      request.input,
+      stream.requestId,
+      request.mode,
+      request.style,
+      (chunk) => {
+        if (!isCurrentStream(stream)) return
+        contextCompacting.value = false
+        streamingText.value += chunk
+        checkStreamingChoices()
+        scrollToBottom()
+      },
+      () => {
+        if (!isCurrentStream(stream)) return resolve()
+        const content = streamingText.value.trim()
+        if (!content) return fail(new Error('模型未返回可用的回答，请重试。'))
+        if (content) {
+          const { cleanText, choices } = parseChoices(content)
+          const message: Message = {
+            role: 'ai',
+            text: cleanText,
+            time: now(),
+            choices: choices ?? undefined,
+            db_id: messageIds?.ai,
+            chatRequest: requestContext(),
+            paired_db_id: request.userMessage ? undefined : messageIds?.user,
+          }
+          const replaceIndex = request.replaceMessage
+            ? session.messages.indexOf(request.replaceMessage)
+            : -1
+          if (replaceIndex >= 0) {
+            session.messages.splice(replaceIndex, 1, message)
+            saveSessions()
+          } else pushMessage(message)
+        }
+        finish()
+      },
+      fail,
+      stream.controller,
+      (user, ai) => {
+        if (!isCurrentStream(stream)) return
+        messageIds = { user, ai }
+        if (request.userMessage) request.userMessage.db_id = user
+        activeStreamMessageIds = messageIds
+        saveSessions()
+      },
+      request.kind,
+      request.quote,
+      request.regenerateMessageId,
+      modelId,
+      (status) => {
+        if (!isCurrentStream(stream)) return
+        contextCompacting.value = status === 'compacting'
+      },
+    )
+  })
 }
 
 function buildUserInput(v: string, quote?: string): string {
@@ -1282,65 +1537,15 @@ async function send() {
   scrollToBottom()
 
   if (chatMode.value === 'normal') {
-    const stream = beginStream(currentSession.value!.id)
-    isThinking.value = true
-    streamingText.value = ''
-    const history = messages.value
-      .slice(-10)
-      .map((m) => ({ role: m.role as 'ai' | 'user', content: m.text }))
-    const userMsgRef = currentSession.value!.messages[currentSession.value!.messages.length - 1]
-    activeStreamUserMessage = userMsgRef
-    let aiMessageId: number | undefined
-    chatStream(
-      'normal',
-      0,
-      currentSession.value!.id,
-      userInput,
-      history,
-      'normal',
-      '标准',
-      (chunk) => {
-        if (!isCurrentStream(stream)) return
-        streamingText.value += chunk
-        checkStreamingChoices()
-        scrollToBottom()
-      },
-      () => {
-        if (!isCurrentStream(stream)) return
-        const t = streamingText.value.trim()
-        streamingText.value = ''
-        streamingChoices.value = null
-        isThinking.value = false
-        if (t) {
-          const { cleanText, choices } = parseChoices(t)
-          pushMessage({
-            role: 'ai',
-            text: cleanText,
-            time: now(),
-            choices: choices ?? undefined,
-            db_id: aiMessageId,
-          })
-        }
-        scrollToBottom()
-      },
-      (err) => {
-        if (!isCurrentStream(stream)) return
-        if (err?.name === 'AbortError') return
-        pushMessage({ role: 'ai', text: '抱歉，连接失败，请重试。', time: now() })
-        streamingText.value = ''
-        isThinking.value = false
-        scrollToBottom()
-      },
-      stream.controller,
-      (userMsgId, responseMessageId) => {
-        if (!isCurrentStream(stream)) return
-        userMsgRef.db_id = userMsgId
-        aiMessageId = responseMessageId
-        activeStreamMessageIds = { user: userMsgId, ai: responseMessageId }
-      },
-      'qa',
-      quoteSnapshot ? { text: quoteSnapshot, sourceId: sourceSnapshot?.dbId } : undefined,
-    )
+    void streamDialogue({
+      nodeKey: 'normal',
+      topicId: 0,
+      input: userInput,
+      mode: 'normal',
+      style: '标准',
+      userMessage: currentSession.value!.messages.at(-1),
+      quote: quoteSnapshot ? { text: quoteSnapshot, sourceId: sourceSnapshot?.dbId } : undefined,
+    })
     return
   }
 
@@ -1399,219 +1604,59 @@ async function send() {
     return
   }
 
-  const stream = beginStream(currentSession.value!.id)
-  isThinking.value = true
-  streamingText.value = ''
-  scrollToBottom()
-  const history = messages.value
-    .slice(-10)
-    .map((m) => ({ role: m.role as 'ai' | 'user', content: m.text }))
-  const userMsgRef = currentSession.value!.messages[currentSession.value!.messages.length - 1]
-  activeStreamUserMessage = userMsgRef
-  let aiMessageId: number | undefined
-
-  chatStream(
-    store.activeNode.id,
-    currentTopicId.value,
-    currentSession.value!.id,
-    userInput,
-    history,
-    'socratic',
-    aiStyle.value,
-    (chunk) => {
-      if (!isCurrentStream(stream)) return
-      streamingText.value += chunk
-      checkStreamingChoices()
-      scrollToBottom()
-    },
-    () => {
-      if (!isCurrentStream(stream)) return
-      const t = streamingText.value.trim()
-      streamingText.value = ''
-      streamingChoices.value = null
-      isThinking.value = false
-      if (t) {
-        const { cleanText, choices } = parseChoices(t)
-        const aiMsg: Message = {
-          role: 'ai',
-          text: cleanText,
-          time: now(),
-          choices: choices ?? undefined,
-        }
-        aiMsg.db_id = aiMessageId
-        pushMessage(aiMsg)
-      }
-      scrollToBottom()
-    },
-    (err) => {
-      if (!isCurrentStream(stream)) return
-      if (err?.name === 'AbortError') return
-      pushMessage({ role: 'ai', text: '抱歉，连接失败，请重试。', time: now() })
-      streamingText.value = ''
-      isThinking.value = false
-      scrollToBottom()
-    },
-    stream.controller,
-    (userMsgId, responseMessageId) => {
-      if (!isCurrentStream(stream)) return
-      userMsgRef.db_id = userMsgId
-      aiMessageId = responseMessageId
-      activeStreamMessageIds = { user: userMsgId, ai: responseMessageId }
-    },
-    'qa',
-    quoteSnapshot ? { text: quoteSnapshot, sourceId: sourceSnapshot?.dbId } : undefined,
-  )
+  void streamDialogue({
+    nodeKey: store.activeNode.id,
+    topicId: currentTopicId.value,
+    input: userInput,
+    mode: 'socratic',
+    style: aiStyle.value,
+    userMessage: currentSession.value!.messages.at(-1),
+    quote: quoteSnapshot ? { text: quoteSnapshot, sourceId: sourceSnapshot?.dbId } : undefined,
+  })
 }
 
 async function retryAt(aiIndex: number) {
   if (isThinking.value) return
-  const msgs = currentSession.value?.messages ?? []
-  if (aiIndex !== retryableAiIndex(msgs)) return
-  let userMsg: Message | null = null
-  for (let i = aiIndex - 1; i >= 0; i--) {
-    if (msgs[i].role === 'user') {
-      userMsg = msgs[i]
-      break
-    }
+  const messages = currentSession.value?.messages ?? []
+  if (aiIndex !== retryableAiIndex(messages)) return
+  const original = messages[aiIndex]
+  if (original.db_id == null) {
+    chatError.value = '这条回复尚未保存，无法重新生成。'
+    return
   }
-  if (!userMsg || !currentSession.value) return
-
-  currentSession.value.messages = msgs.slice(0, aiIndex)
-  saveSessions()
-
-  const stream = beginStream(currentSession.value.id)
-  isThinking.value = true
-  streamingText.value = ''
-  scrollToBottom()
-
-  const history = msgs
-    .slice(0, aiIndex)
-    .map((m) => ({ role: m.role as 'ai' | 'user', content: m.text }))
-    .slice(-10)
-  activeStreamUserMessage = userMsg
-  let aiMessageId: number | undefined
-
-  chatStream(
-    store.activeNode?.id ?? 'normal',
-    currentTopicId.value,
-    currentSession.value.id,
-    buildUserInput(userMsg.text, userMsg.quote),
-    history,
-    chatMode.value,
-    aiStyle.value,
-    (chunk) => {
-      if (!isCurrentStream(stream)) return
-      streamingText.value += chunk
-      checkStreamingChoices()
-      scrollToBottom()
-    },
-    () => {
-      if (!isCurrentStream(stream)) return
-      const t = streamingText.value.trim()
-      streamingText.value = ''
-      streamingChoices.value = null
-      isThinking.value = false
-      if (t) {
-        const { cleanText, choices } = parseChoices(t)
-        pushMessage({
-          role: 'ai',
-          text: cleanText,
-          time: now(),
-          choices: choices ?? undefined,
-          db_id: aiMessageId,
-        })
-      }
-      scrollToBottom()
-    },
-    (err) => {
-      if (!isCurrentStream(stream)) return
-      if (err?.name === 'AbortError') return
-      pushMessage({ role: 'ai', text: '抱歉，连接失败，请重试。', time: now() })
-      streamingText.value = ''
-      isThinking.value = false
-      scrollToBottom()
-    },
-    stream.controller,
-    (userMsgId, responseMessageId) => {
-      if (!isCurrentStream(stream)) return
-      if (userMsg.db_id == null) userMsg.db_id = userMsgId
-      else userMsg.paired_db_id = userMsgId
-      aiMessageId = responseMessageId
-      activeStreamMessageIds = { user: userMsgId, ai: responseMessageId }
-    },
-    'qa',
-    userMsg.quote ? { text: userMsg.quote, sourceId: userMsg.quote_source_db_id } : undefined,
-  )
+  const request = original.chatRequest
+  const userMessage = request?.userMessageId
+    ? messages.find((message) => message.db_id === request.userMessageId)
+    : messages
+        .slice(0, aiIndex)
+        .reverse()
+        .find((message) => message.role === 'user')
+  if (!userMessage && !request) return
+  await streamDialogue({
+    nodeKey:
+      request?.nodeKey ?? (chatMode.value === 'normal' ? 'normal' : (store.activeNode?.id ?? '')),
+    topicId: chatMode.value === 'normal' ? 0 : currentTopicId.value,
+    input: request?.input ?? buildUserInput(userMessage!.text, userMessage!.quote),
+    kind: request?.kind,
+    mode: chatMode.value,
+    style: aiStyle.value,
+    userMessage,
+    replaceMessage: original,
+    regenerateMessageId: original.db_id,
+    quote: userMessage?.quote
+      ? { text: userMessage.quote, sourceId: userMessage.quote_source_db_id }
+      : undefined,
+  })
 }
 
 function streamOverview(kind: 'topic' | 'node', identifier: string): Promise<void> {
-  return new Promise((resolve) => {
-    isThinking.value = true
-    streamingText.value = ''
-    const stream = beginStream(currentSession.value!.id)
-    const apiKind = kind === 'topic' ? 'topic_overview' : 'node_overview'
-    let messageIds: { user: number; ai: number } | null = null
-    chatStream(
-      identifier,
-      currentTopicId.value,
-      currentSession.value!.id,
-      '',
-      [],
-      'socratic',
-      aiStyle.value,
-      (chunk) => {
-        if (!isCurrentStream(stream)) return
-        streamingText.value += chunk
-        checkStreamingChoices()
-        scrollToBottom()
-      },
-      () => {
-        if (!isCurrentStream(stream)) {
-          resolve()
-          return
-        }
-        const t = streamingText.value.trim()
-        streamingText.value = ''
-        streamingChoices.value = null
-        isThinking.value = false
-        if (t) {
-          const { cleanText, choices } = parseChoices(t)
-          const aiMsg: Message = {
-            role: 'ai',
-            text: cleanText,
-            time: now(),
-            choices: choices ?? undefined,
-          }
-          if (messageIds) {
-            aiMsg.db_id = messageIds.ai
-            aiMsg.paired_db_id = messageIds.user
-          }
-          pushMessage(aiMsg)
-        }
-        scrollToBottom()
-        resolve()
-      },
-      (err) => {
-        if (!isCurrentStream(stream)) {
-          resolve()
-          return
-        }
-        if (err?.name !== 'AbortError') {
-          pushMessage({ role: 'ai', text: '加载概览失败，但你仍可以正常学习。', time: now() })
-        }
-        streamingText.value = ''
-        isThinking.value = false
-        scrollToBottom()
-        resolve()
-      },
-      stream.controller,
-      (userMsgId, aiMessageId) => {
-        if (!isCurrentStream(stream)) return
-        messageIds = { user: userMsgId, ai: aiMessageId }
-        activeStreamMessageIds = messageIds
-      },
-      apiKind,
-    )
+  return streamDialogue({
+    nodeKey: identifier,
+    topicId: currentTopicId.value,
+    input: '',
+    mode: 'socratic',
+    style: aiStyle.value,
+    kind: kind === 'topic' ? 'topic_overview' : 'node_overview',
   })
 }
 
@@ -1626,62 +1671,13 @@ watch(
     }
 
     if (node.state === 'mastered') {
-      isThinking.value = true
-      streamingText.value = ''
-      scrollToBottom()
-
-      const prompt = `用户想复习「${node.label}」（${node.sub}），请用苏格拉底式提问引导用户回顾这个知识点的核心内容。`
-      const stream = beginStream(currentSession.value!.id)
-      let messageIds: { user: number; ai: number } | null = null
-      chatStream(
-        node.id,
-        currentTopicId.value,
-        currentSession.value!.id,
-        prompt,
-        [],
-        'socratic',
-        aiStyle.value,
-        (chunk) => {
-          if (!isCurrentStream(stream)) return
-          streamingText.value += chunk
-          checkStreamingChoices()
-          scrollToBottom()
-        },
-        () => {
-          if (!isCurrentStream(stream)) return
-          const t = streamingText.value.trim()
-          streamingText.value = ''
-          streamingChoices.value = null
-          isThinking.value = false
-          if (t) {
-            const { cleanText, choices } = parseChoices(t)
-            const aiMsg: Message = {
-              role: 'ai',
-              text: cleanText,
-              time: now(),
-              choices: choices ?? undefined,
-            }
-            if (messageIds) {
-              aiMsg.db_id = messageIds.ai
-              aiMsg.paired_db_id = messageIds.user
-            }
-            pushMessage(aiMsg)
-          }
-          scrollToBottom()
-        },
-        (err) => {
-          if (!isCurrentStream(stream)) return
-          if (err?.name === 'AbortError') return
-          streamingText.value = ''
-          isThinking.value = false
-        },
-        stream.controller,
-        (userMsgId, aiMessageId) => {
-          if (!isCurrentStream(stream)) return
-          messageIds = { user: userMsgId, ai: aiMessageId }
-          activeStreamMessageIds = messageIds
-        },
-      )
+      await streamDialogue({
+        nodeKey: node.id,
+        topicId: currentTopicId.value,
+        input: `用户想复习「${node.label}」（${node.sub}），请用苏格拉底式提问引导用户回顾这个知识点的核心内容。`,
+        mode: 'socratic',
+        style: aiStyle.value,
+      })
       return
     }
 
@@ -1691,12 +1687,32 @@ watch(
 
 onBeforeUnmount(() => {
   disposeSessionPersistence()
+  cancelActiveStream()
   streamEpoch += 1
   streamControl.abortRequest()
 })
 </script>
 
 <style scoped>
+.chat-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 16px;
+  color: var(--color-danger, #b42318);
+  font-size: 13px;
+}
+.chat-error button {
+  flex-shrink: 0;
+  padding: 4px 10px;
+  border: 1px solid currentColor;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
 .dialogue-wrap {
   display: flex;
   flex-direction: column;

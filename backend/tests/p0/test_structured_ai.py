@@ -5,6 +5,7 @@ from types import SimpleNamespace
 import pytest
 from pydantic import ValidationError
 
+from core.config import settings
 from schemas.structured_ai import (
     AssessmentScore,
     DiagnosticQuestions,
@@ -16,6 +17,13 @@ from services.agent.structured_ai import (
     generate_structured,
     high_risk_notice,
 )
+
+
+@pytest.fixture(autouse=True)
+def standard_test_model(monkeypatch):
+    monkeypatch.setattr(settings, "llm_models", "")
+    monkeypatch.setattr(settings, "llm_default_model_id", "")
+    monkeypatch.setattr(settings, "llm_model", "test-model")
 
 
 def response(content: str, tokens: int = 12):
@@ -65,6 +73,24 @@ def test_parses_json_and_tracks_tokens():
     assert result.attempts == 1
     assert calls[0]["temperature"] <= 0.3
     assert calls[0]["timeout"] == 60
+
+
+@pytest.mark.parametrize(
+    "finish_reason,code", [("length", "AI_OUTPUT_LIMIT"), ("content_filter", "AI_CONTENT_FILTERED")]
+)
+def test_incomplete_finish_never_accepts_even_valid_json(finish_reason, code):
+    incomplete = response(json.dumps(questions_payload()))
+    incomplete.choices[0].finish_reason = finish_reason
+    client, calls = client_with(incomplete)
+    with pytest.raises(StructuredAIError) as error:
+        generate_structured(
+            DiagnosticQuestions,
+            [],
+            RunContext(run_id="incomplete", call_type="test"),
+            client=client,
+        )
+    assert error.value.code == code
+    assert len(calls) == 1
 
 
 def test_accepts_markdown_json_and_repairs_only_once():

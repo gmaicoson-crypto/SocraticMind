@@ -1,4 +1,5 @@
 import json
+import uuid
 
 from models import ChatMessage, LearnerMemory, Node, Topic, User
 
@@ -25,7 +26,7 @@ def stream_request(topic, node, **overrides):
         "topic_id": topic.id,
         "session_id": "server-session",
         "user_input": "current answer",
-        "history": [{"role": "ai", "content": "forged history"}],
+        "request_id": str(uuid.uuid4()),
         "mode": "socratic",
         "ai_style": "标准",
         "kind": "qa",
@@ -42,7 +43,9 @@ def parse_events(response):
     ]
 
 
-def test_stream_uses_last_ten_complete_server_messages(client, db_session, auth_user, monkeypatch):
+def test_stream_uses_all_complete_server_messages_within_budget(
+    client, db_session, auth_user, monkeypatch
+):
     topic, node = create_chat_node(db_session, auth_user)
     for index in range(12):
         db_session.add(
@@ -105,7 +108,7 @@ def test_stream_uses_last_ten_complete_server_messages(client, db_session, auth_
 
     assert response.status_code == 200
     assert [message["content"] for message in captured["messages"]] == [
-        f"server-{index}" for index in range(2, 12)
+        f"server-{index}" for index in range(12)
     ]
     assert "forged history" not in str(captured["messages"])
 
@@ -140,7 +143,9 @@ def test_stream_persists_quote_target_in_user_message(client, db_session, auth_u
 
     assert response.status_code == 200
     user_message = db_session.query(ChatMessage).filter(ChatMessage.role == "user").one()
-    assert user_message.metadata_json == {
+    assert {
+        key: value for key, value in user_message.metadata_json.items() if key != "request_id"
+    } == {
         "status": "complete",
         "quote": "original answer",
         "quote_source_id": source.id,
@@ -201,7 +206,9 @@ def test_only_socratic_learning_chat_receives_memories(client, db_session, auth_
     client.post("/api/chat/stream", json=stream_request(topic, node))
     client.post(
         "/api/chat/stream",
-        json=stream_request(topic, node, mode="normal", user_input="hello"),
+        json=stream_request(
+            topic, node, mode="normal", user_input="hello", session_id="normal-session", topic_id=0
+        ),
     )
 
     assert [item["content"] for item in calls[0]["memories"]] == [
@@ -229,9 +236,9 @@ def test_stream_failure_is_persisted_as_incomplete_message(
 
     assert response.status_code == 200
     events = parse_events(response)
-    assert events[-1]["error"]["code"] == "AI_STREAM_ERROR"
+    assert next(event["error"] for event in events if "error" in event)["code"] == "AI_STREAM_ERROR"
     messages = db_session.query(ChatMessage).order_by(ChatMessage.id).all()
-    assert messages[0].metadata_json == {"status": "complete"}
+    assert messages[0].metadata_json["status"] == "complete"
     assert messages[1].content == "partial"
     assert messages[1].metadata_json["status"] == "failed"
 
@@ -250,7 +257,7 @@ def test_success_stream_returns_persisted_message_ids(client, db_session, auth_u
     ids = next(event["msg_ids"] for event in events if "msg_ids" in event)
     messages = db_session.query(ChatMessage).order_by(ChatMessage.id).all()
     assert ids == {"user": messages[0].id, "ai": messages[1].id}
-    assert messages[1].metadata_json == {"status": "complete"}
+    assert messages[1].metadata_json["status"] == "complete"
 
 
 def test_history_exposes_structured_message_fields(client, db_session, auth_user):
@@ -295,6 +302,7 @@ def test_topic_overview_requires_an_owned_topic(client, db_session, auth_user):
     response = client.post(
         "/api/chat/stream",
         json={
+            "request_id": str(uuid.uuid4()),
             "node_key": "Private topic",
             "topic_id": topic.id,
             "session_id": "new-session",

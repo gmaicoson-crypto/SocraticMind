@@ -65,10 +65,22 @@
       <div class="msg-actions" :class="{ visible: hovered }">
         <span class="msg-time"
           >{{ message.role === 'ai' ? 'Socrates AI' : '你' }} ·
-          {{ formatMessageTime(message.time) }}</span
+          {{ formatMessageTime(message.time) }}
+          <span
+            v-if="
+              message.metadata?.status === 'interrupted' || message.metadata?.status === 'failed'
+            "
+          >
+            · 未完成</span
+          ></span
         >
         <div class="action-btns">
-          <button v-if="index > 0" class="action-btn delete" title="删除" @click="emit('delete')">
+          <button
+            v-if="index > 0 || message.db_id != null || message.role === 'user'"
+            class="action-btn delete"
+            title="删除"
+            @click="emit('delete')"
+          >
             <svg
               width="12"
               height="12"

@@ -2,6 +2,8 @@ from models import AgentRun, ArchivedChatActivity, ArchivedMastery, ChatMessage,
 from sqlalchemy import String, and_, func, or_
 from sqlalchemy.orm import Session
 
+from services.chat_lifecycle import invalidate_chat_contexts_for_messages
+
 
 def archive_and_delete_messages(
     db: Session,
@@ -54,6 +56,14 @@ def archive_and_delete_messages(
     db.add_all(
         ArchivedChatActivity(user_id=user_id, day=row.day, hour=int(row.hour), count=row[2])
         for row in counts
+    )
+    message_ids = [value for (value,) in messages.with_entities(ChatMessage.id)]
+    invalidate_chat_contexts_for_messages(
+        db,
+        user_id=user_id,
+        message_ids=message_ids,
+        session_id=session_id,
+        topic_id=topic_id,
     )
     return messages.delete(synchronize_session=False)
 

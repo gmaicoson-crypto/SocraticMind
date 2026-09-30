@@ -8,6 +8,7 @@ from pydantic import BaseModel, ValidationError
 
 from ai.util import extract_json_from_markdown
 from core.ai_client import get_ai_client, resolve_llm_profile
+from core.context_budget import completion_options, ensure_fits
 
 
 log = logging.getLogger(__name__)
@@ -80,6 +81,8 @@ def _parse(schema: type[SchemaT], content: str) -> SchemaT:
 
 
 def _map_upstream_error(error: Exception) -> StructuredAIError:
+    if isinstance(error, StructuredAIError):
+        return error
     status_code = getattr(error, "status_code", None)
     class_name = type(error).__name__.lower()
     if isinstance(error, TimeoutError) or "timeout" in class_name:
@@ -91,14 +94,23 @@ def _map_upstream_error(error: Exception) -> StructuredAIError:
     return StructuredAIError("AI_REQUEST_FAILED", "模型请求失败", retryable=False)
 
 
-def _call(client, *, model: str, messages: list[dict], temperature: float):
-    return client.chat.completions.create(
+def _call(client, *, model: str, profile_id: str, messages: list[dict], temperature: float):
+    ensure_fits(messages, profile_id)
+    response = client.chat.completions.create(
         model=model,
         messages=messages,
-        max_tokens=4096,
-        temperature=temperature,
+        **completion_options(profile_id, temperature=temperature),
         timeout=60,
     )
+    choices = getattr(response, "choices", None) or []
+    finish_reason = getattr(choices[0], "finish_reason", None) if choices else None
+    if finish_reason == "length":
+        raise StructuredAIError(
+            "AI_OUTPUT_LIMIT", "模型生成额度不足，结构化结果尚未完成", retryable=False
+        )
+    if finish_reason == "content_filter":
+        raise StructuredAIError("AI_CONTENT_FILTERED", "模型服务中止了本次生成", retryable=False)
+    return response
 
 
 def generate_structured(
@@ -114,7 +126,9 @@ def generate_structured(
     started = perf_counter()
     total_tokens = 0
     try:
-        first = _call(ai_client, model=model, messages=messages, temperature=0.2)
+        first = _call(
+            ai_client, model=model, profile_id=profile.id, messages=messages, temperature=0.2
+        )
     except Exception as error:
         mapped = _map_upstream_error(error)
         log.warning(
@@ -148,6 +162,7 @@ def generate_structured(
             repaired = _call(
                 ai_client,
                 model=model,
+                profile_id=profile.id,
                 messages=repair_messages,
                 temperature=0,
             )

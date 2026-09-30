@@ -2,6 +2,9 @@ from .user import User
 from .topic import Topic
 from .node import Node
 from .progress import ChatMessage, LearningRecord
+from .chat_session import ChatSession
+from .chat_turn import ChatTurn
+from .chat_cancellation import ChatCancellation
 from .progress_archive import ArchivedChatActivity, ArchivedMastery
 from .email_code import EmailCode
 from .agent_run import AgentRun
@@ -17,6 +20,9 @@ __all__ = [
     "ArchivedChatActivity",
     "ArchivedMastery",
     "ChatMessage",
+    "ChatSession",
+    "ChatTurn",
+    "ChatCancellation",
     "EmailCode",
     "LearnerMemory",
     "LearningRecord",

@@ -9,6 +9,7 @@ import { getNodes, getTopics } from '../../api/topic'
 
 vi.mock('../../api/chat', () => ({
   chatStream: vi.fn(),
+  cancelChatStream: vi.fn().mockResolvedValue(undefined),
   deleteChatSession: vi.fn(),
   deleteMessages: vi.fn(),
   getAllMessages: vi.fn().mockResolvedValue([]),

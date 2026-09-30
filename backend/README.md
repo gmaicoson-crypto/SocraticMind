@@ -153,6 +153,7 @@ alembic upgrade head
 - `Topic`：学习主题
 - `Node`：知识图谱节点
 - `ChatMessage`：用户和 AI 的对话记录
+- `ChatSession` / `ChatTurn` / `ChatCancellation`：会话摘要、有效轮次、请求幂等与持久取消状态
 - `LearningRecord`：学习打卡记录
 - `EmailCode`：邮箱验证码
 - `AgentRun`：可恢复的 onboarding、计划和评估运行状态
@@ -190,6 +191,8 @@ backend/uploads/avatars/
 ## AI 能力
 
 后端通过 `core/ai_client.py` 创建兼容 OpenAI SDK 的客户端，并在以下场景调用 AI：
+
+对话由后端统一管理 256K 上下文窗口，前端请求不传历史。首次运行新增版本前执行 `alembic upgrade head`；模型容量、摘要后台任务和请求恢复的具体用法见 [上下文管理说明](../docs/chat-context-management.md)。
 
 - `ai/agent.py`：根据当前节点、用户输入、历史消息和模式生成流式回复
 - `ai/graph_generator.py`：为新主题生成知识节点和依赖关系

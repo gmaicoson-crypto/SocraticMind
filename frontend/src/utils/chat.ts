@@ -15,7 +15,7 @@ export function formatMessageTime(value: string, today = new Date()): string {
 }
 
 export function retryableAiIndex(
-  messages: { role: 'ai' | 'user'; messageType?: string }[],
+  messages: { role: 'ai' | 'user'; messageType?: string; chatRequest?: unknown }[],
 ): number {
   const index = messages.length - 1
   if (
@@ -23,6 +23,7 @@ export function retryableAiIndex(
     (messages[index].messageType && messages[index].messageType !== 'chat')
   )
     return -1
+  if (messages[index].chatRequest) return index
   for (let i = index - 1; i >= 0; i--) {
     if (messages[i].role === 'user') return index
   }

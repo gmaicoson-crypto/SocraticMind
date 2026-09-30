@@ -39,6 +39,9 @@ def test_empty_database_upgrades_to_head(tmp_path):
         "user_llm_profiles",
         "archived_chat_activity",
         "archived_mastery",
+        "chat_sessions",
+        "chat_turns",
+        "chat_cancellations",
     }.issubset(set(inspector.get_table_names()))
     assert {"estimated_minutes", "mastery_source", "mastery_confidence"}.issubset(
         {column["name"] for column in inspector.get_columns("nodes")}
@@ -51,6 +54,12 @@ def test_empty_database_upgrades_to_head(tmp_path):
     }
     assert "config_id" not in {
         column["name"] for column in inspector.get_columns("user_llm_profiles")
+    }
+    assert {"summary_json", "summary_source_version", "generation_lease_token"}.issubset(
+        {column["name"] for column in inspector.get_columns("chat_sessions")}
+    )
+    assert "uq_chat_turns_user_request" in {
+        index["name"] for index in inspector.get_indexes("chat_turns")
     }
 
 
@@ -217,6 +226,9 @@ def test_p0_downgrade_keeps_legacy_tables(tmp_path):
     assert "agent_runs" not in tables
     assert "study_plans" not in tables
     assert "mastery_events" not in tables
+    assert "chat_sessions" not in tables
+    assert "chat_turns" not in tables
+    assert "chat_cancellations" not in tables
     assert "estimated_minutes" not in {column["name"] for column in inspector.get_columns("nodes")}
 
 
@@ -231,4 +243,188 @@ def test_application_guard_rejects_legacy_revision_and_accepts_head(tmp_path):
 
     command.upgrade(config, "head")
     assert_database_at_head(engine)
+    engine.dispose()
+
+
+def test_chat_context_backfill_preserves_text_and_only_adopts_complete_isolated_pairs(tmp_path):
+    import sqlalchemy as sa
+
+    database_url = f"sqlite:///{tmp_path / 'chat-context-backfill.sqlite'}"
+    config = alembic_config(database_url)
+    command.upgrade(config, "0009_split_ai_avatar_presets")
+    engine = create_engine(database_url)
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO users (id, username, email, hashed_password, avatar_url) VALUES "
+                "(1, 'first', 'first@example.test', 'hash', '/avatars/study/boy-read.webp'), "
+                "(2, 'second', 'second@example.test', 'hash', '/avatars/study/boy-read.webp')"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO topics (id, user_id, title) VALUES (1, 1, 'Scoped A'), (2, 1, 'Scoped B')"
+            )
+        )
+        messages = sa.Table("chat_messages", sa.MetaData(), autoload_with=connection)
+        rows = []
+
+        def message(
+            identifier,
+            role,
+            content,
+            *,
+            name="same-name",
+            user_id=1,
+            topic_id=None,
+            node_key="normal",
+            mode="normal",
+            status=None,
+            message_type="chat",
+        ):
+            rows.append(
+                dict(
+                    id=identifier,
+                    user_id=user_id,
+                    topic_id=topic_id,
+                    session_id=name,
+                    node_key=node_key,
+                    role=role,
+                    content=content,
+                    mode=mode,
+                    message_type=message_type,
+                    metadata_json={"status": status} if status else None,
+                )
+            )
+
+        message(1, "user", "complete question")
+        message(2, "ai", "complete answer")
+        message(3, "user", "unanswered question")
+        message(4, "ai", "", status="complete")
+        message(5, "user", "failed question")
+        message(6, "ai", "failed partial", status="failed")
+        message(7, "ai", "orphan answer")
+        message(10, "user", "scope A question", name="mixed", topic_id=1, mode="socratic")
+        message(11, "ai", "scope A answer", name="mixed", topic_id=1, mode="socratic")
+        message(12, "user", "scope B question", name="mixed", topic_id=2, mode="socratic")
+        message(13, "ai", "scope B answer", name="mixed", topic_id=2, mode="socratic")
+        message(20, "user", "other user question", user_id=2)
+        message(21, "ai", "other user answer", user_id=2)
+        message(30, "user", "", name="overview", topic_id=1, mode="socratic", node_key="Scoped A")
+        message(
+            31,
+            "ai",
+            "topic overview",
+            name="overview",
+            topic_id=1,
+            mode="socratic",
+            node_key="Scoped A",
+        )
+        message(32, "user", "", name="overview", topic_id=1, mode="socratic", node_key="node-A")
+        message(
+            33,
+            "ai",
+            "node overview",
+            name="overview",
+            topic_id=1,
+            mode="socratic",
+            node_key="node-A",
+        )
+        message(
+            40,
+            "ai",
+            "structured onboarding",
+            topic_id=2,
+            mode="socratic",
+            message_type="agent_step",
+        )
+        connection.execute(messages.insert(), rows)
+        before = dict(connection.execute(sa.select(messages.c.id, messages.c.content)).all())
+
+    command.upgrade(config, "head")
+
+    with engine.connect() as connection:
+        assert (
+            dict(connection.execute(text("SELECT id, content FROM chat_messages")).all()) == before
+        )
+        assert connection.execute(
+            text("SELECT user_id, session_id FROM chat_sessions ORDER BY user_id, session_id")
+        ).all() == [(1, "overview"), (1, "same-name"), (2, "same-name")]
+        turns = connection.execute(
+            text(
+                "SELECT user_message_id, ai_message_id, status, kind FROM chat_turns ORDER BY user_message_id"
+            )
+        ).all()
+        assert turns == [
+            (1, 2, "complete", "qa"),
+            (20, 21, "complete", "qa"),
+            (30, 31, "complete", "topic_overview"),
+            (32, 33, "complete", "node_overview"),
+        ]
+        assert (
+            connection.scalar(
+                text("SELECT count(*) FROM chat_sessions WHERE active_request_id IS NOT NULL")
+            )
+            == 0
+        )
+        assert (
+            connection.scalar(
+                text("SELECT count(*) FROM chat_sessions WHERE summary_json IS NOT NULL")
+            )
+            == 0
+        )
+        metadata = sa.Table("chat_messages", sa.MetaData(), autoload_with=connection)
+        restored = connection.execute(
+            sa.select(metadata.c.metadata_json).where(metadata.c.id == 31)
+        ).scalar_one()
+        assert restored["user_message_id"] == 30
+        assert restored["kind"] == "topic_overview"
+    engine.dispose()
+
+
+def test_chat_context_backfill_pairs_messages_across_keyset_batch_boundaries(tmp_path):
+    import sqlalchemy as sa
+
+    database_url = f"sqlite:///{tmp_path / 'chat-backfill-batches.sqlite'}"
+    config = alembic_config(database_url)
+    command.upgrade(config, "0009_split_ai_avatar_presets")
+    engine = create_engine(database_url)
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO users (id, username, email, hashed_password, avatar_url) VALUES "
+                "(1, 'batch-user', 'batch@example.test', 'hash', '/avatars/study/boy-read.webp')"
+            )
+        )
+        messages = sa.Table("chat_messages", sa.MetaData(), autoload_with=connection)
+        shared = dict(
+            user_id=1,
+            session_id="long-history",
+            topic_id=None,
+            node_key="normal",
+            mode="normal",
+            message_type="chat",
+            metadata_json={"status": "complete"},
+        )
+        # The leading orphan shifts questions onto the last row of each 256-row
+        # page, so a complete pair must survive the read/write page transition.
+        rows = [{**shared, "id": 1, "role": "ai", "content": "orphan"}]
+        for index in range(300):
+            rows.extend(
+                [
+                    {**shared, "id": 2 * index + 2, "role": "user", "content": f"question {index}"},
+                    {**shared, "id": 2 * index + 3, "role": "ai", "content": f"answer {index}"},
+                ]
+            )
+        connection.execute(messages.insert(), rows)
+    command.upgrade(config, "head")
+    with engine.connect() as connection:
+        restored_pairs = connection.execute(
+            text("SELECT user_message_id, ai_message_id FROM chat_turns ORDER BY user_message_id")
+        ).all()
+        assert restored_pairs == [(2 * index + 2, 2 * index + 3) for index in range(300)]
+        assert (256, 257) in restored_pairs
+        assert (512, 513) in restored_pairs
+        assert connection.scalar(text("SELECT count(*) FROM chat_messages")) == 601
+        assert connection.scalar(text("SELECT count(*) FROM chat_sessions")) == 1
     engine.dispose()

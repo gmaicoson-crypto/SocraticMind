@@ -21,132 +21,201 @@ export interface StoredChatMessage extends ChatMessage {
 }
 
 export type ChatKind = 'qa' | 'topic_overview' | 'node_overview'
+export type ChatContextStatus = 'compacting' | 'ready'
 
 export interface ChatQuote {
   text: string
   sourceId?: number
 }
 
-export function chatStream(
+export class ChatStreamError extends Error {
+  readonly code: string
+  readonly retryable?: boolean
+
+  constructor(message: string, code: string, retryable?: boolean) {
+    super(message)
+    this.name = 'ChatStreamError'
+    this.code = code
+    this.retryable = retryable
+  }
+}
+
+function streamError(value: unknown, fallback = '连接失败，请重试。'): ChatStreamError {
+  if (typeof value === 'string') return new ChatStreamError(value, 'CHAT_STREAM_ERROR')
+  if (value && typeof value === 'object') {
+    const detail = value as {
+      detail?: unknown
+      message?: string
+      code?: string
+      retryable?: boolean
+    }
+    if (detail.detail) return streamError(detail.detail, fallback)
+    return new ChatStreamError(
+      detail.message || fallback,
+      detail.code || 'CHAT_STREAM_ERROR',
+      detail.retryable,
+    )
+  }
+  return new ChatStreamError(fallback, 'CHAT_STREAM_ERROR')
+}
+
+export interface CancelChatResponse {
+  status: string
+  msg_ids?: { user: number; ai: number }
+}
+
+export async function cancelChatStream(
+  sessionId: string,
+  requestId: string,
+): Promise<CancelChatResponse> {
+  const response = await api.post<CancelChatResponse>('/api/chat/cancel', {
+    session_id: sessionId,
+    request_id: requestId,
+  })
+  return response.data
+}
+
+export async function chatStream(
   nodeKey: string,
   topicId: number,
   sessionId: string,
   userInput: string,
-  history: ChatMessage[],
+  requestId: string,
   mode: 'socratic' | 'normal',
   aiStyle: string,
   onChunk: (text: string) => void,
   onDone: () => void,
-  onError: (err: any) => void,
+  onError: (err: unknown) => void,
   controllers?: AbortController,
   onMsgIds?: (userMsgId: number, aiMsgId: number) => void,
   kind: ChatKind = 'qa',
   quote?: ChatQuote,
+  regenerateMessageId?: number,
+  modelId: string | null = getSelectedModelId(),
+  onContextStatus?: (status: ChatContextStatus) => void,
 ) {
-  const token = getToken()
-  const model = getSelectedModelId()
   const controller = controllers ?? new AbortController()
-
-  const timeout = setTimeout(() => controller.abort(), 5 * 60 * 1000)
+  const model = modelId
   let terminalEventSent = false
-
+  let failedState: ChatStreamError | null = null
   let reader: ReadableStreamDefaultReader<Uint8Array> | null = null
 
   function notifyDone() {
     if (terminalEventSent) return
+    if (failedState) return notifyError(failedState)
     terminalEventSent = true
-    clearTimeout(timeout)
     onDone()
   }
 
   function notifyError(error: unknown) {
     if (terminalEventSent) return
     terminalEventSent = true
-    clearTimeout(timeout)
     onError(error)
   }
 
-  const originalAbort = controller.abort.bind(controller)
-  controller.abort = () => {
-    originalAbort()
-    reader?.cancel().catch(() => {})
-  }
-
-  fetch(`${import.meta.env.VITE_API_BASE}/api/chat/stream`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
+  const timeout = setTimeout(
+    () => {
+      notifyError(new ChatStreamError('等待回复超时，请重试。', 'CHAT_STREAM_TIMEOUT'))
+      controller.abort()
+      void cancelChatStream(sessionId, requestId).catch(() => {})
     },
-    body: JSON.stringify({
-      node_key: nodeKey,
-      topic_id: topicId,
-      session_id: sessionId,
-      user_input: userInput,
-      history: history.map((m) => ({ role: m.role, content: m.content })),
-      mode,
-      ai_style: aiStyle,
-      kind,
-      ...(quote ? { quote_text: quote.text, quote_source_id: quote.sourceId } : {}),
-      ...(model ? { model } : {}),
-    }),
-    signal: controller.signal,
-  })
-    .then((res) => {
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      reader = res.body!.getReader()
-      const decoder = new TextDecoder('utf-8')
-      let buffer = ''
+    5 * 60 * 1000,
+  )
+  const onAbort = () => {
+    clearTimeout(timeout)
+    void reader?.cancel().catch(() => {})
+  }
+  controller.signal.addEventListener('abort', onAbort, { once: true })
 
-      function processBuffer() {
-        const events = buffer.split('\n\n')
-        buffer = events.pop() ?? ''
+  try {
+    const response = await fetch(`${import.meta.env.VITE_API_BASE}/api/chat/stream`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${getToken()}`,
+      },
+      body: JSON.stringify({
+        node_key: nodeKey,
+        topic_id: topicId,
+        session_id: sessionId,
+        user_input: userInput,
+        request_id: requestId,
+        mode,
+        ai_style: aiStyle,
+        kind,
+        ...(quote ? { quote_text: quote.text, quote_source_id: quote.sourceId } : {}),
+        ...(model ? { model } : {}),
+        ...(regenerateMessageId != null ? { regenerate_message_id: regenerateMessageId } : {}),
+      }),
+      signal: controller.signal,
+    })
+    if (!response.ok) {
+      const error = await response.json().catch(() => null)
+      if (error?.msg_ids) onMsgIds?.(error.msg_ids.user, error.msg_ids.ai)
+      throw streamError(error, `请求失败（HTTP ${response.status}），请重试。`)
+    }
+    if (!response.body) throw new ChatStreamError('服务器未返回回复流。', 'CHAT_STREAM_EMPTY')
+    reader = response.body.getReader()
+    const decoder = new TextDecoder('utf-8')
+    let buffer = ''
 
-        for (const event of events) {
-          const lines = event.split('\n')
-          for (const line of lines) {
-            if (!line.startsWith('data:')) continue
-            const data = line.slice(5).trim()
-            if (!data) continue
-            if (data === '[DONE]') {
-              notifyDone()
-              return
-            }
-            try {
-              const json = JSON.parse(data)
-              if (json.text) onChunk(json.text)
-              if (json.msg_ids) onMsgIds?.(json.msg_ids.user, json.msg_ids.ai)
-              if (json.error) notifyError(json.error)
-            } catch (e) {
-              console.warn('[SSE] JSON 解析失败，分片数据:', data.slice(0, 80), e)
-            }
-          }
+    function processEvent(event: string) {
+      for (const line of event.split('\n')) {
+        if (terminalEventSent || controller.signal.aborted) return
+        if (!line.startsWith('data:')) continue
+        const data = line.slice(5).trim()
+        if (!data) continue
+        if (data === '[DONE]') {
+          notifyDone()
+          return
+        }
+        let json
+        try {
+          json = JSON.parse(data)
+        } catch {
+          throw new ChatStreamError('回复流格式错误，请重试。', 'CHAT_STREAM_INVALID')
+        }
+        if (json.type === 'context_compacting') onContextStatus?.('compacting')
+        if (json.type === 'context_ready') onContextStatus?.('ready')
+        if (json.msg_ids) onMsgIds?.(json.msg_ids.user, json.msg_ids.ai)
+        if (json.text) onChunk(json.text)
+        if (json.error) notifyError(streamError(json.error))
+        const status = json.request_state?.status
+        if (status === 'complete') notifyDone()
+        if (status === 'failed' || status === 'interrupted') {
+          failedState = streamError(
+            json.request_state.error,
+            status === 'interrupted' ? '回复已中断，可重新生成。' : '回复失败，请重试。',
+          )
         }
       }
+    }
 
-      function read() {
-        reader!
-          .read()
-          .then(({ done, value }) => {
-            if (done) {
-              if (buffer.trim()) processBuffer()
-              notifyDone()
-              return
-            }
-            buffer += decoder.decode(value, { stream: true })
-            processBuffer()
-            read()
-          })
-          .catch((err) => {
-            if (err?.name !== 'AbortError') notifyError(err)
-          })
+    while (!terminalEventSent && !controller.signal.aborted) {
+      const { done, value } = await reader.read()
+      buffer += done ? decoder.decode() : decoder.decode(value, { stream: true })
+      buffer = buffer.replace(/\r\n/g, '\n')
+      const events = buffer.split('\n\n')
+      buffer = events.pop() ?? ''
+      for (const event of events) processEvent(event)
+      if (done) {
+        if (buffer.trim()) processEvent(buffer)
+        if (!terminalEventSent && !controller.signal.aborted) {
+          notifyError(
+            failedState ??
+              new ChatStreamError('连接意外中断，请重试恢复回复。', 'CHAT_STREAM_DISCONNECTED'),
+          )
+        }
+        break
       }
-
-      read()
-    })
-    .catch((err) => {
-      if (err?.name !== 'AbortError') notifyError(err)
-    })
+    }
+  } catch (error) {
+    if (!controller.signal.aborted) notifyError(error)
+  } finally {
+    clearTimeout(timeout)
+    controller.signal.removeEventListener('abort', onAbort)
+    await reader?.cancel().catch(() => {})
+  }
 }
 
 export async function getChatHistory(nodeKey: string) {

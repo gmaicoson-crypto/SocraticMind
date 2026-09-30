@@ -3,10 +3,10 @@ import json
 import re
 from io import StringIO
 from pathlib import Path
-from typing import Mapping
+from typing import Literal, Mapping
 
 from dotenv import dotenv_values
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pydantic_settings import BaseSettings, DotEnvSettingsSource, PydanticBaseSettingsSource
 from pydantic_settings.sources import parse_env_vars
 
@@ -51,7 +51,42 @@ class MultilineLLMDotEnvSource(DotEnvSettingsSource):
         )
 
 
-class LLMProfile(BaseModel):
+class LLMContextCapabilities(BaseModel):
+    """容量按实际服务配置，默认使用项目统一的 256K 窗口。"""
+
+    context_window_tokens: int = Field(default=256_000, gt=0)
+    max_input_tokens: int | None = Field(default=None, gt=0)
+    max_output_tokens: int = Field(default=4_096, gt=0)
+    output_tokens: int = Field(default=4_096, gt=0)
+    # 推理服务可单独配置“推理 + 可见回答”的总生成额度，不从窗口大小猜测。
+    reasoning_output_tokens: int | None = Field(default=None, gt=0)
+    safety_margin_tokens: int = Field(default=8_192, ge=0)
+    target_input_tokens: int = Field(default=64_000, gt=0)
+    summary_trigger_tokens: int = Field(default=48_000, gt=0)
+    summary_target_tokens: int = Field(default=32_000, gt=0)
+    # None 自动识别已知模型；未知模型按 UTF-8 字节保守估算。
+    # 可显式指定服务的 tiktoken encoding，或 "utf8_bytes" 强制保守估算。
+    tokenizer_encoding: str | None = None
+    completion_token_parameter: Literal["auto", "max_tokens", "max_completion_tokens"] = "auto"
+    stream_usage: bool = True
+    temperature: float | None = Field(default=0.7, ge=0, le=2)
+
+    @property
+    def generation_budget_tokens(self) -> int:
+        return self.reasoning_output_tokens or self.output_tokens
+
+    @model_validator(mode="after")
+    def validate_context_capacity(self):
+        if self.generation_budget_tokens > self.max_output_tokens:
+            raise ValueError("生成预算不能超过服务的最大输出额度")
+        if self.generation_budget_tokens + self.safety_margin_tokens >= self.context_window_tokens:
+            raise ValueError("上下文窗口必须大于生成预算与安全余量之和")
+        if not self.summary_target_tokens < self.summary_trigger_tokens <= self.target_input_tokens:
+            raise ValueError("摘要目标必须小于触发阈值，触发阈值不能超过常规输入目标")
+        return self
+
+
+class LLMProfile(LLMContextCapabilities):
     """一个 OpenAI 兼容服务的连接配置。密钥只在后端进程内使用。"""
 
     id: str
@@ -61,8 +96,8 @@ class LLMProfile(BaseModel):
     model: str
 
 
-class LLMConfig(BaseModel):
-    """用户填写的四项服务配置；运行时 ID 由服务地址和模型生成。"""
+class LLMConfig(LLMContextCapabilities):
+    """服务配置及可选容量覆盖；运行时 ID 由服务地址和模型生成。"""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -77,7 +112,7 @@ class Settings(BaseSettings):
     llm_api_key: str = ""
     llm_base_url: str = ""
     llm_model: str = ""
-    # JSON 数组中的模型只需 MODEL、API_KEY、BASE_URL、NAME。
+    # JSON 数组必填 MODEL、API_KEY、BASE_URL、NAME，可附加上下文能力配置。
     llm_models: str = ""
     llm_default_model_id: str = ""
     secret_key: str

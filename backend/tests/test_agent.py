@@ -5,6 +5,12 @@ from unittest.mock import patch
 from ai.agent import chat_stream
 
 
+def completed_chunk(content=None):
+    return SimpleNamespace(
+        choices=[SimpleNamespace(delta=SimpleNamespace(content=content), finish_reason="stop")]
+    )
+
+
 class ChatStreamTests(unittest.TestCase):
     def test_ignores_metadata_chunks_without_choices(self):
         chunks = [
@@ -12,6 +18,7 @@ class ChatStreamTests(unittest.TestCase):
             SimpleNamespace(choices=[]),
             SimpleNamespace(choices=[SimpleNamespace(delta=SimpleNamespace(content=None))]),
             SimpleNamespace(choices=[SimpleNamespace(delta=SimpleNamespace(content="second"))]),
+            completed_chunk(),
         ]
         completions = SimpleNamespace(create=lambda **_: iter(chunks))
         client = SimpleNamespace(chat=SimpleNamespace(completions=completions))
@@ -33,7 +40,7 @@ class ChatStreamTests(unittest.TestCase):
 
         def create(**kwargs):
             captured.update(kwargs)
-            return iter([])
+            return iter([completed_chunk("reply")])
 
         completions = SimpleNamespace(create=create)
         client = SimpleNamespace(chat=SimpleNamespace(completions=completions))
@@ -59,7 +66,7 @@ class ChatStreamTests(unittest.TestCase):
 
         def create(**kwargs):
             captured.append(kwargs["messages"][0]["content"])
-            return iter([])
+            return iter([completed_chunk("reply")])
 
         completions = SimpleNamespace(create=create)
         client = SimpleNamespace(chat=SimpleNamespace(completions=completions))

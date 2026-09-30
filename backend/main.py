@@ -7,6 +7,7 @@ from core.errors import install_api_error_handler
 from core.database import engine
 from core.avatar_uploads import UPLOAD_DIR
 from core.migrations import assert_database_at_head
+from services.chat_summaries import ChatSummaryWorker
 from routers import agent, auth, topics, nodes, chat, memories, plans, progress, llm
 import models  # noqa: F401 - ensure ORM relationships can resolve registered models
 
@@ -17,7 +18,12 @@ UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     assert_database_at_head(engine)
-    yield
+    summaries = ChatSummaryWorker()
+    summaries.start()
+    try:
+        yield
+    finally:
+        summaries.stop()
 
 
 app = FastAPI(

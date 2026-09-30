@@ -38,6 +38,12 @@ export interface Message {
   quote_source_local_id?: string
   db_id?: number
   paired_db_id?: number
+  chatRequest?: {
+    nodeKey: string
+    input: string
+    kind: 'qa' | 'topic_overview' | 'node_overview'
+    userMessageId?: number
+  }
   choices?: { label: string; text: string }[]
   selected_choice?: string
   messageType?: import('./learningAgent').StructuredMessageType
