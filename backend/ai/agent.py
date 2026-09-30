@@ -35,9 +35,9 @@ def chat_stream(
     """向 AI 发起流式请求，逐块 yield 文本片段。
 
     kind 参数说明：
-      - "qa"             默认 Q&A 模式；socratic 模式用苏格拉底式提问 prompt，normal 模式用普通 prompt
+      - "qa"             默认 Q&A 模式；socratic 模式用教学回答 prompt，normal 模式用普通 prompt
       - "topic_overview" 生成约 500 字的主题概览介绍
-      - "node_overview"  生成约 100 字的节点概览 + 一个引导性问题
+      - "node_overview"  生成约 180-260 字的节点概览
     """
     if kind == "topic_overview":
         system_prompt = TOPIC_OVERVIEW_PROMPT

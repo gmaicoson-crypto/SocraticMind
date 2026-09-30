@@ -10,13 +10,14 @@ def _load(name: str) -> str:
 
 
 # 苏格拉底式教学 prompt，对应三种 AI 风格
+SOCRATIC_BASE_PROMPT = _load("socratic_base")
 SOCRATIC_GENTLE_PROMPT = _load("socratic_gentle")
 SOCRATIC_STANDARD_PROMPT = _load("socratic_standard")
 SOCRATIC_STRICT_PROMPT = _load("socratic_strict")
 
 # 各场景的独立 prompt
 TOPIC_OVERVIEW_PROMPT = _load("topic_overview")  # 主题概览（约 500 字）
-NODE_OVERVIEW_PROMPT = _load("node_overview")  # 节点概览（约 100 字 + 引导问题）
+NODE_OVERVIEW_PROMPT = _load("node_overview")  # 节点概览（约 180-260 字）
 NORMAL_CHAT_PROMPT = _load("normal_chat")  # 普通对话模式
 GENERATE_NODES_PROMPT = _load("generate_nodes")  # 生成知识图谱节点
 RECOMMEND_TOPICS_PROMPT = _load("recommend_topics")  # 推荐学习主题
@@ -25,10 +26,12 @@ RECOMMEND_TOPICS_PROMPT = _load("recommend_topics")  # 推荐学习主题
 def get_socratic_prompt(ai_style: str) -> str:
     """根据用户设置的 AI 风格返回对应的苏格拉底式 prompt。"""
     if ai_style == "温和":
-        return SOCRATIC_GENTLE_PROMPT
+        style_prompt = SOCRATIC_GENTLE_PROMPT
     elif ai_style == "严格":
-        return SOCRATIC_STRICT_PROMPT
-    return SOCRATIC_STANDARD_PROMPT
+        style_prompt = SOCRATIC_STRICT_PROMPT
+    else:
+        style_prompt = SOCRATIC_STANDARD_PROMPT
+    return f"{SOCRATIC_BASE_PROMPT}\n\n{style_prompt}"
 
 
 def build_topic_overview_prompt(topic_title: str) -> str:
