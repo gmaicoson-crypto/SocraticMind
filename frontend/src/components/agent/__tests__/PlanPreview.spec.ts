@@ -41,14 +41,49 @@ const preview: PlanPreviewData = {
 }
 
 describe('PlanPreview', () => {
-  it('shows plan scope and emits server regeneration parameters', async () => {
+  it('shows compact plan cards and regenerates with the current preview parameters', async () => {
     const wrapper = mount(PlanPreview, { props: { preview } })
     expect(wrapper.text()).toContain(preview.topic)
     expect(wrapper.text()).toContain('1 个')
-    await wrapper.get('input[name="daily_minutes"]').setValue('20')
-    await wrapper.get('.preview-edit').trigger('submit')
-    expect(wrapper.emitted('update')?.[0]?.[0]).toMatchObject({ daily_minutes: 20 })
-    await wrapper.get('.tool-actions .primary').trigger('click')
+    expect(wrapper.findAll('.preview-section')).toHaveLength(2)
+    expect(wrapper.find('input').exists()).toBe(false)
+    const actions = wrapper.findAll('.tool-actions button')
+    expect(actions.map((button) => button.text())).toEqual(['重新生成', '取消', '确认创建'])
+    await actions[0].trigger('click')
+    expect(wrapper.emitted('update')?.[0]?.[0]).toEqual({
+      goal: preview.goal,
+      daily_minutes: preview.daily_minutes,
+      target_date: preview.target_date,
+    })
+    await actions[2].trigger('click')
     expect(wrapper.emitted('confirm')).toHaveLength(1)
+
+    await wrapper.setProps({ busy: true })
+    expect(actions.every((button) => button.attributes('disabled') !== undefined)).toBe(true)
+  })
+
+  it('shows the foundation test score and weaknesses without the internal level', () => {
+    const wrapper = mount(PlanPreview, {
+      props: {
+        preview: {
+          ...preview,
+          diagnostic: {
+            score: 82,
+            level: 'foundation',
+            domain: 'software',
+            outcome_type: 'concept',
+            strengths: [],
+            weaknesses: ['概念辨析'],
+            graph_guidance: [],
+          },
+        },
+      },
+    })
+    const card = wrapper.get('.diagnostic-card')
+    expect(card.text()).toContain('基础测试')
+    expect(card.text()).toContain('82/100')
+    expect(card.text()).toContain('薄弱点')
+    expect(card.text()).toContain('概念辨析')
+    expect(card.text()).not.toContain('foundation')
   })
 })

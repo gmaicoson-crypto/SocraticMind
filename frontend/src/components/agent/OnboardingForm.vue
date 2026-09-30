@@ -5,7 +5,6 @@
         <p class="tool-kicker">{{ mode === 'existing-topic' ? '创建主题计划' : '新学习主题' }}</p>
         <h3>{{ form.topic }}</h3>
       </div>
-      <span class="step-badge">设置目标</span>
     </div>
 
     <div class="form-grid">
@@ -14,7 +13,7 @@
         <BaseInput v-model="form.goal" name="goal" maxlength="300" required />
       </label>
       <label class="field">
-        <span>领域</span>
+        <span>领域范围</span>
         <BaseInput v-model="form.domain" name="domain" maxlength="100" required />
       </label>
       <label class="field">
@@ -48,15 +47,11 @@
         <span>目标日期</span>
         <BaseInput v-model="form.target_date" name="target_date" type="date" />
       </label>
-      <label class="field">
-        <span>时区</span>
-        <BaseInput v-model="form.timezone" name="timezone" maxlength="100" required />
-      </label>
     </div>
 
     <label class="diagnostic-toggle">
       <input v-model="form.use_diagnostic" name="use_diagnostic" type="checkbox" />
-      <span>先进行三题诊断</span>
+      <span>进行3题测试</span>
     </label>
     <p v-if="error" class="form-error">{{ error }}</p>
 
@@ -143,12 +138,12 @@ function submit() {
 
 <style scoped>
 .agent-tool {
-  width: min(100%, 680px);
+  width: min(100%, 520px);
   align-self: center;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--surface);
-  padding: 18px;
+  padding: 12px;
   color: var(--ink);
 }
 .tool-heading {
@@ -158,33 +153,25 @@ function submit() {
   align-items: flex-start;
 }
 .tool-kicker {
-  margin: 0 0 4px;
+  margin: 0 0 2px;
   color: var(--blue-2);
   font-size: 11px;
   font-weight: 700;
 }
 h3 {
   margin: 0;
-  font-size: 18px;
+  font-size: 15px;
   overflow-wrap: anywhere;
-}
-.step-badge {
-  flex: 0 0 auto;
-  padding: 4px 8px;
-  border-radius: 6px;
-  background: var(--blue-tint);
-  color: var(--blue-2);
-  font-size: 11px;
 }
 .form-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-  margin-top: 16px;
+  gap: 8px;
+  margin-top: 10px;
 }
 .field {
   display: grid;
-  gap: 6px;
+  gap: 4px;
   min-width: 0;
   color: var(--ink-2);
   font-size: 11px;
@@ -196,20 +183,20 @@ h3 {
 select {
   width: 100%;
   min-width: 0;
-  height: 36px;
-  padding: 0 10px;
+  height: 30px;
+  padding: 0 8px;
   border: 1px solid var(--line);
   border-radius: 6px;
   background: var(--bg);
   color: var(--ink);
   font: inherit;
-  font-size: 13px;
+  font-size: 12px;
 }
 .diagnostic-toggle {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  margin-top: 14px;
+  margin-top: 10px;
   color: var(--ink-2);
   font-size: 12px;
 }
@@ -228,15 +215,17 @@ select {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
-  margin-top: 18px;
+  margin-top: 12px;
 }
 .tool-actions :deep(.ui-button) {
-  min-width: 76px;
-  height: 34px;
+  min-width: 64px;
+  height: 30px;
+  padding: 0 8px;
   border: 1px solid var(--line);
   border-radius: 6px;
   background: var(--bg-2);
   color: var(--ink-2);
+  font-size: 12px;
   cursor: pointer;
 }
 .tool-actions :deep(.primary) {
@@ -246,7 +235,7 @@ select {
 }
 @media (max-width: 640px) {
   .agent-tool {
-    padding: 14px;
+    padding: 12px;
   }
   .form-grid {
     grid-template-columns: minmax(0, 1fr);

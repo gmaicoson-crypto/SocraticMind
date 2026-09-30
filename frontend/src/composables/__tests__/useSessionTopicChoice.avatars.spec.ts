@@ -41,12 +41,32 @@ describe('topic choice avatar inheritance', () => {
   it('keeps the random avatar when starting a different topic', async () => {
     const { session, choice, inheritTopicAvatar } = setup()
     vi.spyOn(Math, 'random').mockReturnValue(0)
+    session.messages.push({ role: 'user', text: 'B. 创建新的主题对话', time: '00:44' })
+    session.name = 'B. 创建新的主题对话'
     await choice.handlePendingTopicChoice('B. 创建新的主题对话')
 
     expect(inheritTopicAvatar).toHaveBeenCalledOnce()
     expect(session.aiAvatarUrl).toBe(aiAvatarPresets[0])
     expect(session.topicId).toBeUndefined()
+    expect(session.name).toBe('新学习对话')
+    expect(session.messages).toHaveLength(1)
+    expect(session.messages[0]).toMatchObject({
+      role: 'ai',
+      text: createDefaultSession('socratic').messages[0].text,
+    })
     vi.restoreAllMocks()
+  })
+
+  it('keeps the new topic request while removing the topic-choice exchange', async () => {
+    const { session, choice } = setup()
+    const request = { role: 'user' as const, text: '我想学 Python', time: '00:44' }
+    session.messages.push(request)
+
+    expect(await choice.handlePendingTopicChoice(request.text)).toBe(false)
+    expect(session.messages).toHaveLength(2)
+    expect(session.messages[0].text).toBe(createDefaultSession('socratic').messages[0].text)
+    expect(session.messages[1]).toEqual(request)
+    expect(session.awaitingTopicChoice).toBe(false)
   })
 
   it('preserves a manually selected avatar when starting a different topic', async () => {

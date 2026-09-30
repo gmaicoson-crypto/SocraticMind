@@ -2,6 +2,7 @@ import type { ComputedRef } from 'vue'
 import type { DialogueSession, Message, Topic } from '../types'
 import { isNewTopicIntent, now } from '../utils/chat'
 import { randomAiAvatar } from '../utils/avatarPresets'
+import { createWelcomeMessage } from './useChatSessions'
 
 interface SessionTopicChoiceOptions {
   currentSession: ComputedRef<DialogueSession | undefined>
@@ -80,14 +81,22 @@ export function useSessionTopicChoice(options: SessionTopicChoiceOptions) {
     }
 
     if (chooseNew) {
+      const choseNewTopicOption =
+        /^B[.、\s]/i.test(value) || /^(创建|重新创建)?新(的)?主题(对话)?$/.test(value.trim())
+      const newTopicRequest = session.messages.at(-1)
+      session.messages = [
+        createWelcomeMessage('socratic'),
+        ...(!choseNewTopicOption &&
+        newTopicRequest?.role === 'user' &&
+        newTopicRequest.text === value
+          ? [newTopicRequest]
+          : []),
+      ]
+      if (choseNewTopicOption) session.name = '新学习对话'
       if (!session.aiAvatarSelected) session.aiAvatarUrl = randomAiAvatar('socratic')
       clearTopicChoice(session)
       saveSessions()
-      if (/^B[.、\s]/i.test(value) || /^(创建|重新创建)?新(的)?主题(对话)?$/.test(value.trim())) {
-        pushMessage({ role: 'ai', text: '好的，请告诉我你想学习什么新主题。', time: now() })
-        return true
-      }
-      return false
+      return choseNewTopicOption
     }
 
     pushMessage({

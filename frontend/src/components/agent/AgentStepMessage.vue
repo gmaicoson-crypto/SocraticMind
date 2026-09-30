@@ -8,18 +8,22 @@
     <p v-if="showPrompt" class="step-prompt">{{ step.prompt }}</p>
     <div v-if="step.choices.length" class="step-choices">
       <button
-        v-for="choice in step.choices"
+        v-for="(choice, index) in step.choices"
         :key="choice"
+        :class="{ 'diagnostic-choice': kind === 'diagnostic' }"
         type="button"
         :disabled="busy"
         @click="emit('answer', choice)"
       >
-        {{ choice }}
+        <span v-if="kind === 'diagnostic'" class="choice-letter">
+          {{ String.fromCharCode(65 + index) }}.
+        </span>
+        <span>{{ choice }}</span>
       </button>
     </div>
     <div class="step-footer">
-      <button type="button" :disabled="busy" @click="emit('cancel')">取消流程</button>
       <span v-if="busy">正在提交</span>
+      <button type="button" :disabled="busy" @click="emit('cancel')">放弃{{ label }}</button>
     </div>
   </section>
 </template>
@@ -48,7 +52,7 @@ const emit = defineEmits<{
   cancel: []
 }>()
 
-const label = computed(() => (props.kind === 'assessment' ? '评估' : '诊断'))
+const label = computed(() => (props.kind === 'assessment' ? '评估' : '测试'))
 const progress = computed(() =>
   props.step.total ? (props.step.current / props.step.total) * 100 : 0,
 )
@@ -87,6 +91,9 @@ const progress = computed(() =>
   margin-top: 14px;
 }
 .step-choices button {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
   width: 100%;
   padding: 9px 11px;
   border: 1px solid var(--line);
@@ -97,24 +104,43 @@ const progress = computed(() =>
   cursor: pointer;
   overflow-wrap: anywhere;
 }
+.step-choices .diagnostic-choice {
+  font-size: 12px;
+}
+.choice-letter {
+  flex: 0 0 18px;
+}
 .step-choices button:hover {
   border-color: var(--blue-line);
   background: var(--blue-tint);
 }
 .step-footer {
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  gap: 12px;
   min-height: 24px;
   margin-top: 12px;
   color: var(--ink-3);
   font-size: 11px;
 }
 .step-footer button {
-  border: 0;
-  background: transparent;
-  color: var(--ink-3);
+  margin-left: auto;
+  min-height: 28px;
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--ink-2);
+  font-size: 11px;
   cursor: pointer;
-  padding: 3px 0;
+}
+.step-footer button:hover:not(:disabled) {
+  border-color: var(--danger-button-border);
+  background: var(--danger-button-bg);
+  color: var(--danger-button-text);
+}
+.step-footer button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 </style>

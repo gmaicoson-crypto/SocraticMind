@@ -24,6 +24,7 @@ export const useTopicsStore = defineStore('topics', () => {
   async function fetchNodes(topicId: number) {
     try {
       const data = await getNodes(topicId)
+      if (activeTopicId.value !== String(topicId)) return
       nodes.value = data.map((node) => ({
         id: node.node_key,
         label: node.label,
@@ -88,10 +89,8 @@ export const useTopicsStore = defineStore('topics', () => {
         nodes: topic.total_nodes,
         mastered: topic.mastered_nodes,
       }))
-      if (data.length > 0) {
-        activeTopicId.value = String(data[0].id)
-        await fetchNodes(data[0].id)
-      }
+      const activeTopic = data.find((topic) => String(topic.id) === activeTopicId.value)
+      if (activeTopic) await fetchNodes(activeTopic.id)
       fetchRecommendations()
     } catch (err) {
       console.error('加载主题失败', err)
@@ -99,7 +98,11 @@ export const useTopicsStore = defineStore('topics', () => {
   }
 
   async function setActiveTopic(id: string) {
-    if (activeTopicId.value !== id) activeNode.value = null
+    if (activeTopicId.value !== id) {
+      activeNode.value = null
+      nodes.value = []
+      edges.value = []
+    }
     activeTopicId.value = id
     const numericId = Number(id)
     if (!Number.isNaN(numericId)) await fetchNodes(numericId)

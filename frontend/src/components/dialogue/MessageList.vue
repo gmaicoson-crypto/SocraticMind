@@ -26,8 +26,8 @@
       <!-- Vue v-memo codegen needs the parentheses around this key. -->
       <!-- prettier-ignore-attribute :key -->
       <MessageItem
-        v-for="(msg, i) in messages"
-        :key="(msg.db_id ?? `${msg.role}-${msg.time}-${i}`)"
+        v-for="(msg, i) in visibleMessages"
+        :key="(msg.db_id ?? `${msg.role}-${msg.time}-${visibleMessageIndexes[i]}`)"
         v-memo="[
           msg.text,
           msg.quote,
@@ -39,22 +39,22 @@
           avatarUrl,
           aiAvatarUrl,
           isThinking,
-          i === messages.length - 1,
-          i === retryableIndex,
-          highlightedIndex === i,
+          visibleMessageIndexes[i] === messages.length - 1,
+          visibleMessageIndexes[i] === retryableIndex,
+          highlightedIndex === visibleMessageIndexes[i],
         ]"
         :message="msg"
-        :index="i"
-        :data-message-index="i"
-        :class="{ 'quote-target': highlightedIndex === i }"
-        :is-last="i === messages.length - 1"
+        :index="visibleMessageIndexes[i]"
+        :data-message-index="visibleMessageIndexes[i]"
+        :class="{ 'quote-target': highlightedIndex === visibleMessageIndexes[i] }"
+        :is-last="visibleMessageIndexes[i] === messages.length - 1"
         :is-thinking="isThinking"
-        :can-retry="i === retryableIndex"
+        :can-retry="visibleMessageIndexes[i] === retryableIndex"
         :can-jump-to-quote="findQuoteIndex(msg) !== -1"
         :avatar-url="avatarUrl"
         :ai-avatar-url="aiAvatarUrl"
-        @delete="$emit('delete', i)"
-        @retry="$emit('retry', i)"
+        @delete="$emit('delete', visibleMessageIndexes[i])"
+        @retry="$emit('retry', visibleMessageIndexes[i])"
         @quote="$emit('quote', msg)"
         @jump-to-quote="jumpToQuote(msg)"
         @change-ai-avatar="$emit('change-ai-avatar')"
@@ -120,6 +120,7 @@ import { ref, computed, nextTick, onBeforeUnmount } from 'vue'
 import type { Message } from '../../types'
 import { avatarSrc } from '../../utils/avatar'
 import { retryableAiIndex } from '../../utils/chat'
+import { SOCRATIC_WELCOME_TEXT } from '../../composables/useChatSessions'
 import InlineMarkdown from './InlineMarkdown.vue'
 import MessageItem from './MessageItem.vue'
 
@@ -138,6 +139,7 @@ const props = defineProps<{
   isThinking: boolean
   avatarUrl: string | null
   aiAvatarUrl: string
+  hideWelcome?: boolean
 }>()
 
 const displayStreamingText = computed(() => {
@@ -150,14 +152,27 @@ const displayStreamingText = computed(() => {
   return text
 })
 
+const visibleMessageIndexes = computed(() =>
+  props.messages.flatMap((message, index) => {
+    if (message.messageType && message.messageType !== 'chat') return []
+    if (props.hideWelcome && message.role === 'ai' && message.text === SOCRATIC_WELCOME_TEXT) {
+      return []
+    }
+    return [index]
+  }),
+)
+const visibleMessages = computed(() =>
+  visibleMessageIndexes.value.map((index) => props.messages[index]),
+)
 const retryableIndex = computed(() => retryableAiIndex(props.messages))
 const quoteTargets = computed(() => {
   const dbIds = new Map<number, number>()
   const localIds = new Map<string, number>()
-  props.messages.forEach((message, index) => {
+  visibleMessages.value.forEach((message, index) => {
     if (message.role !== 'ai') return
-    if (message.db_id != null) dbIds.set(message.db_id, index)
-    if (message.local_id) localIds.set(message.local_id, index)
+    const originalIndex = visibleMessageIndexes.value[index]
+    if (message.db_id != null) dbIds.set(message.db_id, originalIndex)
+    if (message.local_id) localIds.set(message.local_id, originalIndex)
   })
   return { dbIds, localIds }
 })

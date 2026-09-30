@@ -83,6 +83,7 @@
     <MessageList
       ref="messageListRef"
       :messages="messages"
+      :hide-welcome="hideSocraticWelcome"
       :streaming-text="streamingText"
       :streaming-choices="streamingChoices"
       :is-thinking="isThinking"
@@ -110,7 +111,6 @@
           :step="agentStore.run.step"
           :kind="agentStore.run.type === 'assessment' ? 'assessment' : 'diagnostic'"
           :busy="agentStore.submitting"
-          :show-prompt="!currentStepInHistory"
           @answer="submitChoiceAnswer"
           @cancel="cancelAgentFlow"
         />
@@ -395,8 +395,21 @@ const assessmentResult = computed<AssessmentResultData | null>(() => {
   if (!node?.assessmentResult || dismissedAssessmentNodeId.value === node.dbId) return null
   return node.assessmentResult
 })
-const socraticBadge = computed(() => Math.max(0, currentSocraticSession.value.messages.length - 1))
+const socraticBadge = computed(() =>
+  Math.max(
+    0,
+    currentSocraticSession.value.messages.filter(
+      (message) => !message.messageType || message.messageType === 'chat',
+    ).length - 1,
+  ),
+)
 const normalBadge = computed(() => Math.max(0, currentNormalSession.value.messages.length - 1))
+const hideSocraticWelcome = computed(
+  () =>
+    chatMode.value === 'socratic' &&
+    (Boolean(draftTopic.value || agentStore.run || currentSession.value?.topicId) ||
+      messages.value.some((message) => message.messageType && message.messageType !== 'chat')),
+)
 
 const placeholder = computed(() =>
   chatMode.value === 'socratic'
@@ -811,11 +824,21 @@ async function uploadAiAvatar(file: File) {
 function switchSession(id: string) {
   if (id === currentSessionId.value) return
   resetSessionInteraction()
-  if (chatMode.value === 'socratic') socraticCurrentId.value = id
-  else normalCurrentId.value = id
+  if (chatMode.value === 'socratic') {
+    socraticCurrentId.value = id
+    syncSessionTopic(currentSocraticSession.value)
+  } else normalCurrentId.value = id
   showHistory.value = false
   saveSessions()
   scrollToBottom()
+}
+
+function syncSessionTopic(session: Session) {
+  if (session.topicId == null) {
+    store.clearGraph()
+  } else if (store.activeTopicId !== String(session.topicId)) {
+    void store.setActiveTopic(String(session.topicId))
+  }
 }
 
 function newSession() {
@@ -829,6 +852,7 @@ function newSession() {
     prepareTopicChoice(session, previous)
     socraticSessions.value.unshift(session)
     socraticCurrentId.value = session.id
+    syncSessionTopic(session)
   } else {
     normalSessions.value.unshift(session)
     normalCurrentId.value = session.id
@@ -856,6 +880,7 @@ onMounted(() => {
   const cached = loadCachedChips(chatMode.value)
   chips.value = cached.length > 0 ? cached : defaultChips[chatMode.value]
 
+  syncSessionTopic(currentSocraticSession.value)
   isHydrated = true
 })
 
@@ -889,6 +914,7 @@ watch(
       socraticCurrentId.value = session.id
       saveSessions()
     }
+    syncSessionTopic(currentSocraticSession.value)
     nextTick(scrollToBottom)
   },
 )
@@ -899,6 +925,7 @@ watch(
     if (!draft) return
     chatMode.value = 'socratic'
     const session = findOrCreateTopicSession(draft.topicId)
+    syncSessionTopic(session)
     if (socraticCurrentId.value !== session.id) {
       socraticCurrentId.value = session.id
       showHistory.value = false
@@ -906,6 +933,16 @@ watch(
     }
     nextTick(scrollToBottom)
   },
+)
+
+watch(
+  () => agentStore.preview,
+  (preview) => {
+    if (preview && chatMode.value === 'socratic') {
+      requestAnimationFrame(scrollToBottom)
+    }
+  },
+  { flush: 'post' },
 )
 
 watch(
@@ -932,12 +969,14 @@ watch(
     }
     const numId = Number(activeTopicId)
     if (!numId) return
-    const session = findOrCreateTopicSession(numId)
-    if (socraticCurrentId.value !== session.id) {
-      socraticCurrentId.value = session.id
-      showHistory.value = false
-      saveSessions()
-      scrollToBottom()
+    if (currentSocraticSession.value?.topicId !== numId) {
+      const session = findOrCreateTopicSession(numId)
+      if (socraticCurrentId.value !== session.id) {
+        socraticCurrentId.value = session.id
+        showHistory.value = false
+        saveSessions()
+        scrollToBottom()
+      }
     }
 
     if (store.pendingTopicOverviewId === numId && isHydrated) {
@@ -1017,6 +1056,7 @@ async function deleteSession(id: string) {
         socraticCurrentId.value = socraticSessions.value[0].id
       }
     }
+    syncSessionTopic(currentSocraticSession.value)
   } else {
     if (normalSessions.value.length <= 1) {
       normalSessions.value[0] = createDefaultSession('normal')
