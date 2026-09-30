@@ -22,6 +22,11 @@ export interface StoredChatMessage extends ChatMessage {
 
 export type ChatKind = 'qa' | 'topic_overview' | 'node_overview'
 
+export interface ChatQuote {
+  text: string
+  sourceId?: number
+}
+
 export function chatStream(
   nodeKey: string,
   topicId: number,
@@ -36,6 +41,7 @@ export function chatStream(
   controllers?: AbortController,
   onMsgIds?: (userMsgId: number, aiMsgId: number) => void,
   kind: ChatKind = 'qa',
+  quote?: ChatQuote,
 ) {
   const token = getToken()
   const model = getSelectedModelId()
@@ -81,6 +87,7 @@ export function chatStream(
       mode,
       ai_style: aiStyle,
       kind,
+      ...(quote ? { quote_text: quote.text, quote_source_id: quote.sourceId } : {}),
       ...(model ? { model } : {}),
     }),
     signal: controller.signal,

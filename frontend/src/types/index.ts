@@ -33,6 +33,9 @@ export interface Message {
   text: string
   time: string
   quote?: string
+  local_id?: string
+  quote_source_db_id?: number
+  quote_source_local_id?: string
   db_id?: number
   paired_db_id?: number
   choices?: { label: string; text: string }[]

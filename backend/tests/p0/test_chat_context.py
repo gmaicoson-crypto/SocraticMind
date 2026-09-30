@@ -110,6 +110,55 @@ def test_stream_uses_last_ten_complete_server_messages(client, db_session, auth_
     assert "forged history" not in str(captured["messages"])
 
 
+def test_stream_persists_quote_target_in_user_message(client, db_session, auth_user, monkeypatch):
+    topic, node = create_chat_node(db_session, auth_user)
+    source = ChatMessage(
+        user_id=auth_user.id,
+        topic_id=topic.id,
+        session_id="server-session",
+        node_key=node.node_key,
+        role="ai",
+        content="original answer",
+        mode="socratic",
+        message_type="chat",
+        metadata_json={"status": "complete"},
+    )
+    db_session.add(source)
+    db_session.commit()
+    monkeypatch.setattr("routers.chat.chat_stream", lambda **_kwargs: iter(["reply"]))
+
+    response = client.post(
+        "/api/chat/stream",
+        json=stream_request(
+            topic,
+            node,
+            user_input="> original answer\n\nwhy?",
+            quote_text="original answer",
+            quote_source_id=source.id,
+        ),
+    )
+
+    assert response.status_code == 200
+    user_message = db_session.query(ChatMessage).filter(ChatMessage.role == "user").one()
+    assert user_message.metadata_json == {
+        "status": "complete",
+        "quote": "original answer",
+        "quote_source_id": source.id,
+    }
+
+    invalid = client.post(
+        "/api/chat/stream",
+        json=stream_request(
+            topic,
+            node,
+            session_id="other-session",
+            quote_text="original answer",
+            quote_source_id=source.id,
+        ),
+    )
+    assert invalid.status_code == 400
+
+
 def test_only_socratic_learning_chat_receives_memories(client, db_session, auth_user, monkeypatch):
     topic, node = create_chat_node(db_session, auth_user)
     other_topic = Topic(user_id=auth_user.id, title="Other")

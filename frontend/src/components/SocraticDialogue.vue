@@ -251,7 +251,14 @@ import {
   deleteChatAvatar,
 } from '../api/chat'
 import { updateTopicTitle } from '../api/topic'
-import { now, nowDate, extractTopic, isNewTopicIntent } from '../utils/chat'
+import {
+  now,
+  nowDate,
+  genId,
+  retryableAiIndex,
+  extractTopic,
+  isNewTopicIntent,
+} from '../utils/chat'
 import { avatarSrc } from '../utils/avatar'
 import { defaultAiAvatar, defaultNormalAiAvatar } from '../utils/avatarPresets'
 import { useChatSessions } from '../composables/useChatSessions'
@@ -832,6 +839,7 @@ function newSession() {
 }
 
 function resetSessionInteraction() {
+  clearQuote()
   streamEpoch += 1
   streamControl.abortRequest()
   activeStreamMessageIds = null
@@ -1042,8 +1050,14 @@ function saveSessionName(id: string) {
 function quoteMessage(msg: Message) {
   quotedText.value = msg.text
     .replace(/[#*`>]/g, '')
+    .replace(/\s+/g, ' ')
     .trim()
     .slice(0, 200)
+  if (!msg.db_id && !msg.local_id) {
+    msg.local_id = genId()
+    saveSessions()
+  }
+  quotedSource.value = { dbId: msg.db_id, localId: msg.local_id }
   nextTick(() => inputBarRef.value?.focus())
 }
 
@@ -1110,13 +1124,8 @@ function abortChat() {
   scrollToBottom()
 }
 
-function buildUserInput(v: string): string {
-  if (quotedText.value) {
-    const q = quotedText.value
-    quotedText.value = ''
-    return `> ${q}\n\n${v}`
-  }
-  return v
+function buildUserInput(v: string, quote?: string): string {
+  return quote ? `> ${quote}\n\n${v}` : v
 }
 
 function startTopicEdit() {
@@ -1215,14 +1224,17 @@ async function send() {
   }
 
   inputBarRef.value?.reset()
-  const userInput = buildUserInput(v)
   const quoteSnapshot = quotedText.value
-  quotedText.value = ''
+  const sourceSnapshot = quotedSource.value
+  const userInput = buildUserInput(v, quoteSnapshot)
+  clearQuote()
 
   pushMessage({
     role: 'user',
     text: v,
     quote: quoteSnapshot || undefined,
+    quote_source_db_id: sourceSnapshot?.dbId,
+    quote_source_local_id: sourceSnapshot?.localId,
     time: now(),
     messageType: 'chat',
   })
@@ -1286,6 +1298,8 @@ async function send() {
         aiMessageId = responseMessageId
         activeStreamMessageIds = { user: userMsgId, ai: responseMessageId }
       },
+      'qa',
+      quoteSnapshot ? { text: quoteSnapshot, sourceId: sourceSnapshot?.dbId } : undefined,
     )
     return
   }
@@ -1404,12 +1418,15 @@ async function send() {
       aiMessageId = responseMessageId
       activeStreamMessageIds = { user: userMsgId, ai: responseMessageId }
     },
+    'qa',
+    quoteSnapshot ? { text: quoteSnapshot, sourceId: sourceSnapshot?.dbId } : undefined,
   )
 }
 
 async function retryAt(aiIndex: number) {
   if (isThinking.value) return
   const msgs = currentSession.value?.messages ?? []
+  if (aiIndex !== retryableAiIndex(msgs)) return
   let userMsg: Message | null = null
   for (let i = aiIndex - 1; i >= 0; i--) {
     if (msgs[i].role === 'user') {
@@ -1438,7 +1455,7 @@ async function retryAt(aiIndex: number) {
     store.activeNode?.id ?? 'normal',
     currentTopicId.value,
     currentSession.value.id,
-    userMsg.text,
+    buildUserInput(userMsg.text, userMsg.quote),
     history,
     chatMode.value,
     aiStyle.value,
@@ -1482,6 +1499,8 @@ async function retryAt(aiIndex: number) {
       aiMessageId = responseMessageId
       activeStreamMessageIds = { user: userMsgId, ai: responseMessageId }
     },
+    'qa',
+    userMsg.quote ? { text: userMsg.quote, sourceId: userMsg.quote_source_db_id } : undefined,
   )
 }
 

@@ -25,12 +25,23 @@
     </div>
 
     <div class="msg-content" :class="message.role">
-      <div v-if="message.quote" class="msg-quote">
-        <span class="quote-bar" />
-        <span class="quote-text">{{ message.quote }}</span>
-      </div>
       <div class="bubble" :class="message.role">
         <InlineMarkdown :text="message.text" :with-caret="false" />
+      </div>
+      <button
+        v-if="message.quote && canJumpToQuote"
+        type="button"
+        class="msg-quote is-link"
+        title="跳转到引用的消息"
+        @click="emit('jump-to-quote')"
+      >
+        <span class="quote-bar" />
+        <span class="quote-text">{{ message.quote }}</span>
+        <ArrowUpRight :size="14" aria-hidden="true" />
+      </button>
+      <div v-else-if="message.quote" class="msg-quote">
+        <span class="quote-bar" />
+        <span class="quote-text">{{ message.quote }}</span>
       </div>
 
       <div
@@ -53,7 +64,8 @@
 
       <div class="msg-actions" :class="{ visible: hovered }">
         <span class="msg-time"
-          >{{ message.role === 'ai' ? 'Socrates AI' : '你' }} · {{ message.time }}</span
+          >{{ message.role === 'ai' ? 'Socrates AI' : '你' }} ·
+          {{ formatMessageTime(message.time) }}</span
         >
         <div class="action-btns">
           <button v-if="index > 0" class="action-btn delete" title="删除" @click="emit('delete')">
@@ -70,7 +82,7 @@
             </svg>
           </button>
           <button
-            v-if="message.role === 'ai' && !isThinking"
+            v-if="canRetry && !isThinking"
             class="action-btn"
             title="重新回答"
             @click="emit('retry')"
@@ -141,7 +153,9 @@
 
 <script setup lang="ts">
 import { onBeforeUnmount, ref } from 'vue'
+import { ArrowUpRight } from '@lucide/vue'
 import type { Message } from '../../types'
+import { formatMessageTime } from '../../utils/chat'
 import { avatarSrc } from '../../utils/avatar'
 import { defaultUserAvatar } from '../../utils/avatarPresets'
 import InlineMarkdown from './InlineMarkdown.vue'
@@ -151,6 +165,8 @@ const props = defineProps<{
   index: number
   isLast: boolean
   isThinking: boolean
+  canRetry: boolean
+  canJumpToQuote: boolean
   avatarUrl: string | null
   aiAvatarUrl: string
 }>()
@@ -159,6 +175,7 @@ const emit = defineEmits<{
   delete: []
   retry: []
   quote: []
+  'jump-to-quote': []
   'change-ai-avatar': []
   'select-choice': [text: string]
 }>()

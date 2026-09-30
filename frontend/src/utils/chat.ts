@@ -1,10 +1,32 @@
 // chat 工具模块，提供可复用的纯函数。
 export function now(): string {
-  return new Date().toLocaleTimeString('zh-CN', {
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  })
+  return new Date().toISOString()
+}
+
+export function formatMessageTime(value: string, today = new Date()): string {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  const pad = (part: number) => String(part).padStart(2, '0')
+  if (date.toDateString() === today.toDateString()) {
+    return `${pad(date.getHours())}:${pad(date.getMinutes())}`
+  }
+  const day = `${pad(date.getMonth() + 1)}/${pad(date.getDate())}`
+  return date.getFullYear() === today.getFullYear() ? day : `${date.getFullYear()}/${day}`
+}
+
+export function retryableAiIndex(
+  messages: { role: 'ai' | 'user'; messageType?: string }[],
+): number {
+  const index = messages.length - 1
+  if (
+    messages[index]?.role !== 'ai' ||
+    (messages[index].messageType && messages[index].messageType !== 'chat')
+  )
+    return -1
+  for (let i = index - 1; i >= 0; i--) {
+    if (messages[i].role === 'user') return index
+  }
+  return -1
 }
 
 export function nowDate(): string {

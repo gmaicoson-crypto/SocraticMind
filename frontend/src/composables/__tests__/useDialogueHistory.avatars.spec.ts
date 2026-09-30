@@ -121,4 +121,53 @@ describe('dialogue history avatars', () => {
     expect(socraticSessions.value[0].aiAvatarUrl).toBe(customAvatar)
     expect(socraticSessions.value[0].aiAvatarSelected).toBe(true)
   })
+
+  it('restores a quoted follow-up and its source from server metadata', async () => {
+    const socraticSessions = ref([createDefaultSession('socratic')])
+    vi.mocked(getAllMessages).mockResolvedValue([
+      {
+        id: 2,
+        role: 'user',
+        content: '> 原回答\n\n为什么？',
+        node_key: 'node',
+        mode: 'socratic',
+        topic_id: null,
+        session_id: 'quoted-session',
+        message_type: 'chat',
+        metadata: { status: 'complete', quote: '原回答', quote_source_id: 1 },
+        created_at: '2026-09-29T10:01:00Z',
+      },
+      {
+        id: 1,
+        role: 'ai',
+        content: '原回答',
+        node_key: 'node',
+        mode: 'socratic',
+        topic_id: null,
+        session_id: 'quoted-session',
+        message_type: 'chat',
+        metadata: { status: 'complete' },
+        created_at: '2026-09-29T10:00:00Z',
+      },
+    ])
+    const history = useDialogueHistory({
+      socraticSessions,
+      normalSessions: ref([createDefaultSession('normal')]),
+      topics: () => [],
+      createDefaultSession,
+      saveSessions: vi.fn(),
+      parseChoices: (text) => ({ cleanText: text, choices: null }),
+      inferSelectedChoices: vi.fn(),
+    })
+
+    await history.rebuildFromBackend()
+    const messages = socraticSessions.value.find(
+      (session) => session.id === 'quoted-session',
+    )!.messages
+    expect(messages[1]).toMatchObject({
+      text: '为什么？',
+      quote: '原回答',
+      quote_source_db_id: 1,
+    })
+  })
 })

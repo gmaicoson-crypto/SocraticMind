@@ -1,102 +1,114 @@
 <template>
-  <Transition name="scroll-btn">
-    <button
-      v-if="showScrollBtn"
-      class="scroll-to-bottom"
-      title="滚动到底部"
-      @click="scrollToBottom"
-    >
-      <svg
-        width="16"
-        height="16"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="2.5"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-      >
-        <polyline points="6 9 12 15 18 9" />
-      </svg>
-    </button>
-  </Transition>
-
-  <div ref="scrollRef" class="dlg-messages" @scroll="onMessagesScroll">
-    <!-- Vue v-memo codegen needs the parentheses around this key. -->
-    <!-- prettier-ignore-attribute :key -->
-    <MessageItem
-      v-for="(msg, i) in messages"
-      :key="(msg.db_id ?? `${msg.role}-${msg.time}-${i}`)"
-      v-memo="[
-        msg.text,
-        msg.quote,
-        msg.time,
-        msg.selected_choice,
-        avatarUrl,
-        aiAvatarUrl,
-        isThinking,
-        i === messages.length - 1,
-      ]"
-      :message="msg"
-      :index="i"
-      :is-last="i === messages.length - 1"
-      :is-thinking="isThinking"
-      :avatar-url="avatarUrl"
-      :ai-avatar-url="aiAvatarUrl"
-      @delete="$emit('delete', i)"
-      @retry="$emit('retry', i)"
-      @quote="$emit('quote', msg)"
-      @change-ai-avatar="$emit('change-ai-avatar')"
-      @select-choice="$emit('select-choice', $event)"
-    />
-
-    <slot name="agent" />
-
-    <div v-if="streamingText" class="msg-row ai">
+  <div class="message-list-shell">
+    <Transition name="scroll-btn">
       <button
-        type="button"
-        class="ai-avatar sm"
-        title="更改此对话的 AI 头像"
-        aria-label="更改此对话的 AI 头像"
-        @click="$emit('change-ai-avatar')"
+        v-if="showScrollBtn"
+        class="scroll-to-bottom"
+        title="滚动到底部"
+        @click="scrollToBottom"
       >
-        <img :src="avatarSrc(aiAvatarUrl)" alt="" class="ui-avatar-image ai-avatar-image" />
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
       </button>
-      <div class="msg-content ai">
-        <div class="bubble ai">
-          <InlineMarkdown :text="displayStreamingText" :with-caret="true" />
-        </div>
-        <div v-if="streamingChoices && streamingChoices.length" class="choices-row">
-          <button
-            v-for="c in streamingChoices"
-            :key="c.label"
-            class="choice-btn"
-            @click="$emit('select-choice', c.label + '. ' + c.text)"
-          >
-            <span class="choice-label">{{ c.label }}</span>
-            <span class="choice-text">{{ c.text }}</span>
-          </button>
+    </Transition>
+
+    <div ref="scrollRef" class="dlg-messages" @scroll="onMessagesScroll">
+      <!-- Vue v-memo codegen needs the parentheses around this key. -->
+      <!-- prettier-ignore-attribute :key -->
+      <MessageItem
+        v-for="(msg, i) in messages"
+        :key="(msg.db_id ?? `${msg.role}-${msg.time}-${i}`)"
+        v-memo="[
+          msg.text,
+          msg.quote,
+          msg.quote_source_db_id,
+          msg.quote_source_local_id,
+          findQuoteIndex(msg),
+          msg.time,
+          msg.selected_choice,
+          avatarUrl,
+          aiAvatarUrl,
+          isThinking,
+          i === messages.length - 1,
+          i === retryableIndex,
+          highlightedIndex === i,
+        ]"
+        :message="msg"
+        :index="i"
+        :data-message-index="i"
+        :class="{ 'quote-target': highlightedIndex === i }"
+        :is-last="i === messages.length - 1"
+        :is-thinking="isThinking"
+        :can-retry="i === retryableIndex"
+        :can-jump-to-quote="findQuoteIndex(msg) !== -1"
+        :avatar-url="avatarUrl"
+        :ai-avatar-url="aiAvatarUrl"
+        @delete="$emit('delete', i)"
+        @retry="$emit('retry', i)"
+        @quote="$emit('quote', msg)"
+        @jump-to-quote="jumpToQuote(msg)"
+        @change-ai-avatar="$emit('change-ai-avatar')"
+        @select-choice="$emit('select-choice', $event)"
+      />
+
+      <slot name="agent" />
+
+      <div v-if="streamingText" class="msg-row ai">
+        <button
+          type="button"
+          class="ai-avatar sm"
+          title="更改此对话的 AI 头像"
+          aria-label="更改此对话的 AI 头像"
+          @click="$emit('change-ai-avatar')"
+        >
+          <img :src="avatarSrc(aiAvatarUrl)" alt="" class="ui-avatar-image ai-avatar-image" />
+        </button>
+        <div class="msg-content ai">
+          <div class="bubble ai">
+            <InlineMarkdown :text="displayStreamingText" :with-caret="true" />
+          </div>
+          <div v-if="streamingChoices && streamingChoices.length" class="choices-row">
+            <button
+              v-for="c in streamingChoices"
+              :key="c.label"
+              class="choice-btn"
+              @click="$emit('select-choice', c.label + '. ' + c.text)"
+            >
+              <span class="choice-label">{{ c.label }}</span>
+              <span class="choice-text">{{ c.text }}</span>
+            </button>
+          </div>
         </div>
       </div>
-    </div>
 
-    <div v-if="isThinking && !streamingText" class="msg-row ai">
-      <button
-        type="button"
-        class="ai-avatar sm"
-        title="更改此对话的 AI 头像"
-        aria-label="更改此对话的 AI 头像"
-        @click="$emit('change-ai-avatar')"
-      >
-        <img :src="avatarSrc(aiAvatarUrl)" alt="" class="ui-avatar-image ai-avatar-image" />
-      </button>
-      <div
-        class="bubble ai"
-        style="display: flex; gap: 4px; align-items: center; padding: 12px 14px"
-      >
-        <span class="dot" style="animation-delay: 0ms" />
-        <span class="dot" style="animation-delay: 150ms" />
-        <span class="dot" style="animation-delay: 300ms" />
+      <div v-if="isThinking && !streamingText" class="msg-row ai">
+        <button
+          type="button"
+          class="ai-avatar sm"
+          title="更改此对话的 AI 头像"
+          aria-label="更改此对话的 AI 头像"
+          @click="$emit('change-ai-avatar')"
+        >
+          <img :src="avatarSrc(aiAvatarUrl)" alt="" class="ui-avatar-image ai-avatar-image" />
+        </button>
+        <div
+          class="bubble ai"
+          style="display: flex; gap: 4px; align-items: center; padding: 12px 14px"
+        >
+          <span class="dot" style="animation-delay: 0ms" />
+          <span class="dot" style="animation-delay: 150ms" />
+          <span class="dot" style="animation-delay: 300ms" />
+        </div>
       </div>
     </div>
   </div>
@@ -107,6 +119,7 @@
 import { ref, computed, nextTick, onBeforeUnmount } from 'vue'
 import type { Message } from '../../types'
 import { avatarSrc } from '../../utils/avatar'
+import { retryableAiIndex } from '../../utils/chat'
 import InlineMarkdown from './InlineMarkdown.vue'
 import MessageItem from './MessageItem.vue'
 
@@ -137,8 +150,43 @@ const displayStreamingText = computed(() => {
   return text
 })
 
+const retryableIndex = computed(() => retryableAiIndex(props.messages))
+const quoteTargets = computed(() => {
+  const dbIds = new Map<number, number>()
+  const localIds = new Map<string, number>()
+  props.messages.forEach((message, index) => {
+    if (message.role !== 'ai') return
+    if (message.db_id != null) dbIds.set(message.db_id, index)
+    if (message.local_id) localIds.set(message.local_id, index)
+  })
+  return { dbIds, localIds }
+})
+
+function findQuoteIndex(message: Message): number {
+  if (message.quote_source_db_id != null) {
+    const index = quoteTargets.value.dbIds.get(message.quote_source_db_id)
+    if (index != null) return index
+  }
+  if (message.quote_source_local_id) {
+    return quoteTargets.value.localIds.get(message.quote_source_local_id) ?? -1
+  }
+  return -1
+}
+
 const scrollRef = ref<HTMLElement | null>(null)
 const showScrollBtn = ref(false)
+const highlightedIndex = ref(-1)
+let highlightTimer: ReturnType<typeof setTimeout> | null = null
+
+function jumpToQuote(message: Message) {
+  const index = findQuoteIndex(message)
+  if (index < 0) return
+  const target = scrollRef.value?.querySelector<HTMLElement>(`[data-message-index="${index}"]`)
+  target?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  highlightedIndex.value = index
+  if (highlightTimer) clearTimeout(highlightTimer)
+  highlightTimer = setTimeout(() => (highlightedIndex.value = -1), 1800)
+}
 
 let scrollFrame: number | null = null
 function onMessagesScroll() {
@@ -159,12 +207,20 @@ function scrollToBottom() {
 
 onBeforeUnmount(() => {
   if (scrollFrame !== null) cancelAnimationFrame(scrollFrame)
+  if (highlightTimer) clearTimeout(highlightTimer)
 })
 
 defineExpose({ scrollToBottom })
 </script>
 
 <style scoped>
+.message-list-shell {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
 .dlg-messages {
   display: flex;
   flex: 1;
@@ -200,7 +256,7 @@ defineExpose({ scrollToBottom })
 .scroll-to-bottom {
   position: absolute;
   right: 18px;
-  bottom: 132px;
+  bottom: 12px;
   z-index: 10;
   display: flex;
   width: 34px;

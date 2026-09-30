@@ -299,13 +299,34 @@ body,
 
 .dlg-messages .msg-quote {
   display: flex;
-  max-width: 100%;
+  box-sizing: border-box;
+  width: fit-content;
+  max-width: min(45cqw, 100%);
+  height: 21px;
   align-items: stretch;
-  gap: 8px;
-  padding: 4px 0;
+  gap: 6px;
+  padding: 0 7px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
   color: var(--ink-3);
   font-size: 11.5px;
-  font-style: italic;
+  text-align: left;
+}
+
+.dlg-messages button.msg-quote {
+  cursor: pointer;
+}
+
+.dlg-messages button.msg-quote:hover,
+.dlg-messages button.msg-quote:focus-visible {
+  border-color: var(--blue-line);
+  color: var(--ink-2);
+}
+
+.dlg-messages .msg-row.quote-target .bubble {
+  outline: 2px solid var(--blue-line);
+  outline-offset: 3px;
 }
 
 .dlg-messages .quote-bar {
@@ -316,12 +337,17 @@ body,
 }
 
 .dlg-messages .quote-text {
-  display: -webkit-box;
+  display: block;
+  min-width: 0;
+  flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+}
+
+.dlg-messages .msg-quote svg {
+  flex-shrink: 0;
+  align-self: center;
 }
 
 .dlg-messages .bubble {

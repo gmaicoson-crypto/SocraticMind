@@ -68,6 +68,8 @@ class ChatRequest(BaseModel):
     ai_style: str = Field(default="标准", min_length=1, max_length=20)
     kind: Literal["qa", "topic_overview", "node_overview"] = "qa"
     model: str | None = Field(default=None, min_length=1, max_length=100)
+    quote_text: str | None = Field(default=None, max_length=200)
+    quote_source_id: int | None = Field(default=None, gt=0)
 
     @field_validator("node_key", "session_id", "ai_style")
     @classmethod
@@ -164,6 +166,20 @@ def chat_stream_endpoint(
             user_id=current_user.id,
             topic_id=req.topic_id,
         )
+    if req.quote_source_id is not None:
+        source = (
+            db.query(ChatMessage)
+            .filter(
+                ChatMessage.id == req.quote_source_id,
+                ChatMessage.user_id == current_user.id,
+                ChatMessage.session_id == req.session_id,
+                ChatMessage.role == "ai",
+                ChatMessage.mode == req.mode,
+            )
+            .one_or_none()
+        )
+        if source is None or not req.quote_text:
+            raise HTTPException(status_code=400, detail="引用消息无效")
     user_msg, ai_msg = start_chat_messages(
         db,
         user_id=current_user.id,
@@ -172,6 +188,8 @@ def chat_stream_endpoint(
         node_key=node_label if req.kind == "topic_overview" else req.node_key,
         user_input=req.user_input,
         mode=req.mode,
+        quote_text=req.quote_text,
+        quote_source_id=req.quote_source_id,
     )
 
     def generate():

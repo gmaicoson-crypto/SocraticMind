@@ -47,6 +47,8 @@ def start_chat_messages(
     node_key: str,
     user_input: str,
     mode: str,
+    quote_text: str | None = None,
+    quote_source_id: int | None = None,
 ) -> tuple[ChatMessage, ChatMessage]:
     # node_key is a display/context field for topic overviews and may contain
     # a longer topic title than the legacy column allows.
@@ -60,7 +62,11 @@ def start_chat_messages(
         content=user_input,
         mode=mode,
         message_type="chat",
-        metadata_json={"status": "complete"},
+        metadata_json={
+            "status": "complete",
+            **({"quote": quote_text} if quote_text else {}),
+            **({"quote_source_id": quote_source_id} if quote_source_id else {}),
+        },
     )
     ai_message = ChatMessage(
         user_id=user_id,

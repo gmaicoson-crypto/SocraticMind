@@ -64,6 +64,19 @@ function structuredMessageSignature(message: Message): string | null {
   return null
 }
 
+function quotedUserContent(content: string, metadata: Record<string, unknown> | null) {
+  const savedQuote = typeof metadata?.quote === 'string' ? metadata.quote : null
+  const legacyQuote = /^> ([^\n]+)\n\n([\s\S]+)$/.exec(content)
+  const quote = savedQuote ?? legacyQuote?.[1]
+  const prefix = quote ? `> ${quote}\n\n` : ''
+  return {
+    text: prefix && content.startsWith(prefix) ? content.slice(prefix.length) : content,
+    quote,
+    quoteSourceId:
+      typeof metadata?.quote_source_id === 'number' ? metadata.quote_source_id : undefined,
+  }
+}
+
 export function useDialogueHistory(options: DialogueHistoryOptions) {
   const {
     socraticSessions,
@@ -171,9 +184,12 @@ export function useDialogueHistory(options: DialogueHistoryOptions) {
           }
         }
         if (!message.content.trim()) return null
+        const quoted = quotedUserContent(message.content, message.metadata)
         return {
           role: 'user',
-          text: message.content,
+          text: quoted.text,
+          quote: quoted.quote ?? undefined,
+          quote_source_db_id: quoted.quoteSourceId,
           time: message.created_at || now(),
           db_id: message.id,
           messageType: message.message_type,
@@ -197,6 +213,19 @@ export function useDialogueHistory(options: DialogueHistoryOptions) {
             .map((message) => convertMessage(message, mode === 'socratic'))
             .filter((message): message is Message => message != null)
           if (existing) {
+            const localByDbId = new Map(
+              existing.messages
+                .filter((message) => message.db_id != null)
+                .map((message) => [message.db_id, message] as const),
+            )
+            for (const message of messages) {
+              const local = localByDbId.get(message.db_id)
+              if (!local) continue
+              message.local_id = local.local_id
+              message.quote ??= local.quote
+              message.quote_source_db_id ??= local.quote_source_db_id
+              message.quote_source_local_id = local.quote_source_local_id
+            }
             const persistedStructured = new Set(
               messages
                 .map(structuredMessageSignature)
