@@ -162,17 +162,18 @@
             </button>
           </div>
         </div>
-        <NodeMasteryControls
-          v-else-if="chatMode === 'socratic' && store.activeNode && !draftTopic && !activeAgentRun"
-          :node="store.activeNode"
-          :busy="agentStore.submitting"
-          :error="agentStore.error?.message"
-          @assess="startAssessment"
-          @self-report="requestMasteryAction('self_report')"
-          @revert="requestMasteryAction('revert')"
-        />
       </template>
     </MessageList>
+
+    <NodeMasteryControls
+      v-if="chatMode === 'socratic' && store.activeNode && !draftTopic && !activeAgentRun"
+      :node="store.activeNode"
+      :busy="agentStore.submitting"
+      :error="agentStore.error?.message"
+      @assess="startAssessment"
+      @self-report="requestMasteryAction('self_report')"
+      @revert="requestMasteryAction('revert')"
+    />
 
     <DialogueInputBar
       ref="inputBarRef"
