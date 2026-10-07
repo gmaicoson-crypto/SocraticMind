@@ -26,8 +26,14 @@
 
     <div class="msg-content" :class="message.role">
       <div class="bubble" :class="message.role">
-        <InlineMarkdown :text="message.text" :with-caret="false" />
+        <InlineMarkdown
+          :text="message.text"
+          :with-caret="false"
+          :assistant="message.role === 'ai'"
+          :web="messageWeb(message.metadata)"
+        />
       </div>
+      <MessageSources v-if="message.role === 'ai'" :web="messageWeb(message.metadata)" />
       <button
         v-if="message.quote && canJumpToQuote"
         type="button"
@@ -171,6 +177,8 @@ import { formatMessageTime } from '../../utils/chat'
 import { avatarSrc } from '../../utils/avatar'
 import { defaultUserAvatar } from '../../utils/avatarPresets'
 import InlineMarkdown from './InlineMarkdown.vue'
+import MessageSources from './MessageSources.vue'
+import { messageWeb } from '../../utils/webSearch'
 
 const props = defineProps<{
   message: Message

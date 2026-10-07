@@ -1,41 +1,37 @@
 <template>
-  <div class="md-inline" v-html="renderedHtml" />
+  <div class="md-inline" @click="copyCode" v-html="renderedHtml" />
   <span v-if="withCaret" class="typing-caret" />
 </template>
 
 <script setup lang="ts">
 // InlineMarkdown 组件，封装局部界面和交互逻辑。
 import { ref, watch, onBeforeUnmount } from 'vue'
-import { marked } from 'marked'
-import hljs from 'highlight.js'
+import type { WebSnapshot } from '../../types/webSearch'
+import { createMessageMarkdownRenderer } from '../../utils/messageMarkdown'
 
 const props = defineProps<{
   text: string
   withCaret?: boolean
+  assistant?: boolean
+  web?: WebSnapshot
 }>()
+const renderMarkdown = createMessageMarkdownRenderer()
 
-marked.setOptions({
-  breaks: true,
-  gfm: true,
-})
-
-const renderer = new marked.Renderer()
-
-renderer.code = ({ text, lang }: { text: string; lang?: string }) => {
-  const language = lang && hljs.getLanguage(lang) ? lang : 'plaintext'
-  const highlighted = hljs.highlight(text, { language }).value
-  const langLabel = lang ? `<span class="code-lang">${lang}</span>` : ''
-  return `<div class="code-block">
-    <div class="code-header">
-      ${langLabel}
-      <button class="code-copy" onclick="navigator.clipboard.writeText(this.closest('.code-block').querySelector('code').innerText)">复制</button>
-    </div>
-    <pre><code class="hljs language-${language}">${highlighted}</code></pre>
-  </div>`
-}
-
-renderer.codespan = ({ text }: { text: string }) => {
-  return `<code class="inline-code">${text}</code>`
+async function copyCode(event: MouseEvent) {
+  const target =
+    event.target instanceof Element
+      ? event.target.closest<HTMLButtonElement>('button.code-copy')
+      : null
+  if (!target || !(event.currentTarget instanceof Element) || !event.currentTarget.contains(target))
+    return
+  const code = target.closest('.code-block')?.querySelector('code')
+  if (!code) return
+  try {
+    await navigator.clipboard.writeText(code.textContent ?? '')
+    target.textContent = '已复制'
+  } catch {
+    target.textContent = '复制失败'
+  }
 }
 
 function preprocessMarkdown(md: string): string {
@@ -60,12 +56,18 @@ const renderedHtml = ref('')
 let pendingFrame: number | null = null
 
 function compileNow(text: string) {
-  renderedHtml.value = text ? (marked.parse(preprocessMarkdown(text), { renderer }) as string) : ''
+  renderedHtml.value = text
+    ? renderMarkdown(preprocessMarkdown(text), {
+        web: props.web,
+        assistant: props.assistant,
+        streaming: props.withCaret,
+      }).html
+    : ''
 }
 
 watch(
-  () => props.text,
-  (text) => {
+  () => [props.text, props.web, props.assistant, props.withCaret] as const,
+  ([text]) => {
     if (props.withCaret) {
       if (pendingFrame !== null) return
       pendingFrame = requestAnimationFrame(() => {
@@ -242,5 +244,18 @@ onBeforeUnmount(() => {
 }
 .md-inline tr:nth-child(even) {
   background: var(--bg-2);
+}
+</style>
+
+<style scoped>
+:deep(.source-citation) {
+  font-size: 0.8em;
+  vertical-align: super;
+  margin-inline: 2px;
+  color: var(--blue);
+}
+:deep(.source-unavailable) {
+  color: var(--ink-3);
+  font-size: 0.85em;
 }
 </style>

@@ -262,7 +262,13 @@ export function useDialogueHistory(options: DialogueHistoryOptions) {
               }),
             )
           }
-          messages.sort((a, b) => (a.time || '').localeCompare(b.time || ''))
+          messages.sort((a, b) => {
+            const timeOrder = (a.time || '').localeCompare(b.time || '')
+            if (timeOrder !== 0) return timeOrder
+            if (a.db_id == null) return b.db_id == null ? 0 : 1
+            if (b.db_id == null) return -1
+            return a.db_id - b.db_id
+          })
           if (mode === 'socratic') inferSelectedChoices(messages)
           const topicId = group[0]?.topic_id ?? undefined
           const topic = topics().find((item) => Number(item.id) === topicId)

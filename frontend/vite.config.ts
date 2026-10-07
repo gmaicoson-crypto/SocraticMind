@@ -5,7 +5,7 @@ import vue from '@vitejs/plugin-vue'
 
 const vendorChunks: Record<string, string[]> = {
   'vendor-vue': ['vue', 'vue-router', 'pinia'],
-  'vendor-md': ['marked', 'highlight.js'],
+  'vendor-md': ['marked', 'highlight.js', 'dompurify'],
   'vendor-flow': ['@vue-flow/core', '@vue-flow/background', 'dagre'],
   'vendor-editor': ['md-editor-v3'],
   'vendor-confetti': ['canvas-confetti'],

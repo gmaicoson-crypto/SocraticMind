@@ -7,6 +7,9 @@ import MessageList from '../dialogue/MessageList.vue'
 import { createDefaultSession } from '../../composables/useChatSessions'
 import { cancelChatStream, chatStream, deleteMessages } from '../../api/chat'
 
+import { webSnapshot } from '../../test/fixtures/webSearch'
+import type { WebSnapshot } from '../../types/webSearch'
+
 vi.mock('../../api/chat', () => ({
   chatStream: vi.fn(),
   cancelChatStream: vi.fn().mockResolvedValue(undefined),
@@ -26,11 +29,17 @@ vi.mock('../../api/models', () => ({
   deleteCustomModel: vi.fn(),
 }))
 
-async function mountDialogue() {
+async function mountDialogue(initialWeb?: WebSnapshot) {
   const session = createDefaultSession('normal')
   session.messages.push(
     { role: 'user', text: '原问题', time: '2026-01-01T00:00:01Z', db_id: 10 },
-    { role: 'ai', text: '原回答', time: '2026-01-01T00:00:02Z', db_id: 11 },
+    {
+      role: 'ai',
+      text: '原回答',
+      time: '2026-01-01T00:00:02Z',
+      db_id: 11,
+      metadata: initialWeb ? { web: initialWeb } : undefined,
+    },
   )
   localStorage.setItem('sm_normal_sessions', JSON.stringify([session]))
   localStorage.setItem('sm_normal_cur', session.id)
@@ -61,13 +70,13 @@ describe('server managed conversation lifecycle', () => {
     list.vm.$emit('retry', 2)
     await flushPromises()
     const call = currentCall()
-    expect(call[14]).toBe(11)
-    expect(call[4]).toMatch(/^[\da-f-]{36}$/)
+    expect(call[0].regenerateMessageId).toBe(11)
+    expect(call[0].requestId).toMatch(/^[\da-f-]{36}$/)
     expect(list.props('messages').filter((message) => message.role === 'user')).toHaveLength(1)
     expect(list.props('messages')[2].text).toBe('原回答')
-    call[11]?.(10, 12)
-    call[7]('新回答')
-    call[8]()
+    call[1].onMsgIds?.(10, 12)
+    call[1].onChunk('新回答')
+    call[1].onDone()
     await flushPromises()
     expect(list.props('messages').map((message) => message.text)).toContain('新回答')
     expect(list.props('messages').map((message) => message.text)).not.toContain('原回答')
@@ -81,16 +90,16 @@ describe('server managed conversation lifecycle', () => {
     wrapper.findComponent(MessageList).vm.$emit('retry', 2)
     await flushPromises()
     const first = currentCall()
-    first[11]?.(10, 12)
-    first[9](new Error('上下文过长'))
+    first[1].onMsgIds?.(10, 12)
+    first[1].onError(new Error('上下文过长'))
     await flushPromises()
     expect(wrapper.findComponent(MessageList).props('messages')[2].text).toBe('原回答')
     expect(wrapper.get('.chat-error').text()).toContain('上下文过长')
     await wrapper.get('.chat-error button').trigger('click')
     const retry = currentCall()
-    expect(retry[4]).not.toBe(first[4])
-    expect(retry[14]).toBe(12)
-    retry[9](new Error('停止测试'))
+    expect(retry[0].requestId).not.toBe(first[0].requestId)
+    expect(retry[0].regenerateMessageId).toBe(12)
+    retry[1].onError(new Error('停止测试'))
     wrapper.unmount()
   })
 
@@ -101,18 +110,18 @@ describe('server managed conversation lifecycle', () => {
     input.vm.$emit('send')
     await flushPromises()
     const first = currentCall()
-    first[9](new Error('连接中断'))
+    first[1].onError(new Error('连接中断'))
     await flushPromises()
     await wrapper.get('.chat-error button').trigger('click')
     const retry = currentCall()
-    expect(retry[4]).toBe(first[4])
+    expect(retry[0].requestId).toBe(first[0].requestId)
     expect(
       wrapper
         .findComponent(MessageList)
         .props('messages')
         .filter((message) => message.text === '下一问'),
     ).toHaveLength(1)
-    retry[9](new Error('停止测试'))
+    retry[1].onError(new Error('停止测试'))
     wrapper.unmount()
   })
 
@@ -121,16 +130,16 @@ describe('server managed conversation lifecycle', () => {
     wrapper.findComponent(MessageList).vm.$emit('retry', 2)
     await flushPromises()
     const call = currentCall()
-    call[11]?.(10, 12)
-    call[7]('未完成的新回答')
+    call[1].onMsgIds?.(10, 12)
+    call[1].onChunk('未完成的新回答')
     wrapper.findComponent(DialogueInputBar).vm.$emit('abort')
     await flushPromises()
-    expect(cancelChatStream).toHaveBeenCalledWith(session.id, call[4])
-    expect(call[10]?.signal.aborted).toBe(true)
+    expect(cancelChatStream).toHaveBeenCalledWith(session.id, call[0].requestId)
+    expect(call[0].controller?.signal.aborted).toBe(true)
     expect(wrapper.findComponent(MessageList).props('messages')[2].text).toBe('原回答')
     expect(wrapper.findComponent(MessageList).props('messages')).toHaveLength(3)
-    call[7]('迟到的片段')
-    call[8]()
+    call[1].onChunk('迟到的片段')
+    call[1].onDone()
     await flushPromises()
     expect(wrapper.findComponent(MessageList).props('messages')[2].text).toBe('原回答')
     wrapper.unmount()
@@ -143,17 +152,17 @@ describe('server managed conversation lifecycle', () => {
     input.vm.$emit('send')
     await flushPromises()
     const first = currentCall()
-    first[11]?.(13, 14)
-    first[7]('部分回答')
+    first[1].onMsgIds?.(13, 14)
+    first[1].onChunk('部分回答')
     input.vm.$emit('abort')
     await flushPromises()
     expect(wrapper.findComponent(MessageList).props('messages').at(-1)?.text).toBe('部分回答')
     await wrapper.get('.chat-error button').trigger('click')
     const retry = currentCall()
-    expect(retry[14]).toBe(14)
-    retry[11]?.(13, 15)
-    retry[7]('完整回答')
-    retry[8]()
+    expect(retry[0].regenerateMessageId).toBe(14)
+    retry[1].onMsgIds?.(13, 15)
+    retry[1].onChunk('完整回答')
+    retry[1].onDone()
     await flushPromises()
     const messages = wrapper.findComponent(MessageList).props('messages')
     expect(messages.map((message) => message.text)).not.toContain('部分回答')
@@ -167,8 +176,8 @@ describe('server managed conversation lifecycle', () => {
     wrapper.findComponent(MessageList).vm.$emit('retry', 2)
     await flushPromises()
     const call = currentCall()
-    call[11]?.(10, 12)
-    call[8]()
+    call[1].onMsgIds?.(10, 12)
+    call[1].onDone()
     await flushPromises()
     expect(wrapper.findComponent(MessageList).props('messages')[2].text).toBe('原回答')
     expect(wrapper.get('.chat-error').text()).toContain('未返回可用的回答')
@@ -184,14 +193,14 @@ describe('server managed conversation lifecycle', () => {
     input.vm.$emit('send')
     await flushPromises()
     const first = currentCall()
-    first[9]({ code: 'CHAT_SESSION_BUSY', message: '会话忙，请稍后重试', retryable: false })
+    first[1].onError({ code: 'CHAT_SESSION_BUSY', message: '会话忙，请稍后重试', retryable: false })
     await flushPromises()
     localStorage.setItem('sm_llm_model', 'model-changed')
     await wrapper.get('.chat-error button').trigger('click')
     const retry = currentCall()
-    expect(retry[4]).toBe(first[4])
-    expect(retry[15]).toBe('model-original')
-    retry[9](new Error('停止测试'))
+    expect(retry[0].requestId).toBe(first[0].requestId)
+    expect(retry[0].modelId).toBe('model-original')
+    retry[1].onError(new Error('停止测试'))
     wrapper.unmount()
   })
 
@@ -202,8 +211,8 @@ describe('server managed conversation lifecycle', () => {
     input.vm.$emit('send')
     await flushPromises()
     const call = currentCall()
-    call[11]?.(13, 14)
-    call[9]({
+    call[1].onMsgIds?.(13, 14)
+    call[1].onError({
       code: 'CHAT_CONTEXT_TOO_LARGE',
       message: '请缩小引用范围或拆分输入',
       retryable: false,
@@ -224,10 +233,10 @@ describe('server managed conversation lifecycle', () => {
     const call = currentCall()
     input.vm.$emit('abort')
     await flushPromises()
-    expect(cancelChatStream).toHaveBeenCalledWith(session.id, call[4])
-    call[11]?.(13, 14)
-    call[7]('迟到的回答')
-    call[8]()
+    expect(cancelChatStream).toHaveBeenCalledWith(session.id, call[0].requestId)
+    call[1].onMsgIds?.(13, 14)
+    call[1].onChunk('迟到的回答')
+    call[1].onDone()
     await flushPromises()
     expect(wrapper.findComponent(MessageList).props('messages').at(-1)?.text).toBe('下一问')
     expect(wrapper.findComponent(MessageList).props('messages').at(-1)?.db_id).toBeUndefined()
@@ -250,9 +259,9 @@ describe('server managed conversation lifecycle', () => {
     expect(wrapper.findComponent(MessageList).props('messages').at(-1)?.db_id).toBe(13)
     await wrapper.get('.chat-error button').trigger('click')
     const retry = currentCall()
-    expect(retry[4]).not.toBe(first[4])
-    expect(retry[14]).toBe(14)
-    retry[9](new Error('停止测试'))
+    expect(retry[0].requestId).not.toBe(first[0].requestId)
+    expect(retry[0].regenerateMessageId).toBe(14)
+    retry[1].onError(new Error('停止测试'))
     wrapper.unmount()
   })
 
@@ -268,9 +277,9 @@ describe('server managed conversation lifecycle', () => {
     await flushPromises()
     await wrapper.get('.chat-error button').trigger('click')
     const retry = currentCall()
-    expect(retry[4]).not.toBe(first[4])
-    expect(retry[14]).toBeUndefined()
-    retry[9](new Error('停止测试'))
+    expect(retry[0].requestId).not.toBe(first[0].requestId)
+    expect(retry[0].regenerateMessageId).toBeUndefined()
+    retry[1].onError(new Error('停止测试'))
     wrapper.unmount()
   })
 
@@ -282,19 +291,19 @@ describe('server managed conversation lifecycle', () => {
     await flushPromises()
     const call = currentCall()
     expect(wrapper.get('.dlg-sub').text()).toBe('正在思考…')
-    call[16]?.('compacting')
+    call[1].onContextStatus?.('compacting')
     await flushPromises()
     expect(wrapper.get('.dlg-sub').text()).toBe('正在整理较早的对话')
-    call[16]?.('ready')
+    call[1].onContextStatus?.('ready')
     await flushPromises()
     expect(wrapper.get('.dlg-sub').text()).toBe('正在思考…')
-    call[16]?.('compacting')
-    call[7]('回答')
+    call[1].onContextStatus?.('compacting')
+    call[1].onChunk('回答')
     await flushPromises()
     expect(wrapper.get('.dlg-sub').text()).toBe('正在思考…')
     input.vm.$emit('abort')
     await flushPromises()
-    call[16]?.('compacting')
+    call[1].onContextStatus?.('compacting')
     await flushPromises()
     expect(wrapper.get('.dlg-sub').text()).not.toContain('正在整理')
     wrapper.unmount()
@@ -307,9 +316,13 @@ describe('server managed conversation lifecycle', () => {
     input.vm.$emit('send')
     await flushPromises()
     const first = currentCall()
-    first[11]?.(13, 14)
-    first[7]('未完成的回答')
-    first[9]({ code: 'AI_STREAM_INCOMPLETE', message: '回答尚未完成，请重新生成', retryable: true })
+    first[1].onMsgIds?.(13, 14)
+    first[1].onChunk('未完成的回答')
+    first[1].onError({
+      code: 'AI_STREAM_INCOMPLETE',
+      message: '回答尚未完成，请重新生成',
+      retryable: true,
+    })
     await flushPromises()
     const list = wrapper.findComponent(MessageList)
     expect(list.props('messages').at(-1)).toMatchObject({
@@ -320,10 +333,10 @@ describe('server managed conversation lifecycle', () => {
     expect(list.text()).toContain('未完成')
     await wrapper.get('.chat-error button').trigger('click')
     const retry = currentCall()
-    expect(retry[14]).toBe(14)
-    retry[11]?.(13, 15)
-    retry[7]('完整回答')
-    retry[8]()
+    expect(retry[0].regenerateMessageId).toBe(14)
+    retry[1].onMsgIds?.(13, 15)
+    retry[1].onChunk('完整回答')
+    retry[1].onDone()
     await flushPromises()
     expect(list.props('messages').at(-1)?.text).toBe('完整回答')
     expect(list.props('messages').map((message) => message.text)).not.toContain('未完成的回答')
@@ -338,9 +351,9 @@ describe('server managed conversation lifecycle', () => {
     input.vm.$emit('send')
     await flushPromises()
     const first = currentCall()
-    first[11]?.(13, 14)
-    first[7]('未完成的回答')
-    first[9]({ code: 'AI_OUTPUT_LIMIT', message: '输出达到上限', retryable: false })
+    first[1].onMsgIds?.(13, 14)
+    first[1].onChunk('未完成的回答')
+    first[1].onError({ code: 'AI_OUTPUT_LIMIT', message: '输出达到上限', retryable: false })
     await flushPromises()
     const list = wrapper.findComponent(MessageList)
     expect(list.props('messages').at(-1)).toMatchObject({
@@ -353,10 +366,10 @@ describe('server managed conversation lifecycle', () => {
     input.vm.$emit('send')
     await flushPromises()
     const continuation = currentCall()
-    expect(continuation[3]).toBe('继续')
-    expect(continuation[4]).not.toBe(first[4])
-    expect(continuation[14]).toBeUndefined()
-    continuation[9](new Error('停止测试'))
+    expect(continuation[0].userInput).toBe('继续')
+    expect(continuation[0].requestId).not.toBe(first[0].requestId)
+    expect(continuation[0].regenerateMessageId).toBeUndefined()
+    continuation[1].onError(new Error('停止测试'))
     wrapper.unmount()
   })
 
@@ -366,9 +379,9 @@ describe('server managed conversation lifecycle', () => {
     list.vm.$emit('retry', 2)
     await flushPromises()
     const call = currentCall()
-    call[11]?.(10, 12)
-    call[7]('未完成的新回答')
-    call[9]({ code: 'AI_OUTPUT_LIMIT', message: '输出达到上限', retryable: false })
+    call[1].onMsgIds?.(10, 12)
+    call[1].onChunk('未完成的新回答')
+    call[1].onError({ code: 'AI_OUTPUT_LIMIT', message: '输出达到上限', retryable: false })
     await flushPromises()
     expect(list.props('messages')[2].text).toBe('原回答')
     expect(list.props('messages')).toHaveLength(3)
@@ -397,6 +410,134 @@ describe('server managed conversation lifecycle', () => {
     list.vm.$emit('delete', 2)
     await flushPromises()
     expect(list.props('messages')).toHaveLength(2)
+    wrapper.unmount()
+  })
+  it('leaves networking to the backend when an unknown request is retried', async () => {
+    const { wrapper } = await mountDialogue()
+    const input = wrapper.findComponent(DialogueInputBar)
+    expect(input.find('[aria-label="联网模式"]').exists()).toBe(false)
+    input.vm.$emit('update:input', '新问题')
+    input.vm.$emit('send')
+    await flushPromises()
+    const first = currentCall()
+    expect(first[0]).not.toHaveProperty('webMode')
+    first[1].onError(new Error('断网'))
+    await flushPromises()
+    await wrapper.get('.chat-error button').trigger('click')
+    expect(currentCall()[0].requestId).toBe(first[0].requestId)
+    expect(currentCall()[0]).not.toHaveProperty('webMode')
+    currentCall()[1].onError(new Error('停止'))
+    wrapper.unmount()
+  })
+
+  it('keeps the original answer and sources on regeneration failure without a frontend search preference', async () => {
+    const original = webSnapshot()
+    const { wrapper } = await mountDialogue(original)
+    const list = wrapper.findComponent(MessageList)
+    list.vm.$emit('retry', 2)
+    await flushPromises()
+    const call = currentCall()
+    expect(call[0]).not.toHaveProperty('webMode')
+    call[1].onMsgIds?.(10, 12)
+    call[1].onWebEvent?.({
+      type: 'web_sources',
+      request_id: call[0].requestId,
+      ai_message_id: 12,
+      web: webSnapshot({ sources: [] }),
+      final: false,
+    })
+    call[1].onChunk('新的部分回答')
+    call[1].onError(new Error('失败'))
+    await flushPromises()
+    expect(list.props('messages')[2].metadata?.web).toEqual(original)
+    expect(list.props('messages')[2].text).toBe('原回答')
+    wrapper.unmount()
+  })
+
+  it('retains web metadata and cited ids after interruption and discards late web events', async () => {
+    const { wrapper } = await mountDialogue()
+    const input = wrapper.findComponent(DialogueInputBar)
+    input.vm.$emit('update:input', '最新情况')
+    input.vm.$emit('send')
+    await flushPromises()
+    const call = currentCall()
+    call[1].onMsgIds?.(13, 14)
+    const event = {
+      type: 'web_sources' as const,
+      request_id: call[0].requestId,
+      ai_message_id: 14,
+      web: webSnapshot({ cited_source_ids: [] }),
+      final: false,
+    }
+    call[1].onWebEvent?.(event)
+    call[1].onChunk('部分回答 [[source:s1]]')
+    input.vm.$emit('abort')
+    call[1].onWebEvent?.({ ...event, web: webSnapshot({ status: 'failed', sources: [] }) })
+    await flushPromises()
+    const last = wrapper.findComponent(MessageList).props('messages').at(-1)!
+    expect(last.metadata).toMatchObject({
+      status: 'interrupted',
+      web: { status: 'ready', cited_source_ids: ['s1'] },
+    })
+    expect(last.chatRequest).not.toHaveProperty('webMode')
+    wrapper.unmount()
+  })
+
+  it('persists final sources on success and isolates web events after a session switch', async () => {
+    const { wrapper } = await mountDialogue()
+    const input = wrapper.findComponent(DialogueInputBar)
+    input.vm.$emit('update:input', '最新情况')
+    input.vm.$emit('send')
+    await flushPromises()
+    const call = currentCall()
+    call[1].onMsgIds?.(13, 14)
+    const event = {
+      type: 'web_sources' as const,
+      request_id: call[0].requestId,
+      ai_message_id: 14,
+      web: webSnapshot(),
+      final: true,
+    }
+    call[1].onChunk('回答 [[source:s1]]')
+    call[1].onWebEvent?.(event)
+    call[1].onDone()
+    await flushPromises()
+    expect(wrapper.findComponent(MessageList).props('messages').at(-1)?.metadata?.web).toEqual(
+      event.web,
+    )
+    input.vm.$emit('update:input', '下一轮')
+    input.vm.$emit('send')
+    await flushPromises()
+    const running = currentCall()
+    running[1].onMsgIds?.(15, 16)
+    await wrapper.get('button[title="新建对话"]').trigger('click')
+    running[1].onWebEvent?.({ ...event, request_id: running[0].requestId, ai_message_id: 16 })
+    await flushPromises()
+    expect(wrapper.findComponent(MessageList).props('streamingWeb')).toBeUndefined()
+    wrapper.unmount()
+  })
+
+  it('shows search unavailability on the message only when reported by the backend', async () => {
+    const { wrapper } = await mountDialogue()
+    expect(wrapper.text()).not.toContain('联网暂不可用')
+    const input = wrapper.findComponent(DialogueInputBar)
+    input.vm.$emit('update:input', '最新情况')
+    input.vm.$emit('send')
+    await flushPromises()
+    const call = currentCall()
+    call[1].onMsgIds?.(13, 14)
+    call[1].onWebEvent?.({
+      type: 'web_warning',
+      request_id: call[0].requestId,
+      ai_message_id: 14,
+      web: webSnapshot({ status: 'unavailable', sources: [], cited_source_ids: [] }),
+      warning: { code: 'WEB_UNAVAILABLE', message: '当前无法核实最新资料。', retryable: true },
+    })
+    await flushPromises()
+    expect(wrapper.findComponent(MessageList).text()).toContain('联网暂不可用')
+    expect(wrapper.findComponent(MessageList).text()).toContain('当前无法核实最新资料')
+    expect(input.text()).not.toContain('联网暂不可用')
+    call[1].onError(new Error('停止'))
     wrapper.unmount()
   })
 })

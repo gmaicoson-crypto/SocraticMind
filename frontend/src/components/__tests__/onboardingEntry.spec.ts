@@ -91,7 +91,7 @@ describe('onboarding entry points', () => {
     await dialogue.get('.chips-list .chip').trigger('click')
     await flushPromises()
 
-    expect(vi.mocked(chatStream).mock.calls[0]?.[3]).toBe('今天天气怎么样')
+    expect(vi.mocked(chatStream).mock.calls[0]?.[0].userInput).toBe('今天天气怎么样')
     expect((dialogue.get('textarea').element as HTMLTextAreaElement).value).toBe('')
     dialogue.unmount()
   })

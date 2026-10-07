@@ -3,6 +3,7 @@
 import api from './index'
 import { getToken } from '../utils/token'
 import { getSelectedModelId } from '../utils/modelSelection'
+import type { WebEvent } from '../types/webSearch'
 
 export interface ChatMessage {
   role: 'ai' | 'user'
@@ -75,26 +76,47 @@ export async function cancelChatStream(
   return response.data
 }
 
-export async function chatStream(
-  nodeKey: string,
-  topicId: number,
-  sessionId: string,
-  userInput: string,
-  requestId: string,
-  mode: 'socratic' | 'normal',
-  aiStyle: string,
-  onChunk: (text: string) => void,
-  onDone: () => void,
-  onError: (err: unknown) => void,
-  controllers?: AbortController,
-  onMsgIds?: (userMsgId: number, aiMsgId: number) => void,
-  kind: ChatKind = 'qa',
-  quote?: ChatQuote,
-  regenerateMessageId?: number,
-  modelId: string | null = getSelectedModelId(),
-  onContextStatus?: (status: ChatContextStatus) => void,
-) {
-  const controller = controllers ?? new AbortController()
+export interface ChatStreamRequest {
+  nodeKey: string
+  topicId: number
+  sessionId: string
+  userInput: string
+  requestId: string
+  mode: 'socratic' | 'normal'
+  aiStyle: string
+  controller?: AbortController
+  kind?: ChatKind
+  quote?: ChatQuote
+  regenerateMessageId?: number
+  modelId?: string | null
+}
+
+export interface ChatStreamCallbacks {
+  onChunk: (text: string) => void
+  onDone: () => void
+  onError: (err: unknown) => void
+  onMsgIds?: (userMsgId: number, aiMsgId: number) => void
+  onContextStatus?: (status: ChatContextStatus) => void
+  onWebEvent?: (event: WebEvent) => void
+}
+
+export async function chatStream(request: ChatStreamRequest, callbacks: ChatStreamCallbacks) {
+  const {
+    nodeKey,
+    topicId,
+    sessionId,
+    userInput,
+    requestId,
+    mode,
+    aiStyle,
+    kind = 'qa',
+    quote,
+    regenerateMessageId,
+    modelId = getSelectedModelId(),
+  } = request
+  const { onChunk, onDone, onError, onMsgIds, onContextStatus, onWebEvent } = callbacks
+  const controller = request.controller ?? new AbortController()
+  let aiMessageId: number | undefined
   const model = modelId
   let terminalEventSent = false
   let failedState: ChatStreamError | null = null
@@ -177,7 +199,21 @@ export async function chatStream(
         }
         if (json.type === 'context_compacting') onContextStatus?.('compacting')
         if (json.type === 'context_ready') onContextStatus?.('ready')
-        if (json.msg_ids) onMsgIds?.(json.msg_ids.user, json.msg_ids.ai)
+        if (json.msg_ids) {
+          aiMessageId = json.msg_ids.ai
+          onMsgIds?.(json.msg_ids.user, json.msg_ids.ai)
+        }
+        if (['web_status', 'web_sources', 'web_warning'].includes(json.type)) {
+          if (
+            json.request_id === requestId &&
+            typeof json.ai_message_id === 'number' &&
+            aiMessageId === json.ai_message_id &&
+            json.web?.schema_version === 1 &&
+            Array.isArray(json.web.sources) &&
+            Array.isArray(json.web.cited_source_ids)
+          )
+            onWebEvent?.(json as WebEvent)
+        }
         if (json.text) onChunk(json.text)
         if (json.error) notifyError(streamError(json.error))
         const status = json.request_state?.status

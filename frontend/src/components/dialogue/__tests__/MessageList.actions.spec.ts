@@ -2,6 +2,7 @@ import { mount } from '@vue/test-utils'
 import { describe, expect, it, vi } from 'vitest'
 import MessageList from '../MessageList.vue'
 import type { Message } from '../../../types'
+import { webSnapshot } from '../../../test/fixtures/webSearch'
 import { createWelcomeMessage } from '../../../composables/useChatSessions'
 
 function mountList(messages: Message[]) {
@@ -129,5 +130,15 @@ describe('MessageList actions', () => {
 
     await wrapper.setProps({ hideWelcome: true })
     expect(wrapper.find('.msg-row').exists()).toBe(false)
+  })
+  it('refreshes sources on a metadata-only update despite memoized message rows', async () => {
+    const message: Message = { role: 'ai', text: '结论 [[source:s1]]', time: '10:00', db_id: 10 }
+    const wrapper = mountList([message])
+    expect(wrapper.find('.message-sources').exists()).toBe(false)
+    await wrapper.setProps({ messages: [{ ...message, metadata: { web: webSnapshot() } }] })
+    expect(wrapper.get('.source-citation').attributes('href')).toBe('https://example.com/releases')
+    expect(wrapper.get('.message-sources').text()).toContain('引用 1 条来源')
+    expect(wrapper.get('.message-sources').text()).toContain('依据相关片段')
+    wrapper.unmount()
   })
 })

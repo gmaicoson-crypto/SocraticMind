@@ -4,6 +4,7 @@ import { getAllMessages, type StoredChatMessage } from '../../api/chat'
 import { useDialogueHistory } from '../useDialogueHistory'
 import { createDefaultSession } from '../useChatSessions'
 import { retryableAiIndex } from '../../utils/chat'
+import { webSnapshot } from '../../test/fixtures/webSearch'
 
 vi.mock('../../api/chat', () => ({ getAllMessages: vi.fn() }))
 
@@ -31,17 +32,62 @@ function createHistory() {
     { role: 'ai', text: '旧回答', time: '2026-01-01T00:00:02Z', db_id: 11 },
   )
   const sessions = ref([existing])
+  const normalSessions = ref([createDefaultSession('normal')])
   const history = useDialogueHistory({
     socraticSessions: sessions,
-    normalSessions: ref([createDefaultSession('normal')]),
+    normalSessions,
     topics: () => [],
     createDefaultSession,
     saveSessions: vi.fn(),
     parseChoices: (text) => ({ cleanText: text, choices: null }),
     inferSelectedChoices: vi.fn(),
   })
-  return { sessions, history }
+  return { sessions, normalSessions, history }
 }
+
+describe('restoring message order', () => {
+  it.each(['socratic', 'normal'] as const)(
+    'keeps the user before an AI reply with the same timestamp in %s mode',
+    async (mode) => {
+      const { sessions, normalSessions, history } = createHistory()
+      const modeSessions = mode === 'socratic' ? sessions : normalSessions
+      modeSessions.value[0].id = 'same-time-session'
+      modeSessions.value[0].messages = [
+        { role: 'user', text: '待同步的提问', time: '2026-01-01T00:00:01Z' },
+      ]
+      vi.mocked(getAllMessages).mockResolvedValue([
+        stored({
+          id: 22,
+          role: 'ai',
+          content: '回答',
+          mode,
+          session_id: 'same-time-session',
+          metadata: { user_message_id: 21 },
+        }),
+        stored({
+          id: 21,
+          role: 'user',
+          content: '提问',
+          mode,
+          session_id: 'same-time-session',
+        }),
+      ])
+
+      await history.rebuildFromBackend()
+
+      expect(modeSessions.value[0].messages.map((message) => message.db_id ?? 'local')).toEqual([
+        21,
+        22,
+        'local',
+      ])
+      expect(modeSessions.value[0].messages.map((message) => message.role)).toEqual([
+        'user',
+        'ai',
+        'user',
+      ])
+    },
+  )
+})
 
 describe('restoring server managed context', () => {
   it('replaces cached superseded replies and restores the original request for later regeneration', async () => {
@@ -92,5 +138,26 @@ describe('restoring server managed context', () => {
       },
     })
     expect(retryableAiIndex(messages)).toBe(messages.length - 1)
+  })
+  it('restores authoritative sources without creating a frontend search preference', async () => {
+    const { sessions, history } = createHistory()
+    const web = webSnapshot()
+    vi.mocked(getAllMessages).mockResolvedValue([
+      stored({}),
+      stored({
+        id: 12,
+        role: 'ai',
+        content: '结论 [[source:s1]]',
+        metadata: { status: 'interrupted', user_message_id: 10, kind: 'qa', web },
+      }),
+    ])
+    await history.rebuildFromBackend()
+    expect(sessions.value[0]).not.toHaveProperty('webMode')
+    expect(sessions.value[0].messages.find((message) => message.db_id === 12)).toMatchObject({
+      metadata: { web },
+    })
+    expect(
+      sessions.value[0].messages.find((message) => message.db_id === 12)?.chatRequest,
+    ).not.toHaveProperty('webMode')
   })
 })

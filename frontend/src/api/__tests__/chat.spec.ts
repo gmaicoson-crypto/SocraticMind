@@ -27,16 +27,16 @@ describe('chatStream terminal events', () => {
     const onError = vi.fn()
 
     chatStream(
-      'node',
-      1,
-      'session',
-      'question',
-      'request-one',
-      'socratic',
-      '标准',
-      vi.fn(),
-      onDone,
-      onError,
+      {
+        nodeKey: 'node',
+        topicId: 1,
+        sessionId: 'session',
+        userInput: 'question',
+        requestId: 'request-one',
+        mode: 'socratic',
+        aiStyle: '标准',
+      },
+      { onChunk: vi.fn(), onDone: onDone, onError: onError },
     )
 
     await new Promise((resolve) => setTimeout(resolve, 0))
@@ -55,20 +55,18 @@ describe('chatStream terminal events', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     chatStream(
-      'node',
-      1,
-      'session',
-      '> answer\n\nwhy?',
-      'request-one',
-      'socratic',
-      '标准',
-      vi.fn(),
-      vi.fn(),
-      vi.fn(),
-      undefined,
-      undefined,
-      'qa',
-      { text: 'answer', sourceId: 7 },
+      {
+        nodeKey: 'node',
+        topicId: 1,
+        sessionId: 'session',
+        userInput: '> answer\n\nwhy?',
+        requestId: 'request-one',
+        mode: 'socratic',
+        aiStyle: '标准',
+        kind: 'qa',
+        quote: { text: 'answer', sourceId: 7 },
+      },
+      { onChunk: vi.fn(), onDone: vi.fn(), onError: vi.fn() },
     )
 
     const body = JSON.parse(fetchMock.mock.calls[0][1].body)
@@ -97,16 +95,16 @@ describe('chatStream terminal events', () => {
     const onDone = vi.fn()
     const onError = vi.fn()
     await chatStream(
-      'node',
-      1,
-      'session',
-      'question',
-      'request',
-      'socratic',
-      '标准',
-      onChunk,
-      onDone,
-      onError,
+      {
+        nodeKey: 'node',
+        topicId: 1,
+        sessionId: 'session',
+        userInput: 'question',
+        requestId: 'request',
+        mode: 'socratic',
+        aiStyle: '标准',
+      },
+      { onChunk: onChunk, onDone: onDone, onError: onError },
     )
     expect(onChunk).toHaveBeenCalledWith('partial')
     expect(onDone).not.toHaveBeenCalled()
@@ -137,18 +135,16 @@ describe('chatStream terminal events', () => {
       const onError = vi.fn()
       const onIds = vi.fn()
       await chatStream(
-        'node',
-        1,
-        'session',
-        'question',
-        'request',
-        'socratic',
-        '标准',
-        vi.fn(),
-        onDone,
-        onError,
-        undefined,
-        onIds,
+        {
+          nodeKey: 'node',
+          topicId: 1,
+          sessionId: 'session',
+          userInput: 'question',
+          requestId: 'request',
+          mode: 'socratic',
+          aiStyle: '标准',
+        },
+        { onChunk: vi.fn(), onDone: onDone, onError: onError, onMsgIds: onIds },
       )
       expect(onIds).toHaveBeenCalledWith(3, 4)
       expect(onDone).toHaveBeenCalledOnce()
@@ -169,16 +165,16 @@ describe('chatStream terminal events', () => {
     )
     const onError = vi.fn()
     await chatStream(
-      'node',
-      1,
-      'session',
-      'question',
-      'request',
-      'socratic',
-      '标准',
-      vi.fn(),
-      vi.fn(),
-      onError,
+      {
+        nodeKey: 'node',
+        topicId: 1,
+        sessionId: 'session',
+        userInput: 'question',
+        requestId: 'request',
+        mode: 'socratic',
+        aiStyle: '标准',
+      },
+      { onChunk: vi.fn(), onDone: vi.fn(), onError: onError },
     )
     expect(onError).toHaveBeenCalledWith(
       expect.objectContaining({ code: 'CHAT_REQUEST_RUNNING', message: '当前会话正在生成回复' }),
@@ -209,23 +205,18 @@ describe('chatStream terminal events', () => {
     const onDone = vi.fn()
     const onError = vi.fn()
     await chatStream(
-      'node',
-      1,
-      'session',
-      'question',
-      'request',
-      'socratic',
-      '标准',
-      vi.fn(),
-      onDone,
-      onError,
-      undefined,
-      undefined,
-      'qa',
-      undefined,
-      undefined,
-      null,
-      onContext,
+      {
+        nodeKey: 'node',
+        topicId: 1,
+        sessionId: 'session',
+        userInput: 'question',
+        requestId: 'request',
+        mode: 'socratic',
+        aiStyle: '标准',
+        kind: 'qa',
+        modelId: null,
+      },
+      { onChunk: vi.fn(), onDone: onDone, onError: onError, onContextStatus: onContext },
     )
     expect(onContext.mock.calls).toEqual([['compacting'], ['ready']])
     expect(onDone).toHaveBeenCalledOnce()
@@ -250,18 +241,16 @@ describe('chatStream terminal events', () => {
     const onIds = vi.fn()
     const onError = vi.fn()
     await chatStream(
-      'node',
-      1,
-      'session',
-      'question',
-      'request',
-      'socratic',
-      '标准',
-      vi.fn(),
-      vi.fn(),
-      onError,
-      undefined,
-      onIds,
+      {
+        nodeKey: 'node',
+        topicId: 1,
+        sessionId: 'session',
+        userInput: 'question',
+        requestId: 'request',
+        mode: 'socratic',
+        aiStyle: '标准',
+      },
+      { onChunk: vi.fn(), onDone: vi.fn(), onError: onError, onMsgIds: onIds },
     )
     expect(onIds).toHaveBeenCalledWith(8, 9)
     expect(onError).toHaveBeenCalledWith(
@@ -282,21 +271,18 @@ describe('chatStream terminal events', () => {
     })
     vi.stubGlobal('fetch', fetchMock)
     await chatStream(
-      'node',
-      1,
-      'session',
-      'question',
-      'new-request',
-      'socratic',
-      '标准',
-      vi.fn(),
-      vi.fn(),
-      vi.fn(),
-      undefined,
-      undefined,
-      'qa',
-      undefined,
-      9,
+      {
+        nodeKey: 'node',
+        topicId: 1,
+        sessionId: 'session',
+        userInput: 'question',
+        requestId: 'new-request',
+        mode: 'socratic',
+        aiStyle: '标准',
+        kind: 'qa',
+        regenerateMessageId: 9,
+      },
+      { onChunk: vi.fn(), onDone: vi.fn(), onError: vi.fn() },
     )
     expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toMatchObject({
       request_id: 'new-request',

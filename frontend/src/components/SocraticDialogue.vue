@@ -40,7 +40,9 @@
               isThinking
                 ? contextCompacting
                   ? '正在整理较早的对话'
-                  : '正在思考…'
+                  : streamingWeb && ['deciding', 'searching'].includes(streamingWeb.status)
+                    ? webStatusText[streamingWeb.status]
+                    : '正在思考…'
                 : '通过提问引导你发现答案'
             }}
           </div>
@@ -93,6 +95,7 @@
       :messages="messages"
       :hide-welcome="hideSocraticWelcome"
       :streaming-text="streamingText"
+      :streaming-web="streamingWeb"
       :streaming-choices="streamingChoices"
       :is-thinking="isThinking"
       :avatar-url="store.userInfo?.avatar_url ?? null"
@@ -276,6 +279,9 @@ import {
   isNewTopicIntent,
 } from '../utils/chat'
 import { getSelectedModelId } from '../utils/modelSelection'
+import type { WebSnapshot } from '../types/webSearch'
+import { webStatusText } from '../utils/webSearch'
+import { webSnapshotForText } from '../utils/messageMarkdown'
 import { avatarSrc } from '../utils/avatar'
 import { defaultAiAvatar, defaultNormalAiAvatar } from '../utils/avatarPresets'
 import { useChatSessions } from '../composables/useChatSessions'
@@ -327,6 +333,7 @@ const isThinking = ref(false)
 const contextCompacting = ref(false)
 const isGenerating = ref(false)
 const streamingText = ref('')
+const streamingWeb = ref<WebSnapshot>()
 const streamingChoices = ref<{ label: string; text: string }[] | null>(null)
 const quotedText = ref('')
 const quotedSource = ref<{ dbId?: number; localId?: string } | null>(null)
@@ -893,6 +900,7 @@ function resetSessionInteraction() {
   activeStreamMessageIds = null
   activeStreamUserMessage = null
   streamingText.value = ''
+  streamingWeb.value = undefined
   streamingChoices.value = null
   isThinking.value = false
   agentStore.clearRun()
@@ -1178,6 +1186,7 @@ interface StreamContext {
   onPartial?: (message: Message) => void
   onCancelled?: (ids?: { user: number; ai: number }) => void
   cancelled?: boolean
+  web?: WebSnapshot
 }
 
 function cancelActiveStream(): Promise<boolean> {
@@ -1236,9 +1245,10 @@ function abortChat() {
   activeStreamUserMessage = null
   const partial = streamingText.value.trim()
   streamingText.value = ''
+  streamingWeb.value = undefined
   streamingChoices.value = null
   isThinking.value = false
-  if (partial && !replacing) {
+  if ((partial || stoppingStream?.web) && !replacing) {
     const { cleanText, choices } = parseChoices(partial)
     if (messageIds && userMessage) userMessage.db_id = messageIds.user
     const partialMessage: Message = {
@@ -1247,7 +1257,7 @@ function abortChat() {
       time: now(),
       choices: choices ?? undefined,
       db_id: messageIds?.ai,
-      metadata: { status: 'interrupted' },
+      metadata: { status: 'interrupted', web: webSnapshotForText(stoppingStream?.web, partial) },
       paired_db_id: userMessage ? undefined : messageIds?.user,
     }
     pushMessage(partialMessage)
@@ -1280,6 +1290,7 @@ function streamDialogue(request: DialogueRequest): Promise<void> {
   activeStreamUserMessage = request.userMessage ?? null
   isThinking.value = true
   streamingText.value = ''
+  streamingWeb.value = undefined
   streamingChoices.value = null
   scrollToBottom()
   return new Promise((resolve) => {
@@ -1320,6 +1331,7 @@ function streamDialogue(request: DialogueRequest): Promise<void> {
       activeStreamMessageIds = null
       activeStreamUserMessage = null
       streamingText.value = ''
+      streamingWeb.value = undefined
       streamingChoices.value = null
       isThinking.value = false
       contextCompacting.value = false
@@ -1330,7 +1342,7 @@ function streamDialogue(request: DialogueRequest): Promise<void> {
       if (!isCurrentStream(stream)) return resolve()
       chatError.value = chatErrorMessage(error)
       const partial = streamingText.value.trim()
-      if (partial && !request.replaceMessage) {
+      if ((partial || stream.web) && !request.replaceMessage) {
         const { cleanText, choices } = parseChoices(partial)
         pushMessage({
           role: 'ai',
@@ -1340,7 +1352,7 @@ function streamDialogue(request: DialogueRequest): Promise<void> {
           db_id: messageIds?.ai,
           paired_db_id: request.userMessage ? undefined : messageIds?.user,
           chatRequest: requestContext(),
-          metadata: { status: 'interrupted' },
+          metadata: { status: 'interrupted', web: webSnapshotForText(stream.web, partial) },
         })
         replaceMessage = session.messages.at(-1)
       }
@@ -1359,61 +1371,89 @@ function streamDialogue(request: DialogueRequest): Promise<void> {
       finish()
     }
     void chatStream(
-      request.nodeKey,
-      request.topicId,
-      session.id,
-      request.input,
-      stream.requestId,
-      request.mode,
-      request.style,
-      (chunk) => {
-        if (!isCurrentStream(stream)) return
-        contextCompacting.value = false
-        streamingText.value += chunk
-        checkStreamingChoices()
-        scrollToBottom()
+      {
+        nodeKey: request.nodeKey,
+        topicId: request.topicId,
+        sessionId: session.id,
+        userInput: request.input,
+        requestId: stream.requestId,
+        mode: request.mode,
+        aiStyle: request.style,
+        controller: stream.controller,
+        kind: request.kind,
+        quote: request.quote,
+        regenerateMessageId: request.regenerateMessageId,
+        modelId: modelId,
       },
-      () => {
-        if (!isCurrentStream(stream)) return resolve()
-        const content = streamingText.value.trim()
-        if (!content) return fail(new Error('模型未返回可用的回答，请重试。'))
-        if (content) {
-          const { cleanText, choices } = parseChoices(content)
-          const message: Message = {
-            role: 'ai',
-            text: cleanText,
-            time: now(),
-            choices: choices ?? undefined,
-            db_id: messageIds?.ai,
-            chatRequest: requestContext(),
-            paired_db_id: request.userMessage ? undefined : messageIds?.user,
+      {
+        onChunk: (chunk) => {
+          if (!isCurrentStream(stream)) return
+          contextCompacting.value = false
+          streamingText.value += chunk
+          checkStreamingChoices()
+          scrollToBottom()
+        },
+        onDone: () => {
+          if (!isCurrentStream(stream)) return resolve()
+          const content = streamingText.value.trim()
+          if (!content) return fail(new Error('模型未返回可用的回答，请重试。'))
+          if (content) {
+            const { cleanText, choices } = parseChoices(content)
+            const message: Message = {
+              role: 'ai',
+              text: cleanText,
+              time: now(),
+              choices: choices ?? undefined,
+              db_id: messageIds?.ai,
+              chatRequest: requestContext(),
+              metadata: { web: stream.web },
+              paired_db_id: request.userMessage ? undefined : messageIds?.user,
+            }
+            const replaceIndex = request.replaceMessage
+              ? session.messages.indexOf(request.replaceMessage)
+              : -1
+            if (replaceIndex >= 0) {
+              session.messages.splice(replaceIndex, 1, message)
+              saveSessions()
+            } else pushMessage(message)
           }
-          const replaceIndex = request.replaceMessage
-            ? session.messages.indexOf(request.replaceMessage)
-            : -1
-          if (replaceIndex >= 0) {
-            session.messages.splice(replaceIndex, 1, message)
-            saveSessions()
-          } else pushMessage(message)
-        }
-        finish()
-      },
-      fail,
-      stream.controller,
-      (user, ai) => {
-        if (!isCurrentStream(stream)) return
-        messageIds = { user, ai }
-        if (request.userMessage) request.userMessage.db_id = user
-        activeStreamMessageIds = messageIds
-        saveSessions()
-      },
-      request.kind,
-      request.quote,
-      request.regenerateMessageId,
-      modelId,
-      (status) => {
-        if (!isCurrentStream(stream)) return
-        contextCompacting.value = status === 'compacting'
+          finish()
+        },
+        onError: fail,
+        onMsgIds: (user, ai) => {
+          if (!isCurrentStream(stream)) return
+          messageIds = { user, ai }
+          if (request.userMessage) request.userMessage.db_id = user
+          activeStreamMessageIds = messageIds
+          saveSessions()
+        },
+        onWebEvent: (event) => {
+          if (
+            !isCurrentStream(stream) ||
+            event.request_id !== stream.requestId ||
+            event.ai_message_id !== messageIds?.ai
+          )
+            return
+          const web =
+            event.type === 'web_warning'
+              ? {
+                  ...event.web,
+                  warnings: [
+                    ...(event.web.warnings ?? []).filter(
+                      (warning) => warning.code !== event.warning.code,
+                    ),
+                    event.warning,
+                  ],
+                }
+              : event.web
+          stream.web = web
+          streamingWeb.value = web
+          contextCompacting.value = false
+        },
+        onContextStatus: (status) => {
+          if (!isCurrentStream(stream)) return
+          contextCompacting.value = status === 'compacting'
+        },
       },
     )
   })

@@ -21,6 +21,13 @@ vi.mock('../../api/progress', () => ({
   recordToday: vi.fn().mockResolvedValue(undefined),
 }))
 
+vi.mock('../../api/models', () => ({
+  getLLMModels: vi.fn().mockResolvedValue([]),
+  createCustomModel: vi.fn(),
+  updateCustomModel: vi.fn(),
+  deleteCustomModel: vi.fn(),
+}))
+
 vi.mock('../graph/ThreeGraphCanvas.vue', () => ({
   default: {
     name: 'ThreeGraphCanvas',
@@ -61,7 +68,7 @@ describe('knowledge graph node dialogue', () => {
     learning.requestNodeDialogue(node)
     await flushPromises()
     expect(chatStream).toHaveBeenCalledTimes(1)
-    expect(vi.mocked(chatStream).mock.calls[0]?.[0]).toBe(node.id)
+    expect(vi.mocked(chatStream).mock.calls[0]?.[0].nodeKey).toBe(node.id)
 
     learning.requestNodeDialogue(node)
     await flushPromises()

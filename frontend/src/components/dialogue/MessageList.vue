@@ -30,6 +30,8 @@
         :key="(msg.db_id ?? `${msg.role}-${msg.time}-${visibleMessageIndexes[i]}`)"
         v-memo="[
           msg.text,
+          msg.metadata?.web,
+          msg.metadata?.status,
           msg.quote,
           msg.quote_source_db_id,
           msg.quote_source_local_id,
@@ -75,8 +77,14 @@
         </button>
         <div class="msg-content ai">
           <div class="bubble ai">
-            <InlineMarkdown :text="displayStreamingText" :with-caret="true" />
+            <InlineMarkdown
+              :text="displayStreamingText"
+              :with-caret="true"
+              :assistant="true"
+              :web="streamingWeb"
+            />
           </div>
+          <MessageSources :web="streamingWeb" :pending="true" />
           <div v-if="streamingChoices && streamingChoices.length" class="choices-row">
             <button
               v-for="c in streamingChoices"
@@ -101,13 +109,16 @@
         >
           <img :src="avatarSrc(aiAvatarUrl)" alt="" class="ui-avatar-image ai-avatar-image" />
         </button>
-        <div
-          class="bubble ai"
-          style="display: flex; gap: 4px; align-items: center; padding: 12px 14px"
-        >
-          <span class="dot" style="animation-delay: 0ms" />
-          <span class="dot" style="animation-delay: 150ms" />
-          <span class="dot" style="animation-delay: 300ms" />
+        <div class="msg-content ai">
+          <div
+            class="bubble ai"
+            style="display: flex; gap: 4px; align-items: center; padding: 12px 14px"
+          >
+            <span class="dot" style="animation-delay: 0ms" />
+            <span class="dot" style="animation-delay: 150ms" />
+            <span class="dot" style="animation-delay: 300ms" />
+          </div>
+          <MessageSources :web="streamingWeb" :pending="true" />
         </div>
       </div>
     </div>
@@ -118,6 +129,8 @@
 // MessageList 组件，封装局部界面和交互逻辑。
 import { ref, computed, nextTick, onBeforeUnmount } from 'vue'
 import type { Message } from '../../types'
+import type { WebSnapshot } from '../../types/webSearch'
+import MessageSources from './MessageSources.vue'
 import { avatarSrc } from '../../utils/avatar'
 import { retryableAiIndex } from '../../utils/chat'
 import { SOCRATIC_WELCOME_TEXT } from '../../composables/useChatSessions'
@@ -135,6 +148,7 @@ defineEmits<{
 const props = defineProps<{
   messages: Message[]
   streamingText: string
+  streamingWeb?: WebSnapshot
   streamingChoices?: { label: string; text: string }[] | null
   isThinking: boolean
   avatarUrl: string | null
