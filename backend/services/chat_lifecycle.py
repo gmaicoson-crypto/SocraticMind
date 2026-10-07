@@ -1,6 +1,7 @@
 """Short database transactions around generation; no lock spans an LLM call."""
 
 from dataclasses import dataclass
+from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 import hashlib
 import json
@@ -12,6 +13,8 @@ from sqlalchemy.orm import Session
 
 from core.errors import ApiError
 from models import ChatCancellation, ChatMessage, ChatSession, ChatTurn
+from services.web_evidence import cited_source_ids
+from services.web_search import empty_web_snapshot
 
 GENERATION_LEASE_SECONDS = 360
 TERMINAL_STATUSES = {"complete", "failed", "interrupted"}
@@ -117,9 +120,28 @@ def _mark_interrupted(db: Session, turn: ChatTurn, code: str) -> None:
     if message is not None:
         message.metadata_json = {
             **(message.metadata_json or {}),
+            **_web_metadata(message, message.content, status="interrupted", error_code=code),
             "status": "interrupted",
             "error_code": code,
         }
+
+
+def _web_metadata(
+    message: ChatMessage,
+    content: str,
+    *,
+    web: dict | None = None,
+    status: str = "generating",
+    error_code: str | None = None,
+) -> dict:
+    snapshot = deepcopy(web if web is not None else (message.metadata_json or {}).get("web"))
+    if snapshot is None:
+        return {}
+    snapshot["cited_source_ids"] = cited_source_ids(content, snapshot.get("sources", []))
+    if status in TERMINAL_STATUSES and snapshot.get("status") in {"deciding", "searching"}:
+        snapshot["status"] = "failed"
+        snapshot["error_code"] = error_code or "WEB_PREPARATION_INTERRUPTED"
+    return {"web": snapshot}
 
 
 def begin_chat_turn(
@@ -138,9 +160,13 @@ def begin_chat_turn(
     quote_text: str | None = None,
     quote_source_id: int | None = None,
     regenerate_message_id: int | None = None,
+    web_mode: str | None = None,
 ) -> StartedChatTurn:
     """Claim a session and persist placeholders atomically before streaming starts."""
     topic_id = topic_id or None
+    web_mode = web_mode or ("auto" if kind == "qa" else "off")
+    if web_mode not in {"auto", "off"} or (kind != "qa" and web_mode != "off"):
+        raise ValueError("invalid web mode for chat kind")
     if is_chat_cancelled(db, user_id=user_id, request_id=request_id):
         raise _error("CHAT_REQUEST_CANCELLED", "该请求已停止，请使用新的请求重新发送")
     fingerprint = hashlib.sha256(
@@ -157,6 +183,7 @@ def begin_chat_turn(
                 "quote_text": quote_text,
                 "quote_source_id": quote_source_id,
                 "regenerate_message_id": regenerate_message_id,
+                "web_mode": web_mode,
             },
             ensure_ascii=False,
             sort_keys=True,
@@ -339,6 +366,7 @@ def begin_chat_turn(
                 "user_message_id": user_message.id,
                 "kind": kind,
                 "node_key": node_key[:100],
+                "web": empty_web_snapshot(web_mode, "off" if web_mode == "off" else "deciding"),
                 **(
                     {"regenerate_message_id": regenerate_message_id}
                     if regenerate_message_id
@@ -385,6 +413,7 @@ def finish_chat_turn(
     content: str,
     status: str,
     error_code: str | None = None,
+    web: dict | None = None,
 ) -> bool:
     if status not in TERMINAL_STATUSES:
         raise ValueError("invalid chat turn terminal status")
@@ -427,6 +456,7 @@ def finish_chat_turn(
     message.content = content
     message.metadata_json = {
         **(message.metadata_json or {}),
+        **_web_metadata(message, content, web=web, status=status, error_code=error_code),
         "status": status,
         **({"error_code": error_code} if error_code else {}),
     }
@@ -468,6 +498,7 @@ def refresh_generation_lease(
     request_id: str,
     generation_token: str,
     content: str | None = None,
+    web: dict | None = None,
 ) -> bool:
     turn = get_chat_turn(db, user_id=user_id, request_id=request_id)
     if turn is None or turn.status != "generating" or turn.generation_token != generation_token:
@@ -492,10 +523,22 @@ def refresh_generation_lease(
     if not claimed:
         db.rollback()
         return False
-    if content is not None:
-        db.query(ChatMessage).filter_by(id=turn.ai_message_id, user_id=user_id).update(
-            {"content": content}, synchronize_session=False
+    if content is not None or web is not None:
+        message = (
+            db.query(ChatMessage)
+            .filter_by(id=turn.ai_message_id, user_id=user_id)
+            .populate_existing()
+            .one_or_none()
         )
+        if message is None:
+            db.rollback()
+            return False
+        if content is not None:
+            message.content = content
+        message.metadata_json = {
+            **(message.metadata_json or {}),
+            **_web_metadata(message, message.content, web=web),
+        }
     db.commit()
     return True
 
@@ -687,5 +730,9 @@ def checkpoint_interrupted_content(
         db.rollback()
         return False
     message.content = content
+    message.metadata_json = {
+        **(message.metadata_json or {}),
+        **_web_metadata(message, content, status="interrupted", error_code=turn.error_code),
+    }
     db.commit()
     return True

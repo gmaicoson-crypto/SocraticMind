@@ -1,5 +1,5 @@
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Iterator
 
 from sqlalchemy import case, or_, exists
@@ -9,6 +9,12 @@ from ai.agent import build_chat_messages
 from core.context_budget import count_messages, ensure_fits, get_context_policy
 from models import AgentRun, ChatMessage, ChatSession, ChatTurn, Node, StudyPlan, Topic
 from services.memories import select_relevant_memories
+from services.web_evidence import (
+    compact_web_references,
+    historical_source_note,
+    hydrate_summary_web_sources,
+    message_web_sources,
+)
 
 
 @dataclass
@@ -17,6 +23,7 @@ class HistoryBlock:
     node_key: str
     message_ids: list[int]
     messages: list[dict[str, str]]
+    web_references: list[dict] = field(default_factory=list)
 
 
 @dataclass
@@ -85,14 +92,17 @@ def iter_history_blocks(
             continue
         if turn.status == "interrupted" and turn.regenerate_message_id is not None:
             continue
-        content = ai.content
+        sources = message_web_sources(ai)
+        content = ai.content + historical_source_note(sources)
         if turn.status == "interrupted":
             content = "[以下为生成中断前已显示的部分回答，尚未完成]\n" + content
         messages = []
         if user.content:
             messages.append({"role": "user", "content": user.content})
         messages.append({"role": "assistant", "content": content})
-        yield HistoryBlock(turn.id, turn.node_key, [user.id, ai.id], messages)
+        yield HistoryBlock(
+            turn.id, turn.node_key, [user.id, ai.id], messages, compact_web_references(sources)
+        )
 
     # Development databases may already have raw messages. They remain searchable
     # without accepting a client history field or inventing successful turns.
@@ -117,11 +127,18 @@ def iter_history_blocks(
     for message in legacy.order_by(order).yield_per(64):
         if message.role not in {"user", "ai"} or not message.content:
             continue
+        sources = message_web_sources(message)
         yield HistoryBlock(
             None,
             message.node_key,
             [message.id],
-            [{"role": "assistant" if message.role == "ai" else "user", "content": message.content}],
+            [
+                {
+                    "role": "assistant" if message.role == "ai" else "user",
+                    "content": message.content + historical_source_note(sources),
+                }
+            ],
+            compact_web_references(sources),
         )
 
 
@@ -192,7 +209,7 @@ def topic_context_notes(db: Session, session: ChatSession, *, node_key: str) -> 
         .all()
     )
     for candidate in candidates:
-        summary = candidate.summary_json or {}
+        summary = hydrate_summary_web_sources(db, candidate, candidate.summary_json or {})
         if not related_keys.intersection(summary.get("node_keys", [])):
             continue
         notes.append(
@@ -231,8 +248,19 @@ def assemble_chat_context(
     )
     required_notes = []
     if quote_source:
+        quote_sources = (
+            message_web_sources(quote_source)
+            if (
+                quote_source.user_id == session.user_id
+                and quote_source.session_id == session.session_id
+                and quote_source.topic_id == session.topic_id
+                and quote_source.mode == session.mode
+            )
+            else []
+        )
         required_notes.append(
             f"用户明确引用的消息原文（消息 {quote_source.id}）：\n{quote_source.content}"
+            + historical_source_note(quote_sources)
         )
     topic_notes = topic_context_notes(db, session, node_key=node_key) if kind == "qa" else []
     if topic_notes:
@@ -256,6 +284,8 @@ def assemble_chat_context(
         # earlier questions. Never expose a summary that includes that answer.
         if summarized_user_id is None or summarized_user_id >= user_message_id:
             summary = None
+    if summary:
+        summary = hydrate_summary_web_sources(db, session, summary)
     summary_notes = (
         ["当前会话较早讨论摘要：" + json.dumps(summary, ensure_ascii=False)] if summary else []
     )
@@ -294,6 +324,7 @@ def assemble_chat_context(
                     else message
                     for message in block.messages
                 ],
+                block.web_references,
             )
         cost = count_messages(block.messages, model_id) - count_messages([], model_id)
         if cost > remaining:

@@ -158,6 +158,7 @@ def chat_stream(
     context_notes: list[str] | None = None,
     prepared_messages: list[dict] | None = None,
     on_usage: Callable[[dict], None] | None = None,
+    on_stream: Callable[[object], None] | None = None,
 ) -> Generator[str, None, None]:
     """Stream a budget-checked request and close the upstream stream on cancel."""
     full_messages = (
@@ -193,6 +194,8 @@ def chat_stream(
     finish_reason = None
     has_content = False
     try:
+        if on_stream is not None:
+            on_stream(stream)
         for chunk in stream:
             usage = getattr(chunk, "usage", None)
             if usage is not None and on_usage is not None:

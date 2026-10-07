@@ -1,4 +1,5 @@
 from datetime import datetime
+from copy import deepcopy
 import hashlib
 import json
 import logging
@@ -34,6 +35,10 @@ from core.context_budget import (
     get_context_policy,
 )
 from services.chat_context import assemble_chat_context
+from services.web_evidence import apply_web_context, cited_source_ids, invalid_source_ids
+from services.web_search import iter_web_search, web_search_capabilities
+from services.web_search_quota import reserve_web_queries
+from services.chat_stream_runner import cancellable_chat_stream
 from services.chat_summaries import run_one_summary_job, schedule_chat_summary
 from services.chat_lifecycle import (
     begin_chat_turn,
@@ -83,6 +88,11 @@ class ChatRequest(BaseModel):
     quote_text: str | None = Field(default=None, max_length=200)
     quote_source_id: int | None = Field(default=None, gt=0)
 
+    @property
+    def web_mode(self) -> Literal["auto", "off"]:
+        """The server owns the policy; clients only select the kind of conversation."""
+        return "auto" if self.kind == "qa" else "off"
+
     @field_validator("node_key", "session_id", "ai_style", "request_id")
     @classmethod
     def strip_required_text(cls, value: str) -> str:
@@ -120,6 +130,11 @@ class HistoryResponse(BaseModel):
     message_type: str = "chat"
     metadata: dict[str, Any] | None = Field(default=None, validation_alias="metadata_json")
     created_at: datetime | None = None
+
+
+@router.get("/capabilities")
+def chat_capabilities(current_user: User = Depends(get_current_user)):
+    return web_search_capabilities()
 
 
 @router.post("/stream")
@@ -196,6 +211,7 @@ def chat_stream_endpoint(
         quote_text=req.quote_text,
         quote_source_id=req.quote_source_id,
         regenerate_message_id=req.regenerate_message_id,
+        web_mode=req.web_mode,
     )
     user_id = current_user.id
     session_pk = started.session.id
@@ -203,6 +219,10 @@ def chat_stream_endpoint(
     user_msg, ai_msg = started.user_message, started.ai_message
     model_user_input = user_msg.content
     ids = {"user": user_msg.id, "ai": ai_msg.id}
+    initial_web = deepcopy((ai_msg.metadata_json or {}).get("web"))
+
+    def web_event(payload):
+        return event({**payload, "request_id": req.request_id, "ai_message_id": ids["ai"]})
 
     def event(payload):
         return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
@@ -221,8 +241,16 @@ def chat_stream_endpoint(
 
         def replay():
             yield event({"msg_ids": ids})
+            if initial_web is not None:
+                yield web_event(
+                    {"type": "web_status", "status": initial_web["status"], "web": initial_web}
+                )
+                for warning in initial_web.get("warnings", []):
+                    yield web_event({"type": "web_warning", "warning": warning, "web": initial_web})
             if replay_content:
                 yield event({"text": replay_content})
+            if initial_web is not None:
+                yield web_event({"type": "web_sources", "web": initial_web, "final": True})
             yield event({"request_state": {"status": replay_status}})
             if replay_status != "complete":
                 yield event(
@@ -300,6 +328,48 @@ def chat_stream_endpoint(
         first_chunk = True
         terminal = False
         active_context = prepared
+        web = deepcopy(initial_web)
+
+        def check_active():
+            if not refresh_generation_lease(
+                db, user_id=user_id, request_id=req.request_id, generation_token=generation_token
+            ):
+                db.rollback()
+                raise ApiError(
+                    status_code=409,
+                    code="CHAT_REQUEST_CANCELLED",
+                    message="本次生成已停止或会话内容已改变",
+                    retryable=True,
+                )
+
+        def reserve_search(queries):
+            allowed = reserve_web_queries(
+                db,
+                user_id=user_id,
+                request_id=req.request_id,
+                generation_token=generation_token,
+                queries=queries,
+            )
+            # Cancellation must not become a quota warning and then a normal answer.
+            check_active()
+            return allowed
+
+        def persist_web():
+            if not refresh_generation_lease(
+                db,
+                user_id=user_id,
+                request_id=req.request_id,
+                generation_token=generation_token,
+                web=web,
+            ):
+                db.rollback()
+                raise ApiError(
+                    status_code=409,
+                    code="CHAT_REQUEST_CANCELLED",
+                    message="本次生成已停止或会话内容已改变",
+                    retryable=True,
+                )
+
         try:
             yield event({"msg_ids": ids})
             if not refresh_generation_lease(
@@ -350,28 +420,75 @@ def chat_stream_endpoint(
                         retryable=True,
                     )
                 yield event({"type": "context_ready"})
-            input_tokens = active_context.input_tokens
-            stream = chat_stream(
-                messages=active_context.history,
-                node_label=node_label,
-                node_sub=node_sub,
-                user_input=model_user_input,
-                mode=req.mode,
-                ai_style=req.ai_style,
-                kind=req.kind,
-                memories=active_context.memories,
+            for payload in iter_web_search(
+                web_mode=req.web_mode,
                 model_id=model_id,
-                prepared_messages=active_context.messages,
-                on_usage=lambda usage: log.info(
-                    "chat_token_usage request=%s estimated_input=%s input_delta=%s usage=%s",
-                    req.request_id,
-                    input_tokens,
-                    (usage["prompt_tokens"] - input_tokens)
-                    if isinstance(usage.get("prompt_tokens"), int)
-                    else None,
-                    usage,
-                ),
-            )
+                user_input=model_user_input,
+                context_messages=active_context.messages,
+                request_id=req.request_id,
+                user_id=user_id,
+                check_active=check_active,
+                reserve_search=reserve_search,
+            ):
+                check_active()
+                if "web" in payload:
+                    web = deepcopy(payload["web"])
+                    persist_web()
+                # Evidence fitting may shorten sources. Publish their candidate
+                # snapshot only once it matches the payload sent to the model.
+                if payload["type"] != "web_sources":
+                    yield web_event(payload)
+            if req.kind == "qa":
+                previous_warnings = len(web.get("warnings", []))
+                active_context, web = apply_web_context(active_context, web, model_id)
+                persist_web()
+                for warning in web.get("warnings", [])[previous_warnings:]:
+                    yield web_event({"type": "web_warning", "warning": warning, "web": web})
+            check_active()
+            yield web_event({"type": "web_status", "status": web["status"], "web": web})
+            yield web_event({"type": "web_sources", "web": web, "final": False})
+            input_tokens = active_context.input_tokens
+
+            def start_answer(control):
+                return chat_stream(
+                    messages=active_context.history,
+                    node_label=node_label,
+                    node_sub=node_sub,
+                    user_input=model_user_input,
+                    mode=req.mode,
+                    ai_style=req.ai_style,
+                    kind=req.kind,
+                    memories=active_context.memories,
+                    model_id=model_id,
+                    prepared_messages=active_context.messages,
+                    on_stream=control.attach,
+                    on_usage=lambda usage: log.info(
+                        "chat_token_usage request=%s estimated_input=%s input_delta=%s usage=%s",
+                        req.request_id,
+                        input_tokens,
+                        (usage["prompt_tokens"] - input_tokens)
+                        if isinstance(usage.get("prompt_tokens"), int)
+                        else None,
+                        {
+                            key: value
+                            for key, value in usage.items()
+                            if key in {"prompt_tokens", "completion_tokens", "total_tokens"}
+                            and isinstance(value, int)
+                            and not isinstance(value, bool)
+                        },
+                    ),
+                )
+
+            last_guard = perf_counter()
+
+            def check_answer_active():
+                nonlocal last_guard
+                now = perf_counter()
+                if now - last_guard >= 0.2:
+                    check_active()
+                    last_guard = now
+
+            stream = cancellable_chat_stream(start_answer, check_answer_active)
             for chunk in stream:
                 full_text.append(chunk)
                 now = perf_counter()
@@ -382,6 +499,7 @@ def chat_stream_endpoint(
                         request_id=req.request_id,
                         generation_token=generation_token,
                         content="".join(full_text),
+                        web=web,
                     ):
                         raise ApiError(
                             status_code=409,
@@ -406,6 +524,16 @@ def chat_stream_endpoint(
                     message="模型未返回可用回答，请重新生成",
                     retryable=True,
                 )
+            invalid_citations = invalid_source_ids(content, web.get("sources", []))
+            if invalid_citations:
+                warning = {
+                    "code": "WEB_CITATION_INVALID",
+                    "message": "部分引用没有对应的检索来源，已禁用这些引用链接。",
+                    "retryable": False,
+                }
+                web.setdefault("warnings", []).append(warning)
+                web.setdefault("metrics", {})["invalid_citations"] = len(invalid_citations)
+                yield web_event({"type": "web_warning", "warning": warning, "web": web})
             saved = finish_chat_turn(
                 db,
                 user_id=user_id,
@@ -413,6 +541,7 @@ def chat_stream_endpoint(
                 generation_token=generation_token,
                 content=content,
                 status="complete",
+                web=web,
             )
             if not saved:
                 raise ApiError(
@@ -422,6 +551,7 @@ def chat_stream_endpoint(
                     retryable=True,
                 )
             terminal = True
+            web["cited_source_ids"] = cited_source_ids(content, web.get("sources", []))
             policy = get_context_policy(model_id)
             if (
                 active_context.summary_needed
@@ -431,9 +561,14 @@ def chat_stream_endpoint(
             ):
                 try:
                     schedule_chat_summary(db, session_id=session_pk, model_id=model_id)
-                except Exception:
+                except Exception as error:
                     db.rollback()
-                    log.exception("chat_summary_schedule_failed session=%s", session_pk)
+                    log.warning(
+                        "chat_summary_schedule_failed session=%s error_type=%s",
+                        session_pk,
+                        type(error).__name__,
+                    )
+            yield web_event({"type": "web_sources", "web": web, "final": True})
             yield event({"request_state": {"status": "complete"}})
             yield "data: [DONE]\n\n"
         except GeneratorExit:
@@ -445,6 +580,7 @@ def chat_stream_endpoint(
                 content="".join(full_text),
                 status="interrupted",
                 error_code="CLIENT_DISCONNECTED",
+                web=web,
             )
             checkpoint_interrupted_content(
                 db,
@@ -464,7 +600,12 @@ def chat_stream_endpoint(
                 message = str(error)
                 retryable = False
             incomplete = code in {"AI_OUTPUT_LIMIT", "AI_STREAM_INCOMPLETE"}
-            log.exception("chat_stream_failed request=%s", req.request_id)
+            log.warning(
+                "chat_stream_failed request=%s code=%s error_type=%s",
+                req.request_id,
+                code,
+                type(error).__name__,
+            )
             finish_chat_turn(
                 db,
                 user_id=user_id,
@@ -473,6 +614,7 @@ def chat_stream_endpoint(
                 content="".join(full_text),
                 status="interrupted" if incomplete else "failed",
                 error_code=code,
+                web=web,
             )
             checkpoint_interrupted_content(
                 db,
@@ -487,7 +629,18 @@ def chat_stream_endpoint(
                 if current_turn is None or current_turn.status in {"interrupted", "deleted"}
                 else "failed"
             )
+            saved_message = (
+                db.query(ChatMessage)
+                .filter_by(id=ids["ai"], user_id=user_id)
+                .populate_existing()
+                .one_or_none()
+            )
+            saved_web = (
+                deepcopy((saved_message.metadata_json or {}).get("web")) if saved_message else None
+            )
             db.commit()
+            if saved_web is not None:
+                yield web_event({"type": "web_sources", "web": saved_web, "final": True})
             yield event({"request_state": {"status": status}})
             yield event({"error": {"code": code, "message": message, "retryable": retryable}})
             yield "data: [DONE]\n\n"
