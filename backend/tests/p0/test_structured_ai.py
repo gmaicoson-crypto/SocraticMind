@@ -206,3 +206,83 @@ def test_logs_exclude_prompts_answers_and_provider_payloads(caplog):
     assert "safe-log-run" in caplog.text
     assert secret not in caplog.text
     assert "prior_knowledge" not in caplog.text
+
+
+def test_optional_policy_limits_output_and_disables_repairs():
+    client, calls = client_with(response("invalid"))
+    with pytest.raises(StructuredAIError) as error:
+        generate_structured(
+            DiagnosticQuestions,
+            [],
+            RunContext(run_id="limited", call_type="web_decision"),
+            client=client,
+            timeout=5,
+            output_tokens=256,
+            max_repairs=0,
+        )
+    assert error.value.code == "STRUCTURED_OUTPUT_INVALID"
+    assert len(calls) == 1
+    assert 0 < calls[0]["timeout"] <= 5
+    assert calls[0]["max_tokens"] == 256
+
+
+def test_optional_policy_respects_reasoning_model_temperature_and_token_parameter(monkeypatch):
+    monkeypatch.setattr(settings, "llm_model", "gpt-5-test")
+    client, calls = client_with(response(json.dumps(questions_payload())))
+    generate_structured(
+        DiagnosticQuestions,
+        [],
+        RunContext(run_id="reasoning", call_type="web_decision"),
+        client=client,
+        timeout=5,
+        output_tokens=2048,
+        max_repairs=0,
+    )
+    assert calls[0]["max_completion_tokens"] == 2048
+    assert "temperature" not in calls[0]
+    assert "max_tokens" not in calls[0]
+
+
+def test_optional_timeout_is_shared_by_repairs(monkeypatch):
+    from services.agent import structured_ai
+
+    readings = iter([10, 10, 14, 14])
+    monkeypatch.setattr(structured_ai, "perf_counter", lambda: next(readings))
+    client, calls = client_with(response("invalid"), response(json.dumps(questions_payload())))
+    generate_structured(
+        DiagnosticQuestions,
+        [],
+        RunContext(run_id="deadline", call_type="web_decision"),
+        client=client,
+        timeout=5,
+    )
+    assert calls[0]["timeout"] == 5
+    assert calls[1]["timeout"] == 1
+
+
+def test_absent_usage_preserves_legacy_count_but_is_explicitly_unknown():
+    item = response(json.dumps(questions_payload()))
+    item.usage = None
+    client, _ = client_with(item)
+    result = generate_structured(
+        DiagnosticQuestions,
+        [],
+        RunContext(run_id="unknown-usage", call_type="web_decision"),
+        client=client,
+    )
+    assert result.token_usage == 0
+    assert result.usage_known is False
+
+
+def test_missing_usage_in_one_repair_attempt_keeps_total_unknown():
+    invalid = response("invalid")
+    invalid.usage = None
+    client, _ = client_with(invalid, response(json.dumps(questions_payload()), tokens=7))
+    result = generate_structured(
+        DiagnosticQuestions,
+        [],
+        RunContext(run_id="partial-usage", call_type="web_decision"),
+        client=client,
+    )
+    assert result.token_usage == 7
+    assert result.usage_known is False

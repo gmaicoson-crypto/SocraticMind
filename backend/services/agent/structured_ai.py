@@ -28,6 +28,7 @@ class StructuredResult(Generic[SchemaT]):
     token_usage: int
     latency_ms: int
     attempts: int
+    usage_known: bool = True
 
 
 class StructuredAIError(Exception):
@@ -67,6 +68,11 @@ def _token_usage(response) -> int:
     return int(getattr(usage, "total_tokens", 0) or 0)
 
 
+def _usage_known(response) -> bool:
+    tokens = getattr(getattr(response, "usage", None), "total_tokens", None)
+    return isinstance(tokens, int) and not isinstance(tokens, bool) and tokens >= 0
+
+
 def _response_content(response) -> str:
     choices = getattr(response, "choices", None) or []
     if not choices:
@@ -94,13 +100,25 @@ def _map_upstream_error(error: Exception) -> StructuredAIError:
     return StructuredAIError("AI_REQUEST_FAILED", "模型请求失败", retryable=False)
 
 
-def _call(client, *, model: str, profile_id: str, messages: list[dict], temperature: float):
+def _call(
+    client,
+    *,
+    model: str,
+    profile_id: str,
+    messages: list[dict],
+    temperature: float,
+    timeout: float = 60,
+    output_tokens: int | None = None,
+):
     ensure_fits(messages, profile_id)
+    options = completion_options(profile_id, temperature=temperature)
+    if output_tokens is not None:
+        parameter = "max_completion_tokens" if "max_completion_tokens" in options else "max_tokens"
+        options[parameter] = min(
+            output_tokens, resolve_llm_profile(profile_id).generation_budget_tokens
+        )
     response = client.chat.completions.create(
-        model=model,
-        messages=messages,
-        **completion_options(profile_id, temperature=temperature),
-        timeout=60,
+        model=model, messages=messages, **options, timeout=timeout
     )
     choices = getattr(response, "choices", None) or []
     finish_reason = getattr(choices[0], "finish_reason", None) if choices else None
@@ -119,52 +137,36 @@ def generate_structured(
     run_context: RunContext,
     *,
     client=None,
+    timeout: float | None = None,
+    output_tokens: int | None = None,
+    max_repairs: int = 1,
 ) -> StructuredResult[SchemaT]:
+    """Optional timeout covers all attempts; omitted preserves existing 60s calls."""
+    if timeout is not None and timeout <= 0:
+        raise ValueError("timeout 必须大于零")
+    if output_tokens is not None and output_tokens <= 0:
+        raise ValueError("output_tokens 必须大于零")
+    if not 0 <= max_repairs <= 3:
+        raise ValueError("max_repairs 必须在 0 到 3 之间")
     profile = resolve_llm_profile(run_context.model)
     ai_client = client or get_ai_client(profile.id)
-    model = profile.model
     started = perf_counter()
     total_tokens = 0
-    try:
-        first = _call(
-            ai_client, model=model, profile_id=profile.id, messages=messages, temperature=0.2
-        )
-    except Exception as error:
-        mapped = _map_upstream_error(error)
-        log.warning(
-            "structured_ai_failed run_id=%s call_type=%s model=%s code=%s",
-            run_context.run_id,
-            run_context.call_type,
-            model,
-            mapped.code,
-        )
-        raise mapped from error
-
-    total_tokens += _token_usage(first)
-    content = _response_content(first)
-    try:
-        value = _parse(schema, content)
-        attempts = 1
-    except (json.JSONDecodeError, ValidationError, TypeError, ValueError):
-        repair_messages = [
-            *messages,
-            {"role": "assistant", "content": content},
-            {
-                "role": "user",
-                "content": (
-                    "修复上一条回复的 JSON 格式和字段，使其严格符合以下 JSON Schema。"
-                    "只返回 JSON，不要解释："
-                    + json.dumps(schema.model_json_schema(), ensure_ascii=False)
-                ),
-            },
-        ]
+    usage_known = True
+    current_messages = messages
+    for attempt in range(max_repairs + 1):
+        remaining = 60 if timeout is None else timeout - (perf_counter() - started)
         try:
-            repaired = _call(
+            if remaining <= 0:
+                raise TimeoutError()
+            response = _call(
                 ai_client,
-                model=model,
+                model=profile.model,
                 profile_id=profile.id,
-                messages=repair_messages,
-                temperature=0,
+                messages=current_messages,
+                temperature=0.2 if attempt == 0 else 0,
+                timeout=remaining,
+                output_tokens=output_tokens,
             )
         except Exception as error:
             mapped = _map_upstream_error(error)
@@ -172,42 +174,56 @@ def generate_structured(
                 "structured_ai_failed run_id=%s call_type=%s model=%s code=%s",
                 run_context.run_id,
                 run_context.call_type,
-                model,
+                profile.model,
                 mapped.code,
             )
             raise mapped from error
-        total_tokens += _token_usage(repaired)
-        repaired_content = _response_content(repaired)
+
+        total_tokens += _token_usage(response)
+        usage_known = usage_known and _usage_known(response)
+        content = _response_content(response)
         try:
-            value = _parse(schema, repaired_content)
+            value = _parse(schema, content)
+            break
         except (json.JSONDecodeError, ValidationError, TypeError, ValueError) as error:
-            log.warning(
-                "structured_ai_failed run_id=%s call_type=%s model=%s code=%s",
-                run_context.run_id,
-                run_context.call_type,
-                model,
-                "STRUCTURED_OUTPUT_INVALID",
-            )
-            raise StructuredAIError(
-                "STRUCTURED_OUTPUT_INVALID",
-                "模型结构化输出校验失败",
-                retryable=True,
-            ) from error
-        attempts = 2
+            if attempt == max_repairs:
+                log.warning(
+                    "structured_ai_failed run_id=%s call_type=%s model=%s code=%s",
+                    run_context.run_id,
+                    run_context.call_type,
+                    profile.model,
+                    "STRUCTURED_OUTPUT_INVALID",
+                )
+                raise StructuredAIError(
+                    "STRUCTURED_OUTPUT_INVALID", "模型结构化输出校验失败", retryable=True
+                ) from error
+            current_messages = [
+                *messages,
+                {"role": "assistant", "content": content},
+                {
+                    "role": "user",
+                    "content": (
+                        "修复上一条回复的 JSON 格式和字段，使其严格符合以下 JSON Schema。"
+                        "只返回 JSON，不要解释："
+                        + json.dumps(schema.model_json_schema(), ensure_ascii=False)
+                    ),
+                },
+            ]
 
     latency_ms = round((perf_counter() - started) * 1000)
     log.info(
-        "structured_ai_complete run_id=%s call_type=%s model=%s tokens=%d latency_ms=%d attempts=%d",
+        "structured_ai_complete run_id=%s call_type=%s model=%s tokens=%s latency_ms=%d attempts=%d",
         run_context.run_id,
         run_context.call_type,
-        model,
-        total_tokens,
+        profile.model,
+        total_tokens if usage_known else None,
         latency_ms,
-        attempts,
+        attempt + 1,
     )
     return StructuredResult(
         value=value,
         token_usage=total_tokens,
         latency_ms=latency_ms,
-        attempts=attempts,
+        attempts=attempt + 1,
+        usage_known=usage_known,
     )

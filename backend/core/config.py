@@ -119,6 +119,22 @@ class Settings(BaseSettings):
     database_url: str = "mysql+pymysql://root@localhost:3306/socraticmind"
     access_token_expire_minutes: int = 60 * 24 * 7  # 默认 7 天
 
+    # 联网默认关闭；真实质量、延迟、费用验收后再启用。
+    web_search_enabled: bool = False
+    tavily_api_key: str = ""
+    web_search_api_base: str = "https://api.tavily.com"
+    web_decision_timeout_seconds: float = Field(default=5, gt=0, le=30)
+    web_search_timeout_seconds: float = Field(default=8, gt=0, le=60)
+    web_decision_input_tokens: int = Field(default=6_000, ge=512, le=32_000)
+    web_decision_output_tokens: int = Field(default=2_048, ge=128, le=16_384)
+    web_evidence_tokens: int = Field(default=4_000, ge=128, le=16_000)
+    web_search_daily_query_limit: int = Field(default=100, ge=0)
+    web_search_global_daily_query_limit: int = Field(default=1_000, ge=0)
+    web_search_max_workers: int = Field(default=8, ge=1, le=64)
+    chat_stream_max_workers: int = Field(default=8, ge=1, le=128)
+    web_search_max_pending: int = Field(default=8, ge=0, le=128)
+    web_search_max_response_bytes: int = Field(default=1_000_000, ge=1_024, le=8_000_000)
+
     # 允许的前端源，逗号分隔；生产环境需改为实际域名，禁止保留 localhost
     cors_origins: str = "http://localhost:5173"
 

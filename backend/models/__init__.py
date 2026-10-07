@@ -5,6 +5,7 @@ from .progress import ChatMessage, LearningRecord
 from .chat_session import ChatSession
 from .chat_turn import ChatTurn
 from .chat_cancellation import ChatCancellation
+from .web_search_quota import WebSearchQuota
 from .progress_archive import ArchivedChatActivity, ArchivedMastery
 from .email_code import EmailCode
 from .agent_run import AgentRun
@@ -23,6 +24,7 @@ __all__ = [
     "ChatSession",
     "ChatTurn",
     "ChatCancellation",
+    "WebSearchQuota",
     "EmailCode",
     "LearnerMemory",
     "LearningRecord",

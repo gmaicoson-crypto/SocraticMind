@@ -42,6 +42,7 @@ def test_empty_database_upgrades_to_head(tmp_path):
         "chat_sessions",
         "chat_turns",
         "chat_cancellations",
+        "web_search_quotas",
     }.issubset(set(inspector.get_table_names()))
     assert {"estimated_minutes", "mastery_source", "mastery_confidence"}.issubset(
         {column["name"] for column in inspector.get_columns("nodes")}
@@ -61,6 +62,26 @@ def test_empty_database_upgrades_to_head(tmp_path):
     assert "uq_chat_turns_user_request" in {
         index["name"] for index in inspector.get_indexes("chat_turns")
     }
+
+
+def test_web_quota_migration_has_shared_atomic_counter_key(tmp_path):
+    database_url = f"sqlite:///{tmp_path / 'quota.sqlite'}"
+    config = alembic_config(database_url)
+    command.upgrade(config, "head")
+    engine = create_engine(database_url)
+    inspector = inspect(engine)
+    assert set(inspector.get_pk_constraint("web_search_quotas")["constrained_columns"]) == {
+        "scope",
+        "day",
+    }
+    with engine.begin() as connection:
+        connection.execute(
+            text("INSERT INTO web_search_quotas (scope, day) VALUES ('tavily', '2026-09-30')")
+        )
+        assert connection.scalar(text("SELECT used_queries FROM web_search_quotas")) == 0
+    command.downgrade(config, "0010_chat_context_management")
+    assert "web_search_quotas" not in inspect(engine).get_table_names()
+    assert "chat_messages" in inspect(engine).get_table_names()
 
 
 def test_legacy_data_is_preserved_and_backfilled(tmp_path):
