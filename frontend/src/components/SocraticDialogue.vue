@@ -31,20 +31,19 @@
           <img :src="avatarSrc(aiAvatarUrl)" alt="" class="ui-avatar-image ai-avatar-image" />
           <span v-if="isThinking" class="thinking-dot" />
         </button>
-        <div>
-          <div class="dlg-title">
-            {{ currentSessionName }}
+        <div class="dlg-heading">
+          <div class="dlg-title" :title="currentSessionTitle">
+            {{ currentSessionTitle }}
           </div>
-          <div class="dlg-sub" role="status">
-            {{
-              isThinking
-                ? contextCompacting
-                  ? '正在整理较早的对话'
-                  : streamingWeb && ['deciding', 'searching'].includes(streamingWeb.status)
-                    ? webStatusText[streamingWeb.status]
-                    : '正在思考…'
-                : '通过提问引导你发现答案'
-            }}
+          <div
+            class="dlg-sub"
+            :title="currentSessionSubtitle"
+            :role="currentSessionNode ? undefined : 'status'"
+          >
+            {{ currentSessionSubtitle }}
+          </div>
+          <div v-if="isThinking && currentSessionNode" class="dlg-status" role="status">
+            {{ dialogueStatus }}
           </div>
         </div>
       </div>
@@ -95,9 +94,11 @@
       :messages="messages"
       :hide-welcome="hideSocraticWelcome"
       :streaming-text="streamingText"
+      :streaming-message-id="activeStreamMessageIds?.ai"
       :streaming-web="streamingWeb"
       :streaming-choices="streamingChoices"
       :is-thinking="isThinking"
+      :retry-user-index="retryUserIndex"
       :avatar-url="store.userInfo?.avatar_url ?? null"
       :ai-avatar-url="aiAvatarUrl"
       @delete="deleteMessage"
@@ -186,10 +187,7 @@
       @revert="requestMasteryAction('revert')"
     />
 
-    <div v-if="chatError" class="chat-error" role="alert">
-      <span>{{ chatError }}</span>
-      <button v-if="retryRequest && !isThinking" type="button" @click="retryRequest()">重试</button>
-    </div>
+    <BaseToast v-model:message="chatError" />
 
     <DialogueInputBar
       ref="inputBarRef"
@@ -203,6 +201,17 @@
       :is-thinking="isThinking"
       :is-generating="isGenerating || agentStore.submitting"
       :send-disabled="agentStore.run?.status === 'awaiting_confirmation'"
+      :attachments="attachmentDrafts.drafts.value"
+      :attachments-ready="attachmentDrafts.ready.value"
+      :attachments-disabled="!attachmentsEnabled"
+      :attachment-disabled-reason="attachmentDisabledReason"
+      :attachment-accept="attachmentDrafts.capabilities.value?.allowed_extensions.join(',') ?? ''"
+      :attachment-error="attachmentDrafts.error.value"
+      @add-attachments="attachmentDrafts.add"
+      @remove-attachment="attachmentDrafts.remove"
+      @retry-attachment="attachmentDrafts.retry"
+      @accept-coverage="attachmentDrafts.acceptCoverage"
+      @reload-attachment-service="attachmentDrafts.loadCapabilities"
       :show-chips="!activeAgentRun && !draftTopic"
       :socratic-badge="socraticBadge"
       :normal-badge="normalBadge"
@@ -248,6 +257,8 @@
 <script setup lang="ts">
 // SocraticDialogue 组件，封装局部界面和交互逻辑。
 import { ref, watch, nextTick, computed, onMounted, onBeforeUnmount } from 'vue'
+import { useAttachmentDrafts } from '../composables/useAttachmentDrafts'
+import { useModelsStore } from '../stores/models'
 import { useLearningStore } from '../stores/learning'
 import { useAgentStore } from '../stores/agent'
 import { usePlansStore } from '../stores/plans'
@@ -261,9 +272,9 @@ import type {
 import {
   chatStream,
   cancelChatStream,
+  getChatRequestState,
   type ChatKind,
   type ChatQuote,
-  getSuggestions,
   deleteMessages,
   deleteChatSession,
   uploadChatAvatar,
@@ -275,18 +286,23 @@ import {
   nowDate,
   genId,
   retryableAiIndex,
+  replyUserIndex,
+  hasMessageContent,
   extractTopic,
   isNewTopicIntent,
+  sessionNodeKey,
 } from '../utils/chat'
 import { getSelectedModelId } from '../utils/modelSelection'
 import type { WebSnapshot } from '../types/webSearch'
-import { webStatusText } from '../utils/webSearch'
+import { messageWeb, webStatusText } from '../utils/webSearch'
 import { webSnapshotForText } from '../utils/messageMarkdown'
 import { avatarSrc } from '../utils/avatar'
 import { defaultAiAvatar, defaultNormalAiAvatar } from '../utils/avatarPresets'
 import { useChatSessions } from '../composables/useChatSessions'
+import { useSessionTitles } from '../composables/useSessionTitles'
 import { useChatStream } from '../composables/useChatStream'
 import { useTopicDialogue } from '../composables/useTopicDialogue'
+import { useDialogueSuggestions } from '../composables/useDialogueSuggestions'
 import { useDialogueHistory } from '../composables/useDialogueHistory'
 import { useSessionTopicChoice } from '../composables/useSessionTopicChoice'
 import { useOnboardingFlow } from '../composables/useOnboardingFlow'
@@ -303,6 +319,7 @@ import PlanPreview from './agent/PlanPreview.vue'
 import AssessmentResult from './agent/AssessmentResult.vue'
 import NodeMasteryControls from './agent/NodeMasteryControls.vue'
 import ConfirmDialog from './ui/ConfirmDialog.vue'
+import BaseToast from './ui/BaseToast.vue'
 
 const store = useLearningStore()
 const agentStore = useAgentStore()
@@ -318,19 +335,27 @@ const {
   saveSessions,
   disposeSessionPersistence,
 } = useChatSessions()
+const sessionTitles = useSessionTitles({
+  sessions: () => [...socraticSessions.value, ...normalSessions.value],
+  mode: (session) =>
+    socraticSessions.value.some((item) => item.id === session.id) ? 'socratic' : 'normal',
+  userId: () => store.userInfo?.id,
+})
 
 const messageListRef = ref<InstanceType<typeof MessageList> | null>(null)
 const inputBarRef = ref<InstanceType<typeof DialogueInputBar> | null>(null)
 let streamEpoch = 0
-let activeStreamMessageIds: { user: number; ai: number } | null = null
+const activeStreamMessageIds = ref<{ user: number; ai: number } | null>(null)
 let activeStreamUserMessage: Message | null = null
 let activeStream: StreamContext | null = null
 const chatError = ref('')
 const retryRequest = ref<(() => void) | null>(null)
+const retryUserMessage = ref<Message | null>(null)
 
 const input = ref('')
 const isThinking = ref(false)
 const contextCompacting = ref(false)
+const attachmentPreparation = ref('')
 const isGenerating = ref(false)
 const streamingText = ref('')
 const streamingWeb = ref<WebSnapshot>()
@@ -356,13 +381,7 @@ const chatMode = ref<'socratic' | 'normal'>('socratic')
 const aiStyleOptions = ['温和', '标准', '严格'] as const
 const aiStyle = ref<string>(store.userInfo?.ai_style ?? '标准')
 
-const SK_CHIPS_SOCRATIC = 'sm_chips_socratic'
-const SK_CHIPS_NORMAL = 'sm_chips_normal'
-const CHIP_POOL_SIZE = 12
 const deletingSessionIds = new Set<string>()
-
-const chips = ref<string[]>(loadCachedChips('socratic'))
-const chipsLoading = ref(false)
 
 const currentSessionId = computed(() =>
   chatMode.value === 'socratic' ? socraticCurrentId.value : normalCurrentId.value,
@@ -401,13 +420,75 @@ const pickerAvatarUrl = computed(
     pickerSession.value?.aiAvatarUrl ??
     (chatMode.value === 'normal' ? defaultNormalAiAvatar : defaultAiAvatar),
 )
-const currentSessionName = computed(() => currentSession.value?.name ?? '苏格拉底式对话')
+const currentSessionName = computed(() => currentSession.value?.name ?? '新对话')
 const activeAgentRun = computed(() =>
   Boolean(agentStore.run && !['completed', 'cancelled'].includes(agentStore.run.status)),
 )
 const draftTopic = computed(
   () => agentStore.onboardingTopic ?? agentStore.topicPlanDraft?.title ?? null,
 )
+const currentSessionNode = computed(() => {
+  if (
+    chatMode.value !== 'socratic' ||
+    draftTopic.value ||
+    activeAgentRun.value ||
+    currentSession.value?.topicId !== currentTopicId.value
+  )
+    return undefined
+  const nodeKey = sessionNodeKey(currentSession.value)
+  return store.nodes.find((node) => node.id === nodeKey)
+})
+const currentSessionTitle = computed(
+  () => currentSessionNode.value?.label ?? currentSessionName.value,
+)
+const dialogueStatus = computed(() => {
+  if (!isThinking.value) return '通过提问引导你发现答案'
+  if (attachmentPreparation.value) return attachmentPreparation.value
+  if (contextCompacting.value) return '正在整理较早的对话'
+  if (streamingWeb.value && ['deciding', 'searching'].includes(streamingWeb.value.status))
+    return webStatusText[streamingWeb.value.status]
+  return '正在思考…'
+})
+const currentSessionSubtitle = computed(() =>
+  currentSessionNode.value ? currentSessionName.value : dialogueStatus.value,
+)
+
+watch(
+  [() => sessionNodeKey(currentSocraticSession.value), () => store.nodes, socraticCurrentId],
+  ([nodeKey, nodes]) => {
+    const session = currentSocraticSession.value
+    if (session?.topicId !== currentTopicId.value) return
+    const node = nodes.find((item) => item.id === nodeKey)
+    if (node) store.setActiveNode(node)
+    else if (session.nodeKey === null) store.setActiveNode(null)
+  },
+  { immediate: true },
+)
+const modelsStore = useModelsStore()
+const attachmentDrafts = useAttachmentDrafts(
+  computed(() => ({
+    session_id: currentSessionId.value,
+    mode: chatMode.value,
+    topic_id:
+      chatMode.value === 'socratic'
+        ? (currentSession.value?.topicId ?? currentTopicId.value)
+        : undefined,
+  })),
+)
+const attachmentDisabledReason = computed(() => {
+  if (chatMode.value === 'normal') return ''
+  if (activeAgentRun.value || draftTopic.value)
+    return '诊断、测评和计划确认阶段不能添加附件，已有草稿会保留'
+  if (currentSession.value?.awaitingTopicChoice) return '请先完成主题选择，已有附件草稿会保留'
+  if (!store.activeNode || !currentSession.value?.topicId) return '请先选择已有主题的学习节点'
+  if (
+    Number(store.activeTopicId) !== currentSession.value.topicId ||
+    !store.nodes.some((n) => n.id === store.activeNode?.id)
+  )
+    return '请在本对话主题中选择有效节点'
+  return ''
+})
+const attachmentsEnabled = computed(() => !attachmentDisabledReason.value)
 const assessmentResult = computed<AssessmentResultData | null>(() => {
   const run = agentStore.run
   if (
@@ -456,6 +537,16 @@ const messages = computed({
     saveSessions()
   },
 })
+const retryUserIndex = computed(() => {
+  if (!retryUserMessage.value) return undefined
+  if (!retryRequest.value) return -1
+  const user = retryUserMessage.value
+  return messages.value.findIndex(
+    (message) =>
+      message === user ||
+      (message.role === 'user' && user.db_id != null && message.db_id === user.db_id),
+  )
+})
 const currentStepInHistory = computed(() => {
   const run = agentStore.run
   if (!run?.step) return false
@@ -467,150 +558,63 @@ const currentStepInHistory = computed(() => {
   )
 })
 
-const defaultChips = {
-  socratic: [
-    '我想学 Python',
-    '教我机器学习',
-    '讲讲数据结构',
-    '学习 Web 开发',
-    '解释一下算法',
-    '复习编程基础',
-    '练习逻辑思维',
-    '了解神经网络',
-    '帮我制定计划',
-    '讲讲数据库',
-    '学习前端基础',
-    '做一道练习题',
-  ],
-  normal: [
-    '今天天气怎么样',
-    '推荐一部电影',
-    '给我讲个笑话',
-    '聊聊最近的新闻',
-    '推荐一本书',
-    '分享一个冷知识',
-    '有什么旅行建议',
-    '聊聊音乐',
-    '推荐一道菜',
-    '讲个有趣的故事',
-    '如何安排周末',
-    '聊聊科技趋势',
-  ],
-}
-
-const alternateChips = {
-  socratic: [
-    '学习 TypeScript',
-    '理解函数概念',
-    '讲讲递归',
-    '探索操作系统',
-    '了解计算机网络',
-    '练习概率统计',
-    '复习线性代数',
-    '讲讲设计模式',
-    '学习数据分析',
-    '解释排序算法',
-    '练习 SQL 查询',
-    '了解人工智能',
-  ],
-  normal: [
-    '推荐一首歌',
-    '聊聊城市生活',
-    '分享生活技巧',
-    '推荐一款游戏',
-    '有什么运动建议',
-    '聊聊历史',
-    '讲一个谜语',
-    '推荐一部纪录片',
-    '如何缓解压力',
-    '聊聊摄影',
-    '分享一个节日习俗',
-    '推荐一个播客',
-  ],
-}
-
-function loadCachedChips(mode: 'socratic' | 'normal'): string[] {
-  const key = mode === 'socratic' ? SK_CHIPS_SOCRATIC : SK_CHIPS_NORMAL
-  try {
-    const raw = localStorage.getItem(key)
-    if (raw) {
-      const cached: unknown = JSON.parse(raw)
-      if (
-        Array.isArray(cached) &&
-        cached.length >= CHIP_POOL_SIZE &&
-        cached.every((chip) => typeof chip === 'string')
-      ) {
-        return cached
-      }
-    }
-  } catch (err) {
-    console.warn(`建议词缓存 ${key} 解析失败`, err)
-  }
-  return []
-}
-
-function saveCachedChips(mode: 'socratic' | 'normal', list: string[]) {
-  const key = mode === 'socratic' ? SK_CHIPS_SOCRATIC : SK_CHIPS_NORMAL
-  localStorage.setItem(key, JSON.stringify(list))
-}
-
-function selectSuggestions(candidates: string[], shown: Set<string>): string[] {
-  const selected = new Set<string>()
-  for (const suggestion of candidates) {
-    const text = suggestion.trim()
-    if (text && !shown.has(text)) selected.add(text)
-    if (selected.size === CHIP_POOL_SIZE) break
-  }
-  return [...selected]
-}
-
-function refreshSuggestions(shown: string[]) {
-  void loadSuggestions(true, shown)
-}
-
-async function loadSuggestions(force = false, shown: string[] = []) {
-  const mode = chatMode.value
-  const cached = loadCachedChips(mode)
-  if (cached.length > 0 && !force) {
-    chips.value = cached
-    return
-  }
-  if (chipsLoading.value) return
-  const previous = chips.value
-  const visible = new Set(shown)
-  chipsLoading.value = true
-  try {
-    const result = await getSuggestions(mode, shown)
-    if (chatMode.value !== mode) return
-    const fallback = [...previous, ...defaultChips[mode], ...alternateChips[mode]]
-    chips.value = selectSuggestions(
-      result.source === 'fallback'
-        ? [...fallback, ...result.suggestions]
-        : [...result.suggestions, ...fallback],
-      visible,
-    )
-    if (result.source !== 'fallback' && chips.value.length === CHIP_POOL_SIZE) {
-      saveCachedChips(mode, chips.value)
-    }
-  } catch {
-    if (chatMode.value === mode) {
-      chips.value = selectSuggestions(
-        [...previous, ...defaultChips[mode], ...alternateChips[mode]],
-        visible,
+const { chips, chipsLoading, refreshSuggestions } = useDialogueSuggestions(
+  () => {
+    const session = currentSession.value
+    const topicId = chatMode.value === 'socratic' ? session?.topicId : undefined
+    const hasConversation =
+      chatMode.value === 'normal' &&
+      Boolean(
+        session?.messages.some(
+          (message) =>
+            (!message.messageType || message.messageType === 'chat') &&
+            hasMessageContent(message) &&
+            (message.role === 'user' || message.db_id != null || message.chatRequest),
+        ),
       )
+    const node =
+      topicId &&
+      currentTopicId.value === topicId &&
+      store.nodes.some((item) => item.id === store.activeNode?.id)
+        ? store.activeNode
+        : null
+    return {
+      mode: chatMode.value,
+      userId: store.userInfo?.id,
+      modelId: modelsStore.selectedModelId,
+      ...(topicId || hasConversation
+        ? {
+            sessionId: session?.id,
+            conversationVersion: JSON.stringify(
+              session?.messages
+                .filter((message) => !message.messageType || message.messageType === 'chat')
+                .slice(-6)
+                .map((message) => [message.db_id, message.role, message.text.slice(-800)]),
+            ),
+          }
+        : {}),
+      ...(chatMode.value === 'normal' ? { hasConversation } : {}),
+      ...(topicId
+        ? {
+            topicId,
+            topicTitle:
+              store.topics.find((topic) => Number(topic.id) === topicId)?.title ??
+              session?.topicTitle,
+            nodeKey: node?.id,
+            nodeLabel: node?.label,
+            nodeSub: node?.sub,
+          }
+        : {}),
     }
-  } finally {
-    chipsLoading.value = false
-  }
-}
+  },
+  () => !isThinking.value && !isGenerating.value && !activeAgentRun.value && !draftTopic.value,
+)
 
 function pushMessage(msg: Message) {
   if (!currentSession.value) return
   currentSession.value.messages.push(msg)
   currentSession.value.updatedAt = nowDate()
-  if (msg.role === 'user' && currentSession.value.name.startsWith('新')) {
-    currentSession.value.name = msg.text.slice(0, 12) + (msg.text.length > 12 ? '…' : '')
-  }
+  if (msg.role === 'user') void sessionTitles.ensureTitle(currentSession.value)
   saveSessions()
 }
 
@@ -657,7 +661,6 @@ async function handleOnboardingCompleted(run: AgentRun) {
     inheritCurrentTopicAvatar(session, topicId)
     session.topicId = topicId
     session.topicTitle = title
-    session.name = title.slice(0, 12)
     session.awaitingTopicChoice = false
     saveSessions()
   }
@@ -669,6 +672,7 @@ async function handleOnboardingCompleted(run: AgentRun) {
 }
 
 async function startLearningPlan(input: OnboardingInput) {
+  resetScrollToBottom()
   const topicPlanDraft = agentStore.topicPlanDraft
   const response = topicPlanDraft
     ? await onboardingFlow.startTopicPlan(topicPlanDraft.topicId, withoutTopic(input))
@@ -703,6 +707,7 @@ async function submitChoiceAnswer(answer: string) {
       metadata: { run_id: runId, step_id: stepId },
     })
   }
+  resetScrollToBottom()
   await (agentStore.run?.type === 'assessment'
     ? assessmentFlow.answer(answer)
     : onboardingFlow.answer(answer))
@@ -722,16 +727,19 @@ function recordCurrentAgentStep() {
 }
 
 async function updatePlanPreview(input: AgentRunUpdate) {
+  resetScrollToBottom()
   await onboardingFlow.update(input)
   scrollToBottom()
 }
 
 async function confirmPlan() {
+  resetScrollToBottom()
   await onboardingFlow.confirm()
   scrollToBottom()
 }
 
 async function cancelAgentFlow() {
+  resetScrollToBottom()
   const response = await (agentStore.run?.type === 'assessment'
     ? assessmentFlow.cancel()
     : onboardingFlow.cancel())
@@ -743,6 +751,7 @@ async function cancelAgentFlow() {
 }
 
 async function retryAgentFlow() {
+  resetScrollToBottom()
   await (agentStore.run?.type === 'assessment' ? assessmentFlow.retry() : onboardingFlow.retry())
   scrollToBottom()
 }
@@ -751,6 +760,7 @@ async function startAssessment() {
   const nodeId = store.activeNode?.dbId
   if (!nodeId || store.activeNode?.state === 'locked') return
   dismissedAssessmentNodeId.value = null
+  resetScrollToBottom()
   await assessmentFlow.start(nodeId)
   scrollToBottom()
 }
@@ -758,7 +768,7 @@ async function startAssessment() {
 function continueLearning() {
   dismissedAssessmentNodeId.value = store.activeNode?.dbId ?? null
   agentStore.clearRun()
-  scrollToBottom()
+  resetScrollToBottom()
 }
 
 function requestMasteryAction(action: 'self_report' | 'revert') {
@@ -769,6 +779,7 @@ async function confirmMasteryAction() {
   const action = masteryConfirm.value
   const nodeId = store.activeNode?.dbId
   if (!action || !nodeId) return
+  resetScrollToBottom()
   const response =
     action === 'revert'
       ? await assessmentFlow.revert(nodeId)
@@ -786,6 +797,12 @@ async function confirmMasteryAction() {
 function scrollToBottom() {
   messageListRef.value?.scrollToBottom()
 }
+
+function resetScrollToBottom() {
+  messageListRef.value?.scrollToBottom(true)
+}
+
+watch(currentSessionId, resetScrollToBottom)
 
 function openAiAvatarPicker() {
   if (!currentSession.value) return
@@ -895,32 +912,37 @@ function resetSessionInteraction() {
   cancelActiveStream()
   chatError.value = ''
   retryRequest.value = null
+  retryUserMessage.value = null
   streamEpoch += 1
   streamControl.abortRequest()
-  activeStreamMessageIds = null
+  activeStreamMessageIds.value = null
   activeStreamUserMessage = null
   streamingText.value = ''
   streamingWeb.value = undefined
   streamingChoices.value = null
+  attachmentPreparation.value = ''
   isThinking.value = false
   agentStore.clearRun()
   agentStore.closeOnboarding()
   agentStore.closeTopicPlan()
 }
 
-onMounted(() => {
-  const cached = loadCachedChips(chatMode.value)
-  chips.value = cached.length > 0 ? cached : defaultChips[chatMode.value]
+function persistBeforePageHide() {
+  saveSessions(true)
+}
 
+onMounted(() => {
+  saveSessions(true)
+  window.addEventListener('pagehide', persistBeforePageHide)
   syncSessionTopic(currentSocraticSession.value)
   isHydrated = true
 })
 
 watch(
-  () => store.topics.length,
-  (len) => {
-    if (len > 0 && store.userInfo?.id) {
-      rebuildFromBackend()
+  () => [store.topics.length, store.userInfo?.id] as const,
+  ([, userId]) => {
+    if (userId) {
+      void rebuildFromBackend().then(() => sessionTitles.refreshTitles())
     }
   },
   { immediate: true },
@@ -929,8 +951,6 @@ watch(
 watch(chatMode, (mode, previousMode) => {
   if (mode !== previousMode) resetSessionInteraction()
 
-  const cached = loadCachedChips(chatMode.value)
-  chips.value = cached.length > 0 ? cached : defaultChips[chatMode.value]
   scrollToBottom()
 })
 
@@ -947,7 +967,7 @@ watch(
       saveSessions()
     }
     syncSessionTopic(currentSocraticSession.value)
-    nextTick(scrollToBottom)
+    resetScrollToBottom()
   },
 )
 
@@ -963,7 +983,7 @@ watch(
       showHistory.value = false
       saveSessions()
     }
-    nextTick(scrollToBottom)
+    resetScrollToBottom()
   },
 )
 
@@ -1036,9 +1056,8 @@ watch(
         continue
       }
       const t = topics.find((x) => Number(x.id) === s.topicId)
-      if (t && (s.topicTitle !== t.title || s.name !== t.title.slice(0, 12))) {
+      if (t && s.topicTitle !== t.title) {
         s.topicTitle = t.title
-        s.name = t.title.slice(0, 12)
         mutated = true
       }
       next.push(s)
@@ -1075,6 +1094,8 @@ async function deleteSession(id: string) {
     deletingSessionIds.delete(id)
   }
 
+  attachmentDrafts.discardScope(chatMode.value, id)
+  rememberRequest(id, null)
   if (id === currentSessionId.value) resetSessionInteraction()
 
   if (chatMode.value === 'socratic') {
@@ -1109,12 +1130,16 @@ function startEdit(session: Session) {
   editingName.value = session.name
 }
 
-function saveSessionName(id: string) {
+async function saveSessionName(id: string) {
   const sessions = chatMode.value === 'socratic' ? socraticSessions.value : normalSessions.value
   const session = sessions.find((s) => s.id === id)
   if (session && editingName.value.trim()) {
-    session.name = editingName.value.trim()
-    saveSessions()
+    try {
+      await sessionTitles.renameTitle(session, editingName.value.trim())
+    } catch (error) {
+      chatError.value = error instanceof Error ? error.message : '标题保存失败，请重试'
+      return
+    }
   }
   editingSessionId.value = null
 }
@@ -1165,6 +1190,26 @@ async function deleteMessage(index: number) {
   try {
     const ids = [message.db_id, message.paired_db_id].filter((id): id is number => id != null)
     if (ids.length) await deleteMessages(ids)
+    const deletedAttachmentIds = new Set(
+      message.attachments?.map((attachment) => attachment.id) ?? [],
+    )
+    if (deletedAttachmentIds.size) {
+      for (const item of session.messages) {
+        const web = item.metadata?.web as WebSnapshot | undefined
+        if (web)
+          item.metadata = {
+            ...item.metadata,
+            web: {
+              ...web,
+              sources: web.sources.map((source) =>
+                'attachment_id' in source && deletedAttachmentIds.has(source.attachment_id)
+                  ? { ...source, deleted: true, excerpt: '' }
+                  : source,
+              ),
+            },
+          }
+      }
+    }
     const currentIndex = session.messages.indexOf(message)
     if (currentIndex >= 0) session.messages.splice(currentIndex, 1)
     retryRequest.value = null
@@ -1183,11 +1228,149 @@ interface StreamContext {
   controller: AbortController
   replacing: boolean
   retry?: () => void
+  userMessage?: Message
+  onRecovered?: (ids: { user: number; ai: number }) => void
   onPartial?: (message: Message) => void
   onCancelled?: (ids?: { user: number; ai: number }) => void
   cancelled?: boolean
   web?: WebSnapshot
 }
+
+const pendingRequestKey = 'sm_pending_chat_requests'
+let recoveryTimer: ReturnType<typeof setTimeout> | undefined
+function pendingRequests(): Record<string, string> {
+  try {
+    return JSON.parse(localStorage.getItem(pendingRequestKey) ?? '{}')
+  } catch {
+    return {}
+  }
+}
+function rememberRequest(sessionId: string, requestId: string | null) {
+  const pending = pendingRequests()
+  if (requestId) pending[sessionId] = requestId
+  else delete pending[sessionId]
+  localStorage.setItem(pendingRequestKey, JSON.stringify(pending))
+}
+async function recoverRequest(
+  sessionId: string,
+  requestId: string,
+  epoch: number,
+  failedStream?: StreamContext,
+) {
+  if (streamEpoch !== epoch || currentSession.value?.id !== sessionId) return
+  try {
+    const state = await getChatRequestState(requestId)
+    if (streamEpoch !== epoch || currentSession.value?.id !== sessionId) return
+    if (state.session_id && state.session_id !== sessionId) return
+    if (state.msg_ids) failedStream?.onRecovered?.(state.msg_ids)
+    const localUser = currentSession.value?.messages.find(
+      (message) => message.role === 'user' && message.metadata?.pending_request_id === requestId,
+    )
+    if (localUser && state.msg_ids) {
+      localUser.db_id = state.msg_ids.user
+      attachmentDrafts.consume(
+        localUser.attachments?.map((attachment) => attachment.id) ?? [],
+        `${chatMode.value}:${sessionId}`,
+      )
+      saveSessions()
+    }
+    if (state.status === 'generating') {
+      isThinking.value = true
+      retryRequest.value = null
+      attachmentPreparation.value = state.preparation?.total
+        ? `正在整理资料，已完成 ${state.preparation.completed ?? 0}/${state.preparation.total} 段`
+        : '正在恢复回复状态…'
+      if (!activeStream)
+        activeStream = {
+          epoch,
+          sessionId,
+          requestId,
+          controller: new AbortController(),
+          replacing: false,
+          retry: failedStream?.retry,
+          userMessage: failedStream?.userMessage,
+          onPartial: failedStream?.onPartial,
+          onCancelled: (ids) => {
+            if (!failedStream) return
+            failedStream.cancelled = true
+            failedStream.onCancelled?.(ids)
+          },
+        }
+      activeStreamMessageIds.value = state.msg_ids ?? null
+      const partialReply = currentSession.value?.messages.find(
+        (message) =>
+          message.role === 'ai' && message.db_id != null && message.db_id === state.msg_ids?.ai,
+      )
+      activeStream.replacing = Boolean(partialReply)
+      streamingText.value = partialReply?.text ?? ''
+      streamingChoices.value = partialReply?.choices ?? null
+      streamingWeb.value = messageWeb(partialReply?.metadata)
+      recoveryTimer = setTimeout(
+        () => void recoverRequest(sessionId, requestId, epoch, failedStream),
+        2000,
+      )
+      return
+    }
+    rememberRequest(sessionId, null)
+    activeStream = null
+    activeStreamMessageIds.value = null
+    activeStreamUserMessage = null
+    streamingText.value = ''
+    streamingWeb.value = undefined
+    streamingChoices.value = null
+    contextCompacting.value = false
+    attachmentPreparation.value = ''
+    isThinking.value = false
+    if (state.status !== 'complete') {
+      chatError.value = state.error?.message || '此前回复已中断，可从消息重新生成。'
+      retryRequest.value = state.error?.retryable === false ? null : (failedStream?.retry ?? null)
+      retryUserMessage.value = failedStream?.userMessage ?? null
+    } else {
+      chatError.value = ''
+      retryRequest.value = null
+      retryUserMessage.value = null
+    }
+    await rebuildFromBackend()
+    await sessionTitles.refreshTitles()
+  } catch (cause) {
+    if (streamEpoch !== epoch) return
+    const status = (cause as { response?: { status?: number } }).response?.status
+    if (status === 404) {
+      rememberRequest(sessionId, null)
+      activeStream = null
+      activeStreamMessageIds.value = null
+      activeStreamUserMessage = null
+      streamingText.value = ''
+      streamingWeb.value = undefined
+      streamingChoices.value = null
+      contextCompacting.value = false
+      attachmentPreparation.value = ''
+      isThinking.value = false
+      chatError.value = '请求未被服务端接收，请重试。'
+      retryRequest.value = failedStream?.retry ?? null
+      retryUserMessage.value = failedStream?.userMessage ?? null
+      return
+    }
+    chatError.value = '暂时无法确认回复状态，将自动重试。'
+    recoveryTimer = setTimeout(
+      () => void recoverRequest(sessionId, requestId, epoch, failedStream),
+      5000,
+    )
+  }
+}
+watch(
+  currentSessionId,
+  (sessionId) => {
+    clearTimeout(recoveryTimer)
+    const requestId = pendingRequests()[sessionId]
+    if (requestId) {
+      const epoch = streamEpoch
+      void nextTick(() => recoverRequest(sessionId, requestId, epoch))
+    }
+  },
+  { immediate: true },
+)
+onBeforeUnmount(() => clearTimeout(recoveryTimer))
 
 function cancelActiveStream(): Promise<boolean> {
   const stream = activeStream
@@ -1196,6 +1379,7 @@ function cancelActiveStream(): Promise<boolean> {
   return cancelChatStream(stream.sessionId, stream.requestId)
     .then((response) => {
       stream.cancelled = true
+      rememberRequest(stream.sessionId, null)
       stream.onCancelled?.(response?.msg_ids)
       return true
     })
@@ -1209,17 +1393,20 @@ function beginStream(sessionId: string, requestId: string = crypto.randomUUID())
   cancelActiveStream()
   const controller = streamControl.beginRequest()
   const context = { epoch: ++streamEpoch, sessionId, requestId, controller, replacing: false }
-  activeStreamMessageIds = null
+  activeStreamMessageIds.value = null
   activeStreamUserMessage = null
   activeStream = context
   chatError.value = ''
   contextCompacting.value = false
+  attachmentPreparation.value = ''
   retryRequest.value = null
+  retryUserMessage.value = null
   return context
 }
 
 function isCurrentStream(context: StreamContext): boolean {
   return (
+    activeStream === context &&
     context.epoch === streamEpoch &&
     context.sessionId === currentSession.value?.id &&
     !context.controller.signal.aborted
@@ -1227,7 +1414,7 @@ function isCurrentStream(context: StreamContext): boolean {
 }
 
 function abortChat() {
-  const messageIds = activeStreamMessageIds
+  const messageIds = activeStreamMessageIds.value
   const userMessage = activeStreamUserMessage
   const stoppingStream = activeStream
   const replacing = stoppingStream?.replacing
@@ -1237,19 +1424,22 @@ function abortChat() {
   const cancellation = cancelActiveStream()
   const stoppedEpoch = ++streamEpoch
   void cancellation.then(() => {
-    if (streamEpoch === stoppedEpoch && !isThinking.value)
+    if (streamEpoch === stoppedEpoch && !isThinking.value) {
       retryRequest.value = stoppingStream?.retry ?? null
+      retryUserMessage.value = stoppingStream?.userMessage ?? null
+    }
   })
   streamControl.abortRequest()
-  activeStreamMessageIds = null
+  activeStreamMessageIds.value = null
   activeStreamUserMessage = null
   const partial = streamingText.value.trim()
   streamingText.value = ''
   streamingWeb.value = undefined
   streamingChoices.value = null
+  attachmentPreparation.value = ''
   isThinking.value = false
-  if ((partial || stoppingStream?.web) && !replacing) {
-    const { cleanText, choices } = parseChoices(partial)
+  const { cleanText, choices } = parseChoices(partial)
+  if (hasMessageContent({ text: cleanText, choices: choices ?? undefined }) && !replacing) {
     if (messageIds && userMessage) userMessage.db_id = messageIds.user
     const partialMessage: Message = {
       role: 'ai',
@@ -1279,28 +1469,47 @@ interface DialogueRequest {
   regenerateMessageId?: number
   requestId?: string
   modelId?: string | null
+  attachmentIds?: string[]
+  attachmentScopeKey?: string
 }
 
 function streamDialogue(request: DialogueRequest): Promise<void> {
   const session = currentSession.value
   if (!session) return Promise.resolve()
+  // Freeze ids before dispatch; retry closures never read the current input draft.
+  request = { ...request, attachmentIds: [...(request.attachmentIds ?? [])] }
+  if (request.mode === 'socratic' && !request.regenerateMessageId && !request.replaceMessage) {
+    session.nodeKey = request.kind === 'topic_overview' ? null : request.nodeKey
+    saveSessions()
+  }
   const stream = beginStream(session.id, request.requestId)
+  clearTimeout(recoveryTimer)
+  rememberRequest(session.id, stream.requestId)
+  if (request.userMessage) {
+    request.userMessage.metadata = {
+      ...request.userMessage.metadata,
+      pending_request_id: stream.requestId,
+    }
+    saveSessions()
+  }
   const modelId = request.modelId !== undefined ? request.modelId : getSelectedModelId()
   stream.replacing = Boolean(request.replaceMessage)
+  stream.userMessage = request.userMessage
   activeStreamUserMessage = request.userMessage ?? null
   isThinking.value = true
   streamingText.value = ''
   streamingWeb.value = undefined
   streamingChoices.value = null
-  scrollToBottom()
+  resetScrollToBottom()
   return new Promise((resolve) => {
     stream.controller.signal.addEventListener('abort', () => resolve(), { once: true })
     let messageIds: { user: number; ai: number } | null = null
     let replaceMessage = request.replaceMessage
-    stream.onCancelled = (ids) => {
+    stream.onRecovered = stream.onCancelled = (ids) => {
       if (!ids) return
       messageIds = ids
       if (request.userMessage) request.userMessage.db_id = ids.user
+      attachmentDrafts.consume(request.attachmentIds ?? [], request.attachmentScopeKey)
       if (replaceMessage && !request.replaceMessage) {
         replaceMessage.db_id = ids.ai
         replaceMessage.chatRequest = requestContext()
@@ -1312,29 +1521,59 @@ function streamDialogue(request: DialogueRequest): Promise<void> {
       input: request.input,
       kind: request.kind ?? 'qa',
       userMessageId: messageIds?.user,
+      attachmentIds: request.attachmentIds,
     })
     stream.onPartial = (message) => {
       replaceMessage = message
       message.chatRequest = requestContext()
       saveSessions()
     }
-    stream.retry = () =>
+    stream.retry = () => {
+      const current = currentSession.value
+      if (!current || current.id !== session.id || isThinking.value) return
+      // Recovery can replace local message objects with persisted history.
+      const userMessage =
+        current.messages.find(
+          (message) =>
+            message.role === 'user' &&
+            message.db_id === request.userMessage?.db_id &&
+            message.db_id != null,
+        ) ?? request.userMessage
+      const aiMessageId = messageIds?.ai
+      const persistedReply =
+        aiMessageId != null
+          ? current.messages.find(
+              (message) => message.role === 'ai' && message.db_id === aiMessageId,
+            )
+          : undefined
+      const replacement =
+        persistedReply ??
+        current.messages.find(
+          (message) =>
+            message.role === 'ai' &&
+            message.db_id === replaceMessage?.db_id &&
+            message.db_id != null,
+        ) ??
+        replaceMessage
       void streamDialogue({
         ...request,
-        replaceMessage,
+        userMessage,
+        replaceMessage: replacement,
         modelId: messageIds || stream.cancelled ? undefined : modelId,
         requestId: messageIds || stream.cancelled ? undefined : stream.requestId,
         regenerateMessageId: messageIds?.ai ?? request.regenerateMessageId,
       })
+    }
     const finish = () => {
       activeStream = null
-      activeStreamMessageIds = null
+      activeStreamMessageIds.value = null
       activeStreamUserMessage = null
       streamingText.value = ''
       streamingWeb.value = undefined
       streamingChoices.value = null
       isThinking.value = false
       contextCompacting.value = false
+      attachmentPreparation.value = ''
       scrollToBottom()
       resolve()
     }
@@ -1342,8 +1581,11 @@ function streamDialogue(request: DialogueRequest): Promise<void> {
       if (!isCurrentStream(stream)) return resolve()
       chatError.value = chatErrorMessage(error)
       const partial = streamingText.value.trim()
-      if ((partial || stream.web) && !request.replaceMessage) {
-        const { cleanText, choices } = parseChoices(partial)
+      const { cleanText, choices } = parseChoices(partial)
+      if (
+        hasMessageContent({ text: cleanText, choices: choices ?? undefined }) &&
+        !request.replaceMessage
+      ) {
         pushMessage({
           role: 'ai',
           text: cleanText,
@@ -1368,7 +1610,25 @@ function streamDialogue(request: DialogueRequest): Promise<void> {
         failure?.retryable === false && failure.code !== 'CHAT_SESSION_BUSY'
           ? null
           : (stream.retry ?? null)
+      retryUserMessage.value = request.userMessage ?? null
+      const transportFailure =
+        error instanceof TypeError ||
+        [
+          'CHAT_STREAM_DISCONNECTED',
+          'CHAT_STREAM_TIMEOUT',
+          'CHAT_STREAM_EMPTY',
+          'CHAT_REQUEST_RUNNING',
+        ].includes(failure?.code ?? '')
+      if (!transportFailure) rememberRequest(session.id, null)
       finish()
+      if (transportFailure) {
+        void recoverRequest(
+          session.id,
+          stream.requestId,
+          stream.epoch,
+          retryRequest.value ? stream : undefined,
+        )
+      }
     }
     void chatStream(
       {
@@ -1384,6 +1644,7 @@ function streamDialogue(request: DialogueRequest): Promise<void> {
         quote: request.quote,
         regenerateMessageId: request.regenerateMessageId,
         modelId: modelId,
+        attachmentIds: request.attachmentIds,
       },
       {
         onChunk: (chunk) => {
@@ -1395,28 +1656,28 @@ function streamDialogue(request: DialogueRequest): Promise<void> {
         },
         onDone: () => {
           if (!isCurrentStream(stream)) return resolve()
+          rememberRequest(session.id, null)
           const content = streamingText.value.trim()
-          if (!content) return fail(new Error('模型未返回可用的回答，请重试。'))
-          if (content) {
-            const { cleanText, choices } = parseChoices(content)
-            const message: Message = {
-              role: 'ai',
-              text: cleanText,
-              time: now(),
-              choices: choices ?? undefined,
-              db_id: messageIds?.ai,
-              chatRequest: requestContext(),
-              metadata: { web: stream.web },
-              paired_db_id: request.userMessage ? undefined : messageIds?.user,
-            }
-            const replaceIndex = request.replaceMessage
-              ? session.messages.indexOf(request.replaceMessage)
-              : -1
-            if (replaceIndex >= 0) {
-              session.messages.splice(replaceIndex, 1, message)
-              saveSessions()
-            } else pushMessage(message)
+          const { cleanText, choices } = parseChoices(content)
+          if (!hasMessageContent({ text: cleanText, choices: choices ?? undefined }))
+            return fail(new Error('模型未返回可用的回答，请重试。'))
+          const message: Message = {
+            role: 'ai',
+            text: cleanText,
+            time: now(),
+            choices: choices ?? undefined,
+            db_id: messageIds?.ai,
+            chatRequest: requestContext(),
+            metadata: { web: stream.web },
+            paired_db_id: request.userMessage ? undefined : messageIds?.user,
           }
+          const replaceIndex = request.replaceMessage
+            ? session.messages.indexOf(request.replaceMessage)
+            : -1
+          if (replaceIndex >= 0) {
+            session.messages.splice(replaceIndex, 1, message)
+            saveSessions()
+          } else pushMessage(message)
           finish()
         },
         onError: fail,
@@ -1424,7 +1685,8 @@ function streamDialogue(request: DialogueRequest): Promise<void> {
           if (!isCurrentStream(stream)) return
           messageIds = { user, ai }
           if (request.userMessage) request.userMessage.db_id = user
-          activeStreamMessageIds = messageIds
+          activeStreamMessageIds.value = messageIds
+          attachmentDrafts.consume(request.attachmentIds ?? [], request.attachmentScopeKey)
           saveSessions()
         },
         onWebEvent: (event) => {
@@ -1449,6 +1711,19 @@ function streamDialogue(request: DialogueRequest): Promise<void> {
           stream.web = web
           streamingWeb.value = web
           contextCompacting.value = false
+        },
+        onAttachmentContext: (event) => {
+          if (
+            !isCurrentStream(stream) ||
+            (event.request_id && event.request_id !== stream.requestId)
+          )
+            return
+          attachmentPreparation.value =
+            event.type === 'attachment_context_ready'
+              ? ''
+              : event.total
+                ? `正在整理资料，已完成 ${event.completed ?? 0}/${event.total} 段`
+                : '正在整理资料…'
         },
         onContextStatus: (status) => {
           if (!isCurrentStream(stream)) return
@@ -1479,7 +1754,6 @@ async function saveTopicName() {
     await updateTopicTitle(topicId, newTitle)
     if (currentSession.value) {
       currentSession.value.topicTitle = newTitle
-      currentSession.value.name = newTitle.slice(0, 12)
       saveSessions()
     }
     await store.fetchTopicsOnly()
@@ -1519,19 +1793,40 @@ function sendChoiceText(choiceText: string) {
 
 function sendSuggestion(text: string) {
   input.value = text
-  void send()
+  void send({
+    topicFollowUp: chatMode.value === 'socratic' && Boolean(currentSession.value?.topicId),
+  })
 }
 
-async function send() {
+async function send(options?: { topicFollowUp?: boolean }) {
   const v = input.value.trim()
+  const newTopicIntent = !options?.topicFollowUp && isNewTopicIntent(v)
   if (
-    !v ||
+    (!v && (!attachmentsEnabled.value || !attachmentDrafts.drafts.value.length)) ||
     isThinking.value ||
     isGenerating.value ||
     agentStore.submitting ||
     (chatMode.value === 'socratic' && agentStore.run?.status === 'awaiting_confirmation')
   )
     return
+
+  if (
+    attachmentsEnabled.value &&
+    attachmentDrafts.drafts.value.length &&
+    !attachmentDrafts.ready.value
+  ) {
+    chatError.value = attachmentDisabledReason.value || '请先等待所有附件处理完成，或移除失败附件。'
+    return
+  }
+  if (
+    attachmentsEnabled.value &&
+    attachmentDrafts.drafts.value.length &&
+    chatMode.value === 'socratic' &&
+    newTopicIntent
+  ) {
+    chatError.value = '附件仅用于当前节点问答。新主题创建暂不支持附件，草稿已保留。'
+    return
+  }
 
   if (chatMode.value === 'socratic') {
     store.recordLearning()
@@ -1550,7 +1845,7 @@ async function send() {
       metadata: { run_id: runId, step_id: stepId },
     })
     input.value = ''
-    scrollToBottom()
+    resetScrollToBottom()
     await (agentStore.run.type === 'assessment'
       ? assessmentFlow.answer(v)
       : onboardingFlow.answer(v))
@@ -1559,6 +1854,9 @@ async function send() {
   }
 
   inputBarRef.value?.reset()
+  const attachmentsSnapshot = attachmentsEnabled.value ? attachmentDrafts.snapshot() : []
+  const attachmentIds = attachmentsSnapshot.map((attachment) => attachment.id)
+  const attachmentScopeKey = attachmentDrafts.key.value
   const quoteSnapshot = quotedText.value
   const sourceSnapshot = quotedSource.value
   const userInput = buildUserInput(v, quoteSnapshot)
@@ -1572,9 +1870,10 @@ async function send() {
     quote_source_local_id: sourceSnapshot?.localId,
     time: now(),
     messageType: 'chat',
+    attachments: attachmentsSnapshot,
   })
   input.value = ''
-  scrollToBottom()
+  resetScrollToBottom()
 
   if (chatMode.value === 'normal') {
     void streamDialogue({
@@ -1583,18 +1882,24 @@ async function send() {
       input: userInput,
       mode: 'normal',
       style: '标准',
+      attachmentIds,
+      attachmentScopeKey,
       userMessage: currentSession.value!.messages.at(-1),
       quote: quoteSnapshot ? { text: quoteSnapshot, sourceId: sourceSnapshot?.dbId } : undefined,
     })
     return
   }
 
-  if (await handlePendingTopicChoice(v)) {
-    scrollToBottom()
-    return
+  if (currentSession.value?.awaitingTopicChoice) {
+    const handled = await handlePendingTopicChoice(v)
+    if (currentSession.value) void sessionTitles.ensureTitle(currentSession.value)
+    if (handled) {
+      scrollToBottom()
+      return
+    }
   }
 
-  if (currentSession.value?.topicId && isNewTopicIntent(v)) {
+  if (currentSession.value?.topicId && newTopicIntent) {
     pushMessage({
       role: 'ai',
       text: `本对话已绑定「**${currentSession.value.topicTitle}**」主题，每个学习对话只能学习一个主题。\n\n如需学习新主题，请点击右上角「＋」新建对话。`,
@@ -1604,7 +1909,7 @@ async function send() {
     return
   }
 
-  if (isNewTopicIntent(v)) {
+  if (newTopicIntent) {
     const topicName = extractTopic(v)
     if (topicName.length >= 2) {
       agentStore.openOnboarding(topicName)
@@ -1620,7 +1925,6 @@ async function send() {
       inheritCurrentTopicAvatar(currentSession.value, topicId)
       currentSession.value.topicId = topicId
       currentSession.value.topicTitle = topic.title
-      currentSession.value.name = topic.title.slice(0, 12)
     }
   }
 
@@ -1650,27 +1954,31 @@ async function send() {
     input: userInput,
     mode: 'socratic',
     style: aiStyle.value,
+    attachmentIds,
+    attachmentScopeKey,
     userMessage: currentSession.value!.messages.at(-1),
     quote: quoteSnapshot ? { text: quoteSnapshot, sourceId: sourceSnapshot?.dbId } : undefined,
   })
 }
 
-async function retryAt(aiIndex: number) {
+async function retryAt(messageIndex: number) {
   if (isThinking.value) return
+  if (messageIndex === retryUserIndex.value && retryRequest.value) {
+    retryRequest.value()
+    return
+  }
   const messages = currentSession.value?.messages ?? []
-  if (aiIndex !== retryableAiIndex(messages)) return
+  const aiIndex = retryableAiIndex(messages)
+  if (aiIndex < 0) return
+  const userIndex = replyUserIndex(messages, aiIndex)
+  if (messageIndex !== aiIndex && messageIndex !== userIndex) return
   const original = messages[aiIndex]
   if (original.db_id == null) {
     chatError.value = '这条回复尚未保存，无法重新生成。'
     return
   }
   const request = original.chatRequest
-  const userMessage = request?.userMessageId
-    ? messages.find((message) => message.db_id === request.userMessageId)
-    : messages
-        .slice(0, aiIndex)
-        .reverse()
-        .find((message) => message.role === 'user')
+  const userMessage = messages[userIndex]
   if (!userMessage && !request) return
   await streamDialogue({
     nodeKey:
@@ -1683,6 +1991,8 @@ async function retryAt(aiIndex: number) {
     userMessage,
     replaceMessage: original,
     regenerateMessageId: original.db_id,
+    attachmentIds:
+      request?.attachmentIds ?? userMessage?.attachments?.map((attachment) => attachment.id),
     quote: userMessage?.quote
       ? { text: userMessage.quote, sourceId: userMessage.quote_source_db_id }
       : undefined,
@@ -1726,6 +2036,7 @@ watch(
 )
 
 onBeforeUnmount(() => {
+  window.removeEventListener('pagehide', persistBeforePageHide)
   disposeSessionPersistence()
   cancelActiveStream()
   streamEpoch += 1
@@ -1734,25 +2045,6 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-.chat-error {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 10px 16px;
-  color: var(--color-danger, #b42318);
-  font-size: 13px;
-}
-.chat-error button {
-  flex-shrink: 0;
-  padding: 4px 10px;
-  border: 1px solid currentColor;
-  border-radius: 6px;
-  background: transparent;
-  color: inherit;
-  cursor: pointer;
-}
-
 .dialogue-wrap {
   display: flex;
   flex-direction: column;
@@ -1780,6 +2072,10 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 10px;
+  min-width: 0;
+}
+.dlg-heading {
+  min-width: 0;
 }
 .ai-avatar {
   width: 32px;
@@ -1816,23 +2112,25 @@ onBeforeUnmount(() => {
 .dlg-title {
   font-weight: 600;
   font-size: 13.5px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 200px;
 }
 
-.dlg-sub {
+.dlg-sub,
+.dlg-status {
   font-size: 11px;
   color: var(--ink-3);
   margin-top: 1px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .dlg-actions {
   display: flex;
   gap: 6px;
+  flex-shrink: 0;
 }
 .hdr-btn {
   width: 28px;

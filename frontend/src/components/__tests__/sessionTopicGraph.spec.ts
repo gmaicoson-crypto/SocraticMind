@@ -6,6 +6,8 @@ import { createDefaultSession } from '../../composables/useChatSessions'
 import { useAgentStore } from '../../stores/agent'
 import { useLearningStore } from '../../stores/learning'
 import { getNodes, getTopics } from '../../api/topic'
+import { attachmentCapabilities } from '../../test/fixtures/attachments'
+import { getAttachmentCapabilities } from '../../api/attachments'
 
 vi.mock('../../api/chat', () => ({
   chatStream: vi.fn(),
@@ -26,6 +28,9 @@ vi.mock('../../api/models', () => ({
   createCustomModel: vi.fn(),
   updateCustomModel: vi.fn(),
   deleteCustomModel: vi.fn(),
+}))
+vi.mock('../../api/attachments', () => ({
+  getAttachmentCapabilities: vi.fn(),
 }))
 
 vi.mock('../../api/topic', () => ({
@@ -54,6 +59,7 @@ describe('learning session graph state', () => {
   beforeEach(() => {
     localStorage.clear()
     vi.clearAllMocks()
+    vi.mocked(getAttachmentCapabilities).mockResolvedValue(attachmentCapabilities)
     vi.mocked(getNodes).mockResolvedValue([nodeData])
     Object.defineProperty(window, 'matchMedia', {
       configurable: true,

@@ -4,6 +4,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { chatStream } from '../../api/chat'
 import { useLearningStore } from '../../stores/learning'
 import type { KNode } from '../../types'
+import { attachmentCapabilities } from '../../test/fixtures/attachments'
 import KnowledgeGraph from '../KnowledgeGraph.vue'
 import SocraticDialogue from '../SocraticDialogue.vue'
 
@@ -26,6 +27,9 @@ vi.mock('../../api/models', () => ({
   createCustomModel: vi.fn(),
   updateCustomModel: vi.fn(),
   deleteCustomModel: vi.fn(),
+}))
+vi.mock('../../api/attachments', () => ({
+  getAttachmentCapabilities: vi.fn().mockResolvedValue(attachmentCapabilities),
 }))
 
 vi.mock('../graph/ThreeGraphCanvas.vue', () => ({
