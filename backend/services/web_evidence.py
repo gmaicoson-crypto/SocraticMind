@@ -19,7 +19,8 @@ if TYPE_CHECKING:
     from services.chat_context import PreparedChatContext
 
 
-MAX_SOURCES = 5
+MAX_SOURCES = 64
+MAX_WEB_SOURCES = 5
 MAX_WEB_REFERENCES = 64
 SOURCE_ID = re.compile(r"s[1-9][0-9]{0,15}\Z")
 CITATION = re.compile(r"\[\[source:([A-Za-z0-9_-]{1,64})\]\]")
@@ -168,64 +169,120 @@ def _timestamp(value: object) -> bool:
 
 
 def _sources(sources: object, *, require_excerpt: bool = False) -> list[dict]:
-    """Defend history reconstruction too, rather than trusting arbitrary JSON rows."""
+    """Validate the unified server source snapshot including file locators."""
     if not isinstance(sources, list):
         return []
-    selected = []
-    seen = set()
+    selected, seen = [], set()
+    web_count = 0
     for source in sources[:MAX_SOURCES]:
         if not isinstance(source, dict):
             continue
-        source_id = source.get("id")
-        url = canonical_source_url(source.get("url"))
+        source_id, kind = source.get("id"), source.get("kind", "web")
         if (
             not isinstance(source_id, str)
             or not SOURCE_ID.fullmatch(source_id)
             or source_id in seen
-            or url is None
             or not _timestamp(source.get("retrieved_at"))
         ):
             continue
-        excerpt = source.get("excerpt", "")
-        if not isinstance(excerpt, str) or (require_excerpt and not excerpt.strip()):
+        excerpt, title = source.get("excerpt", ""), source.get("title")
+        if (
+            not isinstance(excerpt, str)
+            or (require_excerpt and not excerpt.strip())
+            or not isinstance(title, str)
+            or not title.strip()
+        ):
             continue
-        title = source.get("title")
-        if not isinstance(title, str) or not title.strip():
-            continue
-        seen.add(source_id)
-        selected.append(
-            {
-                "id": source_id,
-                "title": title[:300],
-                "url": url,
-                "domain": urlsplit(url).hostname,
-                "excerpt": excerpt[:2400],
-                "published_at": source["published_at"][:64]
+        common = {
+            "id": source_id,
+            "kind": kind,
+            "title": title[:300],
+            "excerpt": excerpt[:8000],
+            "retrieved_at": source["retrieved_at"],
+        }
+        if kind == "web":
+            url = canonical_source_url(source.get("url"))
+            if url is None or web_count >= MAX_WEB_SOURCES:
+                continue
+            common.update(
+                url=url,
+                domain=urlsplit(url).hostname,
+                excerpt=excerpt[:2400],
+                published_at=source["published_at"][:64]
                 if isinstance(source.get("published_at"), str)
                 else None,
-                "retrieved_at": source["retrieved_at"],
-            }
-        )
+            )
+            web_count += 1
+        elif kind in {"document", "image"}:
+            attachment_id, revision = source.get("attachment_id"), source.get("revision")
+            chunk_id, locator = source.get("chunk_id"), source.get("locator")
+            if (
+                not isinstance(attachment_id, str)
+                or len(attachment_id) > 36
+                or type(revision) is not int
+                or revision < 1
+                or not isinstance(locator, dict)
+                or (kind == "document" and (not isinstance(chunk_id, str) or len(chunk_id) > 100))
+                or (kind == "image" and chunk_id is not None)
+            ):
+                continue
+            if any(
+                not isinstance(key, str)
+                or len(key) > 64
+                or not isinstance(value, (str, int, list, type(None)))
+                for key, value in locator.items()
+            ):
+                continue
+            common.update(
+                block_type=source.get("block_type", "image" if kind == "image" else "paragraph"),
+                title_path=source.get("title_path", []),
+                attachment_id=attachment_id,
+                revision=revision,
+                chunk_id=chunk_id,
+                locator=locator,
+            )
+            if source.get("deleted"):
+                common.update(deleted=True, excerpt="")
+            if source.get("summary") is True and isinstance(source.get("covered_chunk_ids"), list):
+                ids = source["covered_chunk_ids"]
+                if len(ids) > 5000 or any(
+                    not isinstance(item, str) or len(item) > 100 for item in ids
+                ):
+                    continue
+                common.update(
+                    summary=True, covered_chunk_ids=ids, coverage=source.get("coverage", [])
+                )
+        else:
+            continue
+        seen.add(source_id)
+        selected.append(common)
     return selected
 
 
-def message_web_sources(message: ChatMessage) -> list[dict]:
+def message_web_sources(message: ChatMessage, *, sources: list[dict] | None = None) -> list[dict]:
     """Resolve only citations present in persisted content, never a streamed tail."""
     metadata = message.metadata_json or {}
     if message.role != "ai" or metadata.get("status") in {"deleted", "superseded"}:
         return []
     web = metadata.get("web")
-    sources = _sources(web.get("sources")) if isinstance(web, dict) else []
-    mapping = {source["id"]: source for source in sources}
+    sources = (
+        sources
+        if sources is not None
+        else (_sources(web.get("sources")) if isinstance(web, dict) else [])
+    )
+    mapping = {source["id"]: source for source in sources if not source.get("deleted")}
     return [
         {
             "message_id": message.id,
             "source_id": source_id,
-            "title": mapping[source_id]["title"],
-            "url": mapping[source_id]["url"],
-            "retrieved_at": mapping[source_id]["retrieved_at"],
+            **{
+                key: value
+                for key, value in mapping[source_id].items()
+                if key not in {"id", "excerpt", "coverage"}
+            },
         }
         for source_id in cited_source_ids(message.content, sources)
+        if source_id in mapping
     ]
 
 
@@ -275,9 +332,24 @@ def resolve_web_references(db: Session, session: ChatSession, references: list[d
         )
         .all()
     )
+    from services.attachments.evidence import hydrate_message_sources
+
+    hydrated = hydrate_message_sources(db, user_id=session.user_id, messages=messages)
+    # Use validated transient copies; never mutate persisted metadata on reads.
+    from types import SimpleNamespace
+
+    verified = []
+    for message in messages:
+        metadata = deepcopy(message.metadata_json or {})
+        metadata.setdefault("web", {})["sources"] = hydrated.get(message.id, [])
+        verified.append(
+            SimpleNamespace(
+                id=message.id, role=message.role, content=message.content, metadata_json=metadata
+            )
+        )
     allowed = {
         web_reference_key(source): source
-        for message in messages
+        for message in verified
         if (message.metadata_json or {}).get("status", "complete") == "complete"
         for source in message_web_sources(message)
     }
@@ -372,7 +444,7 @@ def apply_web_context(
         return count_messages(_evidence_messages(guidance, sources), model_id) - framing
 
     candidates = (
-        _sources(snapshot.get("sources"), require_excerpt=True)
+        [s for s in _sources(snapshot.get("sources"), require_excerpt=True) if s["kind"] == "web"]
         if snapshot.get("status") == "ready" and snapshot.get("requested_mode") != "off"
         else []
     )

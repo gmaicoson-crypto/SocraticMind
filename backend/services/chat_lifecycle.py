@@ -15,6 +15,7 @@ from core.errors import ApiError
 from models import ChatCancellation, ChatMessage, ChatSession, ChatTurn
 from services.web_evidence import cited_source_ids
 from services.web_search import empty_web_snapshot
+from services.attachments.service import validate_for_message, bind_to_message
 
 GENERATION_LEASE_SECONDS = 360
 TERMINAL_STATUSES = {"complete", "failed", "interrupted"}
@@ -98,6 +99,14 @@ def _replay(db: Session, turn: ChatTurn, fingerprint: str) -> StartedChatTurn:
     return StartedChatTurn(session, turn, user_message, ai_message, True)
 
 
+def recover_chat_turn(db: Session, *, user_id: int, request_id: str) -> ChatTurn:
+    """Observe a persisted request without starting work; expire abandoned leases."""
+    turn = get_chat_turn(db, user_id=user_id, request_id=request_id)
+    if turn is None:
+        raise _error("CHAT_REQUEST_NOT_FOUND", "请求不存在", 404)
+    return _replay(db, turn, turn.request_fingerprint).turn
+
+
 def _invalidate_summary_values() -> dict:
     return {
         "content_version": ChatSession.content_version + 1,
@@ -144,6 +153,62 @@ def _web_metadata(
     return {"web": snapshot}
 
 
+def _attachment_input(db, *, user_id, session_id, mode, topic_id, ids, regenerate_message_id):
+    """Freeze immutable resource revisions, including the original question on retry."""
+    from models.attachment import Attachment, MessageAttachment
+
+    ids = list(ids or [])
+    if len(ids) != len(set(ids)):
+        raise _error("ATTACHMENT_DUPLICATE", "同一附件不能重复添加", 422)
+    if regenerate_message_id is not None:
+        answer = (
+            db.query(ChatMessage)
+            .filter_by(
+                id=regenerate_message_id,
+                user_id=user_id,
+                session_id=session_id,
+                mode=mode,
+                topic_id=topic_id,
+                role="ai",
+            )
+            .one_or_none()
+        )
+        original_id = (answer.metadata_json or {}).get("user_message_id") if answer else None
+        original_ids = (
+            [
+                row.attachment_id
+                for row in db.query(MessageAttachment)
+                .filter_by(user_message_id=original_id)
+                .order_by(MessageAttachment.position)
+            ]
+            if original_id
+            else []
+        )
+        if ids and ids != original_ids:
+            raise _error("CHAT_REGENERATE_INVALID", "重新生成不能替换原问题的附件", 400)
+        ids = original_ids
+    if not ids:
+        return [], []
+    records = {
+        record.id: record
+        for record in db.query(Attachment).filter(
+            Attachment.id.in_(ids),
+            Attachment.user_id == user_id,
+        )
+    }
+    if len(records) != len(ids):
+        raise _error("ATTACHMENT_NOT_FOUND", "附件不存在或不可访问", 404)
+    snapshot = [
+        {
+            "id": key,
+            "revision": records[key].revision,
+            "accepted_coverage": records[key].accepted_coverage,
+        }
+        for key in ids
+    ]
+    return ids, snapshot
+
+
 def begin_chat_turn(
     db: Session,
     *,
@@ -161,6 +226,7 @@ def begin_chat_turn(
     quote_source_id: int | None = None,
     regenerate_message_id: int | None = None,
     web_mode: str | None = None,
+    attachment_ids: list[str] | None = None,
 ) -> StartedChatTurn:
     """Claim a session and persist placeholders atomically before streaming starts."""
     topic_id = topic_id or None
@@ -169,6 +235,17 @@ def begin_chat_turn(
         raise ValueError("invalid web mode for chat kind")
     if is_chat_cancelled(db, user_id=user_id, request_id=request_id):
         raise _error("CHAT_REQUEST_CANCELLED", "该请求已停止，请使用新的请求重新发送")
+    attachment_ids, attachment_snapshot = _attachment_input(
+        db,
+        user_id=user_id,
+        session_id=session_id,
+        mode=mode,
+        topic_id=topic_id,
+        ids=attachment_ids,
+        regenerate_message_id=regenerate_message_id,
+    )
+    if kind != "qa" and attachment_ids:
+        raise _error("ATTACHMENT_SCOPE_MISMATCH", "概览消息不能包含附件", 422)
     fingerprint = hashlib.sha256(
         json.dumps(
             {
@@ -184,6 +261,7 @@ def begin_chat_turn(
                 "quote_source_id": quote_source_id,
                 "regenerate_message_id": regenerate_message_id,
                 "web_mode": web_mode,
+                "attachments": attachment_snapshot,
             },
             ensure_ascii=False,
             sort_keys=True,
@@ -317,6 +395,10 @@ def begin_chat_turn(
                 )
             if user_message is None or user_message.content != user_input:
                 raise _error("CHAT_REGENERATE_INVALID", "重新生成需要对应原问题", 400)
+            if attachment_snapshot != (user_message.metadata_json or {}).get(
+                "attachment_snapshot", []
+            ):
+                raise _error("CHAT_REGENERATE_INVALID", "原问题附件已改变或不可用", 400)
             if (
                 db.query(ChatMessage.id)
                 .filter(
@@ -333,6 +415,27 @@ def begin_chat_turn(
                     "CHAT_REGENERATE_NOT_LATEST", "仅支持重新生成当前会话最后一轮回答", 400
                 )
         else:
+            attachments = (
+                validate_for_message(
+                    db,
+                    user_id=user_id,
+                    session_id=session_id,
+                    topic_id=topic_id,
+                    mode=mode,
+                    ids=attachment_ids,
+                )
+                if attachment_ids
+                else []
+            )
+            if attachment_snapshot != [
+                {
+                    "id": item.id,
+                    "revision": item.revision,
+                    "accepted_coverage": item.accepted_coverage,
+                }
+                for item in attachments
+            ]:
+                raise _error("ATTACHMENT_NOT_READY", "附件状态已更新，请重新发送")
             user_message = ChatMessage(
                 user_id=user_id,
                 topic_id=topic_id,
@@ -345,12 +448,19 @@ def begin_chat_turn(
                 metadata_json={
                     "status": "complete",
                     "request_id": request_id,
+                    "kind": kind,
+                    "attachment_snapshot": attachment_snapshot,
+                    "attachment_derived": bool(attachment_snapshot),
                     **({"quote": quote_text} if quote_text else {}),
                     **({"quote_source_id": quote_source_id} if quote_source_id else {}),
                 },
             )
             db.add(user_message)
             db.flush()
+            if attachments:
+                bind_to_message(
+                    db, message_id=user_message.id, session_id=session_id, attachments=attachments
+                )
         ai_message = ChatMessage(
             user_id=user_id,
             topic_id=topic_id,
@@ -499,6 +609,8 @@ def refresh_generation_lease(
     generation_token: str,
     content: str | None = None,
     web: dict | None = None,
+    preparation: dict | None = None,
+    attachment_derived: bool | None = None,
 ) -> bool:
     turn = get_chat_turn(db, user_id=user_id, request_id=request_id)
     if turn is None or turn.status != "generating" or turn.generation_token != generation_token:
@@ -506,6 +618,15 @@ def refresh_generation_lease(
     if is_chat_cancelled(db, user_id=user_id, request_id=request_id):
         return False
     now = utcnow()
+    prepared_state = {**deepcopy(turn.preparation_json or {}), **deepcopy(preparation or {})}
+    lease_until = now + timedelta(seconds=GENERATION_LEASE_SECONDS)
+    if prepared_state.get("deadline_at"):
+        deadline = datetime.fromisoformat(prepared_state["deadline_at"]).replace(
+            tzinfo=timezone.utc
+        )
+        if deadline <= now:
+            return False
+        lease_until = min(lease_until, deadline)
     claimed = (
         db.query(ChatSession)
         .filter(
@@ -516,14 +637,16 @@ def refresh_generation_lease(
             ChatSession.generation_lease_until >= now,
         )
         .update(
-            {"generation_lease_until": now + timedelta(seconds=GENERATION_LEASE_SECONDS)},
+            {"generation_lease_until": lease_until},
             synchronize_session=False,
         )
     )
     if not claimed:
         db.rollback()
         return False
-    if content is not None or web is not None:
+    if preparation is not None:
+        turn.preparation_json = prepared_state
+    if content is not None or web is not None or attachment_derived is not None:
         message = (
             db.query(ChatMessage)
             .filter_by(id=turn.ai_message_id, user_id=user_id)
@@ -538,6 +661,9 @@ def refresh_generation_lease(
         message.metadata_json = {
             **(message.metadata_json or {}),
             **_web_metadata(message, message.content, web=web),
+            **(
+                {"attachment_derived": attachment_derived} if attachment_derived is not None else {}
+            ),
         }
     db.commit()
     return True

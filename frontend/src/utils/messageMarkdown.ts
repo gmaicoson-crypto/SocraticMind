@@ -36,7 +36,12 @@ export function createMessageMarkdownRenderer() {
           if (!token.sourceId) return ''
           const index = web?.sources.findIndex((source) => source.id === token.sourceId) ?? -1
           const source = index >= 0 ? web?.sources[index] : undefined
-          const url = source && safeWebUrl(source.url)
+          if (source && (source.kind === 'document' || source.kind === 'image')) {
+            if (source.deleted) return '<span class="source-unavailable">[资料已删除]</span>'
+            cited.add(source.id)
+            return `<button type="button" class="source-citation file-citation" aria-label="${escapeHtml(source.id)}" title="${escapeHtml(source.title)}">[${index + 1}]</button>`
+          }
+          const url = source && 'url' in source && safeWebUrl(source.url)
           if (!source || !url) return '<span class="source-unavailable">[来源不可用]</span>'
           cited.add(source.id)
           return `<a class="source-citation" href="${escapeHtml(url)}" title="${escapeHtml(source.title)}">[${index + 1}]</a>`

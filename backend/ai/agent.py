@@ -3,6 +3,8 @@ import logging
 from copy import deepcopy
 from typing import Callable, Generator
 
+from openai import BadRequestError
+
 from core.ai_client import get_ai_client, resolve_llm_profile
 from core.context_budget import completion_options, ensure_fits
 from .prompts import (
@@ -94,6 +96,7 @@ def build_chat_messages(
     memories: list[dict] | None = None,
     model_id: str | None = None,
     context_notes: list[str] | None = None,
+    image_parts: list[dict] | None = None,
 ) -> list[dict]:
     """Build the same payload used for budgeting and the final model request.
 
@@ -137,6 +140,9 @@ def build_chat_messages(
             }
         ]
 
+    if image_parts:
+        user_content = [{"type": "text", "text": user_content}, *image_parts]
+
     return [
         {"role": "system", "content": system_prompt},
         *reference_messages,
@@ -159,6 +165,7 @@ def chat_stream(
     prepared_messages: list[dict] | None = None,
     on_usage: Callable[[dict], None] | None = None,
     on_stream: Callable[[object], None] | None = None,
+    timeout: float = 300,
 ) -> Generator[str, None, None]:
     """Stream a budget-checked request and close the upstream stream on cancel."""
     full_messages = (
@@ -183,13 +190,45 @@ def chat_stream(
     options = completion_options(model_id, temperature=profile.temperature)
     if on_usage is not None and profile.stream_usage:
         options["stream_options"] = {"include_usage": True}
-    stream = client.chat.completions.create(
-        model=profile.model,
-        messages=full_messages,
-        stream=True,
-        timeout=300,
-        **options,
-    )
+    try:
+        stream = client.chat.completions.create(
+            model=profile.model,
+            messages=full_messages,
+            stream=True,
+            timeout=timeout,
+            **options,
+        )
+    except BadRequestError as error:
+        has_images = any(
+            part.get("type") == "image_url"
+            for message in full_messages
+            if isinstance(message.get("content"), list)
+            for part in message["content"]
+            if isinstance(part, dict)
+        )
+        detail = str(error).lower()
+        if (
+            has_images
+            and any(word in detail for word in ("image", "vision", "multimodal", "图片", "图像"))
+            and any(
+                word in detail
+                for word in (
+                    "not support",
+                    "unsupported",
+                    "only support",
+                    "not allowed",
+                    "invalid content type",
+                    "only accept",
+                    "不支持",
+                )
+            )
+        ):
+            raise ChatStreamError(
+                "MODEL_VISION_UNSUPPORTED",
+                "当前模型或接入接口不支持图片输入，请切换支持图片的模型后重试。",
+                retryable=False,
+            ) from error
+        raise
 
     finish_reason = None
     has_content = False

@@ -144,7 +144,9 @@ def test_stream_persists_quote_target_in_user_message(client, db_session, auth_u
     assert response.status_code == 200
     user_message = db_session.query(ChatMessage).filter(ChatMessage.role == "user").one()
     assert {
-        key: value for key, value in user_message.metadata_json.items() if key != "request_id"
+        key: value
+        for key, value in user_message.metadata_json.items()
+        if key not in {"request_id", "kind", "attachment_derived", "attachment_snapshot"}
     } == {
         "status": "complete",
         "quote": "original answer",

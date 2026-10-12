@@ -91,7 +91,12 @@ const saving = ref(false)
 const deleting = ref(false)
 const busy = computed(() => saving.value || deleting.value)
 const formError = ref('')
-const form = reactive({ name: '', api_key: '', base_url: 'https://api.openai.com/v1', model: '' })
+const form = reactive({
+  name: '',
+  api_key: '',
+  base_url: 'https://api.openai.com/v1',
+  model: '',
+})
 
 watch(
   () => [props.modelValue, props.model?.id] as const,
@@ -232,11 +237,6 @@ async function remove() {
 .model-form input:focus-visible {
   outline: 2px solid var(--blue);
   outline-offset: 1px;
-}
-.key-note {
-  margin: 0;
-  color: var(--ink-3);
-  font-size: 11px;
 }
 .error-message {
   margin: 0;

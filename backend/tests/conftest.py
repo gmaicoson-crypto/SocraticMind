@@ -21,7 +21,17 @@ from sqlalchemy.pool import StaticPool
 from core.database import Base, get_db
 from core.deps import get_current_user
 from models import User
-from routers import agent, chat, llm, memories, nodes, plans, progress, topics
+from routers import (
+    agent,
+    chat,
+    llm,
+    memories,
+    nodes,
+    plans,
+    progress,
+    topics,
+    attachments,
+)
 
 
 @pytest.fixture()
@@ -63,6 +73,7 @@ def auth_user(db_session):
 @pytest.fixture()
 def app(db_session, auth_user):
     test_app = FastAPI()
+    test_app.add_middleware(attachments.AttachmentUploadLimitMiddleware)
     test_app.include_router(topics.router)
     test_app.include_router(nodes.router)
     test_app.include_router(chat.router)
@@ -71,6 +82,7 @@ def app(db_session, auth_user):
     test_app.include_router(plans.router)
     test_app.include_router(memories.router)
     test_app.include_router(llm.router)
+    test_app.include_router(attachments.router)
     from core.errors import install_api_error_handler
 
     install_api_error_handler(test_app)

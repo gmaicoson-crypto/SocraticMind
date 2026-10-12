@@ -44,7 +44,7 @@
     </div>
   </div>
 
-  <div class="input-wrap">
+  <div class="input-wrap" @dragover.prevent @drop.prevent="dropFiles">
     <div class="input-toolbar">
       <div class="mode-switch">
         <button
@@ -106,6 +106,25 @@
       </div>
     </div>
 
+    <AttachmentList
+      :drafts="attachments"
+      horizontal
+      @remove="emit('removeAttachment', $event)"
+      @retry="emit('retryAttachment', $event)"
+      @accept="emit('acceptCoverage', $event)"
+    />
+    <input
+      ref="fileInput"
+      type="file"
+      multiple
+      :accept="attachmentAccept"
+      hidden
+      @change="chooseFiles"
+    />
+    <div v-if="!attachmentAccept" class="attachment-toolbar">
+      <button type="button" @click="emit('reloadAttachmentService')">重新加载附件服务</button>
+    </div>
+    <p v-if="attachmentError" class="attachment-error" role="alert">{{ attachmentError }}</p>
     <div class="input-box">
       <textarea
         ref="textareaRef"
@@ -114,8 +133,18 @@
         :placeholder="placeholder"
         aria-label="输入消息"
         @input="onInput"
+        @paste="pasteFiles"
         @keydown.enter.exact.prevent="requestSend"
       />
+      <IconButton
+        class="attachment-btn"
+        label="添加图片或文档"
+        :disabled="!canAddAttachments"
+        :title="attachmentDisabledReason || '上传图片、Word、PDF、PPT'"
+        @click="fileInput?.click()"
+      >
+        <span aria-hidden="true">+</span>
+      </IconButton>
       <button v-if="isThinking" class="abort-btn" title="中断回答" @click="$emit('abort')">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
           <rect x="4" y="4" width="16" height="16" rx="2" />
@@ -125,7 +154,12 @@
       <button
         v-else
         class="send-btn"
-        :disabled="!input.trim() || isGenerating || sendDisabled"
+        :disabled="
+          (!input.trim() && (attachmentsDisabled || !attachments.length)) ||
+          isGenerating ||
+          sendDisabled ||
+          (!attachmentsDisabled && attachments.length > 0 && !attachmentsReady)
+        "
         @click="requestSend"
       >
         <span v-if="isGenerating">处理中…</span>
@@ -153,6 +187,9 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { RefreshCcw } from '@lucide/vue'
 import ModelSelector from './ModelSelector.vue'
+import AttachmentList from '../attachments/AttachmentList.vue'
+import IconButton from '../ui/IconButton.vue'
+import type { AttachmentDraft } from '../../types/attachments'
 
 const props = withDefaults(
   defineProps<{
@@ -168,10 +205,22 @@ const props = withDefaults(
     socraticBadge: number
     normalBadge: number
     placeholder: string
+    attachments?: AttachmentDraft[]
+    attachmentsReady?: boolean
+    attachmentsDisabled?: boolean
+    attachmentDisabledReason?: string
+    attachmentAccept?: string
+    attachmentError?: string
     sendDisabled?: boolean
     showChips?: boolean
   }>(),
   {
+    attachments: () => [],
+    attachmentsReady: true,
+    attachmentsDisabled: true,
+    attachmentDisabledReason: '当前阶段不能添加附件',
+    attachmentAccept: '',
+    attachmentError: '',
     sendDisabled: false,
     showChips: true,
   },
@@ -181,6 +230,11 @@ const emit = defineEmits<{
   (e: 'update:input', val: string): void
   (e: 'update:chatMode', val: 'socratic' | 'normal'): void
   (e: 'update:aiStyle', val: string): void
+  (e: 'reloadAttachmentService'): void
+  (e: 'addAttachments', files: File[]): void
+  (e: 'removeAttachment', id: string): void
+  (e: 'retryAttachment', id: string): void
+  (e: 'acceptCoverage', id: string): void
   (e: 'send'): void
   (e: 'abort'): void
   (e: 'clearQuote'): void
@@ -188,6 +242,37 @@ const emit = defineEmits<{
   (e: 'sendSuggestion', val: string): void
 }>()
 
+const fileInput = ref<HTMLInputElement | null>(null)
+const canAddAttachments = computed(
+  () => !props.attachmentsDisabled && !props.isThinking && Boolean(props.attachmentAccept),
+)
+function addFiles(files: File[]) {
+  if (canAddAttachments.value && files.length) emit('addAttachments', files)
+}
+function chooseFiles(event: Event) {
+  const el = event.target as HTMLInputElement
+  addFiles(Array.from(el.files ?? []))
+  el.value = ''
+}
+function dropFiles(event: DragEvent) {
+  addFiles(Array.from(event.dataTransfer?.files ?? []))
+}
+function pasteFiles(event: ClipboardEvent) {
+  if (!canAddAttachments.value) return
+  const clipboard = event.clipboardData
+  const files = Array.from(clipboard?.files ?? [])
+  if (!files.length) {
+    for (const item of Array.from(clipboard?.items ?? [])) {
+      const file = item.kind === 'file' ? item.getAsFile() : null
+      if (file) files.push(file)
+    }
+  }
+  const images = files.filter((file) => file.type.startsWith('image/'))
+  if (images.length) {
+    event.preventDefault()
+    addFiles(images)
+  }
+}
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const chipsContentRef = ref<HTMLElement | null>(null)
 const chipsMeasureRef = ref<HTMLElement | null>(null)
@@ -251,7 +336,15 @@ function onInput(e: Event) {
 }
 
 function requestSend() {
-  if (!props.sendDisabled && !props.isGenerating && props.input.trim()) emit('send')
+  if (
+    props.isThinking ||
+    props.sendDisabled ||
+    props.isGenerating ||
+    (!props.input.trim() && (props.attachmentsDisabled || !props.attachments.length))
+  )
+    return
+  if (!props.attachmentsDisabled && props.attachments.length && !props.attachmentsReady) return
+  emit('send')
 }
 
 function reset() {
@@ -269,6 +362,27 @@ defineExpose({ reset, focus })
 </script>
 
 <style scoped>
+.attachment-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 0;
+  font-size: 11px;
+  color: var(--ink-3);
+}
+.attachment-toolbar button {
+  border: 1px solid var(--line);
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: var(--bg-2);
+  color: var(--ink-2);
+  cursor: pointer;
+}
+.attachment-error {
+  font-size: 12px;
+  color: var(--danger, #c04b4b);
+  margin: 6px 0;
+}
 .quote-preview {
   display: flex;
   align-items: center;
@@ -564,6 +678,7 @@ defineExpose({ reset, focus })
 }
 .input-box textarea {
   flex: 1;
+  min-width: 0;
   resize: none;
   border: none;
   outline: none;
@@ -577,6 +692,31 @@ defineExpose({ reset, focus })
 }
 .input-box textarea::placeholder {
   color: var(--ink-3);
+}
+
+.attachment-btn {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink-2);
+  font-size: 24px;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    color 0.15s;
+}
+.attachment-btn:hover:not(:disabled) {
+  background: var(--blue-tint);
+  color: var(--blue-2);
+}
+.attachment-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .send-btn,

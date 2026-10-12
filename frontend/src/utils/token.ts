@@ -39,6 +39,7 @@ export function clearAuth() {
     'sm_normal_sessions',
     'sm_socratic_cur',
     'sm_normal_cur',
+    'sm_pending_chat_requests',
     'sm_chips_socratic',
     'sm_chips_normal',
   ]

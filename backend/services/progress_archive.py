@@ -3,6 +3,7 @@ from sqlalchemy import String, and_, func, or_
 from sqlalchemy.orm import Session
 
 from services.chat_lifecycle import invalidate_chat_contexts_for_messages
+from services.attachments.service import delete_for_messages, delete_for_scope
 
 
 def archive_and_delete_messages(
@@ -58,6 +59,9 @@ def archive_and_delete_messages(
         for row in counts
     )
     message_ids = [value for (value,) in messages.with_entities(ChatMessage.id)]
+    delete_for_messages(db, message_ids)
+    if session_id is not None or topic_id is not None:
+        delete_for_scope(db, user_id=user_id, session_id=session_id, topic_id=topic_id)
     invalidate_chat_contexts_for_messages(
         db,
         user_id=user_id,

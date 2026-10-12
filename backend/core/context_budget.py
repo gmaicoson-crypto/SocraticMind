@@ -14,6 +14,8 @@ import tiktoken
 
 from core.ai_client import resolve_llm_profile
 from core.config import LLMProfile
+from core.errors import ApiError
+from services.attachments.config import IMAGE_TOKEN_ESTIMATE, LIMITS
 
 
 @dataclass(frozen=True)
@@ -97,23 +99,59 @@ def count_text(text: str, model_id: str | None = None) -> int:
 
 
 def count_messages(messages: Sequence[dict[str, Any]], model_id: str | None = None) -> int:
-    """Count every message field plus conservative framing overhead.
+    """Count text and a system-owned image allowance on the actual wire payload.
 
-    This text chat path rejects non-text multimodal parts rather than pretending
-    their URL/JSON size accounts for the model's processed image/audio tokens.
+    Image estimates are independent of base64 length and legacy model settings.
+    The provider remains authoritative for actual image token usage.
     """
-    encoding = _profile_encoding(resolve_llm_profile(model_id))
-    total = 16  # assistant priming / request framing
+    profile = resolve_llm_profile(model_id)
+    encoding = _profile_encoding(profile)
+    total, images, binary_bytes = 16, 0, 0
     for message in messages:
         total += 12
         for key, value in message.items():
-            if key == "content" and isinstance(value, list):
-                if any(not isinstance(part, dict) or part.get("type") != "text" for part in value):
-                    raise ValueError("当前上下文预算仅支持文本消息，请先提取附件文字")
             if value is None:
                 continue
-            text = value if isinstance(value, str) else json.dumps(value, ensure_ascii=False)
-            total += _count_text(text, encoding)
+            if key == "content" and isinstance(value, list):
+                for part in value:
+                    if not isinstance(part, dict):
+                        raise ValueError("无效的多模态消息内容")
+                    if part.get("type") == "text":
+                        total += 8 + _count_text(str(part.get("text", "")), encoding)
+                    elif part.get("type") == "image_url":
+                        image = part.get("image_url", {})
+                        url = image.get("url", "") if isinstance(image, dict) else ""
+                        # Only the server's private, normalized data may be sent.
+                        import re
+
+                        if not isinstance(url, str) or not re.fullmatch(
+                            r"data:image/(?:jpeg|png|webp);base64,[A-Za-z0-9+/]+={0,2}", url
+                        ):
+                            raise ValueError("图片输入必须使用服务器校验后的 data URL")
+                        encoded = url.partition(",")[2]
+                        size = len(encoded) * 3 // 4 - len(encoded) + len(encoded.rstrip("="))
+                        if size > LIMITS["max_image_bytes"]:
+                            raise ApiError(
+                                status_code=422,
+                                code="ATTACHMENT_TOO_LARGE",
+                                message="图片超过输入大小限制",
+                                retryable=False,
+                            )
+                        binary_bytes += size
+                        images += 1
+                        total += 16 + IMAGE_TOKEN_ESTIMATE
+                    else:
+                        raise ValueError("当前消息仅支持文字和图片内容块")
+            else:
+                text = value if isinstance(value, str) else json.dumps(value, ensure_ascii=False)
+                total += _count_text(text, encoding)
+    if images > LIMITS["max_attachments"] or binary_bytes > LIMITS["max_message_bytes"]:
+        raise ApiError(
+            status_code=422,
+            code="ATTACHMENT_TOO_LARGE",
+            message=f"每次最多 {LIMITS['max_attachments']} 张图片，且总大小不能超过 50 MiB",
+            retryable=False,
+        )
     return total
 
 

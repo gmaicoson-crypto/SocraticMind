@@ -794,3 +794,42 @@ def test_oversized_latest_turn_remains_verbatim_despite_soft_target(
     )
     assert [block.turn_id for block in tail] == [latest.id]
     assert len(tail[0].messages[-1]["content"]) > 50_000
+
+
+def test_attachment_provenance_is_server_computed_and_blocks_cross_session_context(
+    db_session,
+    auth_user,
+    summary_environment,
+):
+    from services.chat_context import topic_context_notes
+
+    topic = Topic(user_id=auth_user.id, title="Shared topic")
+    db_session.add(topic)
+    db_session.flush()
+    source = add_session(db_session, auth_user, topic_id=topic.id)
+    turns = add_turns(db_session, source, node_key="related-node")
+    first_answer = db_session.get(ChatMessage, turns[0].ai_message_id)
+    first_answer.metadata_json = {"status": "complete", "attachment_derived": True}
+    db_session.commit()
+    assert run_one_summary_job(
+        summary_environment.factory,
+        lambda _schema, messages, _ctx: summary_result(messages, goal="PRIVATE ATTACHMENT RESULT"),
+    )
+    db_session.refresh(source)
+    assert source.summary_json["attachment_derived"] is True
+    current = add_session(db_session, auth_user, topic_id=topic.id, status="idle")
+    db_session.commit()
+    notes = topic_context_notes(db_session, current, node_key="related-node")
+    assert "PRIVATE ATTACHMENT RESULT" not in json.dumps(notes)
+
+    # Removing direct flags from later blocks must not erase previous provenance.
+    first_answer.metadata_json = {"status": "complete"}
+    db_session.commit()
+    assert run_one_summary_job(
+        summary_environment.factory,
+        lambda _schema, messages, _ctx: summary_result(messages),
+        target_session_id=source.id,
+        force=True,
+    )
+    db_session.refresh(source)
+    assert source.summary_json["attachment_derived"] is True

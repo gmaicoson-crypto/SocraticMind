@@ -32,6 +32,7 @@ export interface Message {
   role: 'ai' | 'user'
   text: string
   time: string
+  attachments?: import('./attachments').AttachmentSummary[]
   quote?: string
   local_id?: string
   quote_source_db_id?: number
@@ -43,6 +44,7 @@ export interface Message {
     input: string
     kind: 'qa' | 'topic_overview' | 'node_overview'
     userMessageId?: number
+    attachmentIds?: string[]
   }
   choices?: { label: string; text: string }[]
   selected_choice?: string

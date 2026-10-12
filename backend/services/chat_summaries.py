@@ -100,6 +100,7 @@ def _summary_messages(
                 "message_ids": block.message_ids,
                 "messages": block.messages,
                 "web_references": block.web_references,
+                "attachment_derived": block.attachment_derived,
             }
             for block in blocks
         ],
@@ -114,8 +115,8 @@ def _summary_messages(
                 "不得把模型建议或用户猜测写成已确认事实，不得推断已掌握。"
                 "精确代码、公式和例子通过source_message_ids保留来源，避免改写造成错误。"
                 "联网结论保留适用时间与未核实限定，检索时间不等于发布时间。"
-                "涉及联网依据时，web_references仅复制输入中对应的message_id、source_id、retrieved_at；"
-                "不得编造来源或网址，无联网引用则为空数组。"
+                "涉及网站、文件或图片依据时，web_references仅复制输入中对应的message_id、source_id、retrieved_at；"
+                "不得编造来源、页码或网址，无引用则为空数组。附件目录、默认处理意图及原始资料的范围限制必须保留。"
                 "仅使用输入中的node_keys和消息ID。输出紧凑JSON，"
                 f"总长度控制在{max(1, summary_limit - 128)} {limit_unit}以内。Schema:\n"
                 + json.dumps(SessionSummary.model_json_schema(), ensure_ascii=False)
@@ -326,6 +327,9 @@ def run_one_summary_job(
                 summary["source_message_ids"] = sorted(allowed_ids)[-128:]
             summary["node_keys"] = sorted(allowed_nodes)[:64]
             summary["schema_version"] = 1
+            summary["attachment_derived"] = bool((previous or {}).get("attachment_derived")) or any(
+                block.attachment_derived for block in blocks
+            )
             # A malformed verbose response must not consume the next turn's budget.
             summary_tokens = count_messages(
                 [{"role": "user", "content": json.dumps(summary, ensure_ascii=False)}], model_id

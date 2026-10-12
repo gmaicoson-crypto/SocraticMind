@@ -53,17 +53,30 @@ def test_cancelled_stream_reports_same_terminal_state_as_database(
 ):
     payload = request()
 
-    def cancelled(**kwargs):
-        yield "already visible"
-        cancel_chat_turn(
-            db_session,
-            user_id=auth_user.id,
-            session_id="edge-session",
-            request_id=payload["request_id"],
-        )
-        yield "next token after stop"
+    from routers import chat
 
-    monkeypatch.setattr("routers.chat.chat_stream", cancelled)
+    original_refresh = chat.refresh_generation_lease
+    cancelled = False
+
+    def refresh_with_cancel(db, **kwargs):
+        nonlocal cancelled
+        # Model streaming runs in a worker. Simulate the external cancellation
+        # at the main generator's first checkpoint, where this test Session is
+        # owned, instead of concurrently flushing it from the model worker.
+        if kwargs.get("content") and not cancelled:
+            cancelled = True
+            cancel_chat_turn(
+                db,
+                user_id=auth_user.id,
+                session_id="edge-session",
+                request_id=payload["request_id"],
+            )
+        return original_refresh(db, **kwargs)
+
+    monkeypatch.setattr(chat, "refresh_generation_lease", refresh_with_cancel)
+    monkeypatch.setattr(
+        chat, "chat_stream", lambda **kwargs: iter(["already visible", "next token after stop"])
+    )
     response = client.post("/api/chat/stream", json=payload)
     turn = db_session.query(ChatTurn).one()
     assert turn.status == "interrupted"

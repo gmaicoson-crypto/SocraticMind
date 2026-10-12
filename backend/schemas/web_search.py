@@ -53,13 +53,33 @@ class WebWarning(BaseModel):
 
 class WebSource(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    id: str = Field(pattern=r"^s[1-5]$")
+    kind: Literal["web"] = "web"
+    id: str = Field(pattern=r"^s[1-9][0-9]{0,15}$")
     title: str = Field(max_length=300)
     url: str = Field(max_length=2048)
     domain: str = Field(max_length=253)
     excerpt: str = Field(max_length=2400)
     published_at: str | None = None
     retrieved_at: str
+
+
+class AttachmentSource(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    kind: Literal["document", "image"]
+    id: str = Field(pattern=r"^s[1-9][0-9]{0,15}$")
+    title: str = Field(max_length=300)
+    attachment_id: str = Field(max_length=36)
+    revision: int = Field(gt=0)
+    chunk_id: str | None = None
+    locator: dict = Field(default_factory=dict)
+    block_type: str = "paragraph"
+    title_path: list[str] = Field(default_factory=list)
+    excerpt: str
+    retrieved_at: str
+    deleted: bool = False
+    summary: bool = False
+    covered_chunk_ids: list[str] = Field(default_factory=list, max_length=5000)
+    coverage: list[dict] = Field(default_factory=list, max_length=5000)
 
 
 class WebMetrics(BaseModel):
@@ -81,8 +101,8 @@ class WebSnapshot(BaseModel):
     decision: dict | None = None
     queries: list[Query] = Field(default_factory=list, max_length=2)
     searched_at: str | None = None
-    sources: list[WebSource] = Field(default_factory=list, max_length=5)
-    cited_source_ids: list[str] = Field(default_factory=list, max_length=5)
+    sources: list[WebSource | AttachmentSource] = Field(default_factory=list, max_length=64)
+    cited_source_ids: list[str] = Field(default_factory=list, max_length=64)
     error_code: str | None = None
     warnings: list[WebWarning] = Field(default_factory=list)
     metrics: WebMetrics = Field(default_factory=WebMetrics)

@@ -1,6 +1,12 @@
 import api from './index'
 
-interface ModelOptionBase {
+export interface VisionModelOptions {
+  image_input?: 'supported' | 'unsupported' | 'unknown'
+  max_images?: number
+  max_image_bytes?: number
+  vision_token_budget?: number | null
+}
+interface ModelOptionBase extends VisionModelOptions {
   id: string
   name: string
   model: string
@@ -22,7 +28,7 @@ export async function getLLMModels() {
   return response.data.models as LLMModelOption[]
 }
 
-export interface CustomModelInput {
+export interface CustomModelInput extends VisionModelOptions {
   name: string
   api_key: string
   base_url: string

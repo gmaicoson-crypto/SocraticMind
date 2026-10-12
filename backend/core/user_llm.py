@@ -32,6 +32,10 @@ def to_llm_profile(record: UserLLMProfile) -> LLMProfile:
         api_key=decrypt_api_key(record.api_key_encrypted),
         base_url=record.base_url,
         model=record.model,
+        image_input=record.image_input,
+        max_images=record.max_images,
+        max_image_bytes=record.max_image_bytes,
+        vision_token_budget=record.vision_token_budget,
     )
 
 

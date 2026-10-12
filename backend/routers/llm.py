@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
 from core.ai_client import register_custom_profile, remove_custom_profile
-from core.config import settings
+from core.config import LLMImageCapabilities, settings
 from core.database import get_db
 from core.deps import get_current_user
 from core.user_llm import encrypt_api_key, get_owned_profile, to_llm_profile
@@ -22,7 +22,13 @@ def get_llm_models(
 ):
     """返回可选的环境模型与当前用户模型，不返回环境连接信息或凭据。"""
     environment_models = [
-        {"id": profile.id, "name": profile.name, "model": profile.model, "source": "environment"}
+        {
+            "id": profile.id,
+            "name": profile.name,
+            "model": profile.model,
+            "source": "environment",
+            **profile.model_dump(include=set(LLMImageCapabilities.model_fields)),
+        }
         for profile in settings.llm_profiles
     ]
     records = (
@@ -34,7 +40,7 @@ def get_llm_models(
     return {"models": environment_models + [_custom_model_response(record) for record in records]}
 
 
-class CustomModelRequest(BaseModel):
+class CustomModelRequest(LLMImageCapabilities):
     name: str = Field(min_length=1, max_length=100)
     api_key: str = Field(min_length=1, max_length=1000)
     base_url: str = Field(min_length=1, max_length=500)
@@ -56,7 +62,7 @@ class CustomModelRequest(BaseModel):
         return value.rstrip("/")
 
 
-class CustomModelUpdateRequest(BaseModel):
+class CustomModelUpdateRequest(LLMImageCapabilities):
     name: str = Field(min_length=1, max_length=100)
     api_key: str | None = Field(default=None, max_length=1000)
     base_url: str = Field(min_length=1, max_length=500)
@@ -86,13 +92,14 @@ class CustomModelUpdateRequest(BaseModel):
         return value.rstrip("/")
 
 
-def _custom_model_response(record: UserLLMProfile) -> dict[str, str]:
+def _custom_model_response(record: UserLLMProfile) -> dict:
     return {
         "id": record.public_id,
         "name": record.name,
         "model": record.model,
         "base_url": record.base_url,
         "source": "custom",
+        **{key: getattr(record, key) for key in LLMImageCapabilities.model_fields},
     }
 
 
@@ -108,6 +115,7 @@ def create_custom_model(
         api_key_encrypted=encrypt_api_key(request.api_key),
         base_url=request.base_url,
         model=request.model,
+        **request.model_dump(include=set(LLMImageCapabilities.model_fields)),
     )
     db.add(record)
     db.commit()
@@ -129,6 +137,9 @@ def update_custom_model(
     record.name = request.name
     record.base_url = request.base_url
     record.model = request.model
+    for key in LLMImageCapabilities.model_fields:
+        if key in request.model_fields_set:
+            setattr(record, key, getattr(request, key))
     if request.api_key is not None:
         record.api_key_encrypted = encrypt_api_key(request.api_key)
     db.commit()

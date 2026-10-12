@@ -1,11 +1,27 @@
 <template>
   <div class="md-inline" @click="copyCode" v-html="renderedHtml" />
+  <AttachmentViewer
+    v-if="activeSource"
+    :open="true"
+    :attachment-id="activeSource.attachment_id"
+    :name="activeSource.title"
+    :image="activeSource.kind === 'image'"
+    :chunk-id="activeSource.chunk_id"
+    :revision="activeSource.revision"
+    :deleted="activeSource.deleted"
+    :summary-text="activeSource.summary ? activeSource.excerpt : undefined"
+    :summary-coverage="activeSource.coverage?.map(attachmentLocation).join('、')"
+    @close="activeSource = null"
+  />
   <span v-if="withCaret" class="typing-caret" />
 </template>
 
 <script setup lang="ts">
 // InlineMarkdown 组件，封装局部界面和交互逻辑。
 import { ref, watch, onBeforeUnmount } from 'vue'
+import AttachmentViewer from '../attachments/AttachmentViewer.vue'
+import { attachmentLocation } from '../../types/attachments'
+import type { FileSource } from '../../types/webSearch'
 import type { WebSnapshot } from '../../types/webSearch'
 import { createMessageMarkdownRenderer } from '../../utils/messageMarkdown'
 
@@ -17,7 +33,20 @@ const props = defineProps<{
 }>()
 const renderMarkdown = createMessageMarkdownRenderer()
 
+const activeSource = ref<FileSource | null>(null)
 async function copyCode(event: MouseEvent) {
+  const citation =
+    event.target instanceof Element
+      ? event.target.closest<HTMLButtonElement>('button.file-citation')
+      : null
+  if (citation) {
+    const source = props.web?.sources.find(
+      (item) => item.id === citation.getAttribute('aria-label'),
+    )
+    if (source && (source.kind === 'document' || source.kind === 'image'))
+      activeSource.value = source
+    return
+  }
   const target =
     event.target instanceof Element
       ? event.target.closest<HTMLButtonElement>('button.code-copy')
@@ -248,6 +277,12 @@ onBeforeUnmount(() => {
 </style>
 
 <style scoped>
+:deep(.file-citation) {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
+}
 :deep(.source-citation) {
   font-size: 0.8em;
   vertical-align: super;

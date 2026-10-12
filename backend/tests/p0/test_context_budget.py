@@ -2,6 +2,8 @@ from types import SimpleNamespace
 
 import pytest
 import tiktoken
+import httpx
+from openai import BadRequestError
 from pydantic import ValidationError
 
 from ai.agent import ChatStreamError, build_chat_messages, chat_stream
@@ -133,7 +135,7 @@ def test_hard_limit_accepts_boundary_and_rejects_one_more_token(configure_profil
 
 def test_nontext_attachments_are_not_miscounted_as_urls(configure_profile):
     configure_profile()
-    with pytest.raises(ValueError, match="仅支持文本消息"):
+    with pytest.raises(ValueError, match="data URL"):
         count_messages(
             [
                 {
@@ -144,6 +146,57 @@ def test_nontext_attachments_are_not_miscounted_as_urls(configure_profile):
                 }
             ]
         )
+
+
+@pytest.mark.parametrize(
+    "provider_message,expected_code",
+    [
+        ("image_url is not supported by this model", "MODEL_VISION_UNSUPPORTED"),
+        (
+            "Invalid content type. image_url is only supported by certain models",
+            "MODEL_VISION_UNSUPPORTED",
+        ),
+        ("This model does not support multimodal inputs", "MODEL_VISION_UNSUPPORTED"),
+        ("Invalid max_tokens parameter", None),
+    ],
+)
+def test_image_support_is_checked_by_provider_and_reported_clearly(
+    configure_profile, monkeypatch, provider_message, expected_code
+):
+    configure_profile()
+    upstream = BadRequestError(
+        provider_message,
+        response=httpx.Response(400, request=httpx.Request("POST", "https://example.test/v1")),
+        body={"message": provider_message},
+    )
+    captured = []
+
+    def create(**kwargs):
+        captured.append(kwargs)
+        raise upstream
+
+    monkeypatch.setattr(
+        "ai.agent.get_ai_client",
+        lambda *_: SimpleNamespace(
+            chat=SimpleNamespace(completions=SimpleNamespace(create=create))
+        ),
+    )
+    prepared = [
+        {
+            "role": "user",
+            "content": [{"type": "image_url", "image_url": {"url": "data:image/png;base64,YWJj"}}],
+        }
+    ]
+    expected_error = ChatStreamError if expected_code else BadRequestError
+    with pytest.raises(expected_error) as caught:
+        list(chat_stream([], "", "", "看图", prepared_messages=prepared))
+    assert len(captured) == 1
+    if expected_code:
+        assert caught.value.code == expected_code
+        assert "切换支持图片的模型" in caught.value.message
+        assert caught.value.retryable is False
+    else:
+        assert caught.value is upstream
 
 
 @pytest.mark.parametrize(

@@ -43,6 +43,9 @@ describe('ModelSelector', () => {
     await flushPromises()
     expect(document.querySelector('.model-dialog h2')?.textContent).toBe('添加模型')
     expect(document.querySelector('.model-overlay')).not.toBeNull()
+    expect(document.querySelectorAll('.model-form input')).toHaveLength(4)
+    expect(document.querySelector('.model-form select')).toBeNull()
+    expect(document.querySelector('.model-form')?.textContent).not.toContain('token')
     const cancelButton = document.querySelector('.secondary-button') as HTMLButtonElement
     cancelButton.click()
     await flushPromises()

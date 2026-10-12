@@ -1,6 +1,9 @@
 import json
 from dataclasses import dataclass, field
 from typing import Any, Iterator
+from itertools import islice
+
+from services.attachments.evidence import hydrate_message_sources
 
 from sqlalchemy import case, or_, exists
 from sqlalchemy.orm import Session, aliased
@@ -9,6 +12,8 @@ from ai.agent import build_chat_messages
 from core.context_budget import count_messages, ensure_fits, get_context_policy
 from models import AgentRun, ChatMessage, ChatSession, ChatTurn, Node, StudyPlan, Topic
 from services.memories import select_relevant_memories
+from services.attachments.context import PreparedAttachments
+from models.attachment import Attachment, MessageAttachment
 from services.web_evidence import (
     compact_web_references,
     historical_source_note,
@@ -24,6 +29,7 @@ class HistoryBlock:
     message_ids: list[int]
     messages: list[dict[str, str]]
     web_references: list[dict] = field(default_factory=list)
+    attachment_derived: bool = False
 
 
 @dataclass
@@ -34,10 +40,20 @@ class PreparedChatContext:
     input_tokens: int
     summary_needed: bool
     omitted_history: bool
+    attachment_derived: bool = False
 
 
 def valid_summary(session: ChatSession) -> bool:
     return bool(session.summary_json and session.summary_source_version == session.content_version)
+
+
+def _validated_sources_in_batches(db, session, rows, message_at):
+    iterator = iter(rows)
+    while batch := list(islice(iterator, 64)):
+        messages = [message_at(row) for row in batch]
+        valid = hydrate_message_sources(db, user_id=session.user_id, messages=messages)
+        for row, message in zip(batch, messages):
+            yield row, message_web_sources(message, sources=valid.get(message.id, []))
 
 
 def iter_history_blocks(
@@ -50,6 +66,27 @@ def iter_history_blocks(
     newest_first: bool = True,
 ) -> Iterator[HistoryBlock]:
     """Read complete turns in bounded database batches, preserving question/answer pairs."""
+    attachment_notes = {}
+    for message_id, attachment in (
+        db.query(MessageAttachment.user_message_id, Attachment)
+        .join(Attachment, Attachment.id == MessageAttachment.attachment_id)
+        .filter(
+            Attachment.user_id == session.user_id,
+            Attachment.session_id == session.session_id,
+            Attachment.topic_id == session.topic_id,
+            Attachment.mode == session.mode,
+            Attachment.status == "ready",
+        )
+        .order_by(MessageAttachment.position)
+    ):
+        attachment_notes.setdefault(message_id, []).append(
+            {
+                "id": attachment.id,
+                "name": attachment.name,
+                "kind": attachment.kind,
+                "revision": attachment.revision,
+            }
+        )
     user_message = aliased(ChatMessage)
     ai_message = aliased(ChatMessage)
     statuses = ["complete", "interrupted"] if include_interrupted else ["complete"]
@@ -87,21 +124,41 @@ def iter_history_blocks(
         if cursor is not None:
             query = query.filter(user_message.id > cursor)
     order = user_message.id.desc() if newest_first else user_message.id.asc()
-    for turn, user, ai in query.order_by(order).yield_per(64):
+    for (turn, user, ai), sources in _validated_sources_in_batches(
+        db, session, query.order_by(order).yield_per(64), lambda row: row[2]
+    ):
         if not ai.content or (ai.metadata_json or {}).get("status") == "superseded":
             continue
         if turn.status == "interrupted" and turn.regenerate_message_id is not None:
             continue
-        sources = message_web_sources(ai)
         content = ai.content + historical_source_note(sources)
         if turn.status == "interrupted":
             content = "[以下为生成中断前已显示的部分回答，尚未完成]\n" + content
         messages = []
-        if user.content:
-            messages.append({"role": "user", "content": user.content})
+        user_content = user.content
+        if user.id in attachment_notes:
+            default = (
+                "结合当前节点，从资料中提出一个引导问题"
+                if session.mode == "socratic"
+                else "概括资料并提示可以继续提问"
+            )
+            user_content += "\n附件目录：" + json.dumps(
+                attachment_notes[user.id], ensure_ascii=False
+            )
+            if not user.content:
+                user_content += "\n用户仅上传附件，服务端默认处理意图：" + default
+        if user_content:
+            messages.append({"role": "user", "content": user_content})
         messages.append({"role": "assistant", "content": content})
         yield HistoryBlock(
-            turn.id, turn.node_key, [user.id, ai.id], messages, compact_web_references(sources)
+            turn.id,
+            turn.node_key,
+            [user.id, ai.id],
+            messages,
+            compact_web_references(sources),
+            user.id in attachment_notes
+            or bool((ai.metadata_json or {}).get("attachment_derived"))
+            or any(source.get("kind") in {"document", "image"} for source in sources),
         )
 
     # Development databases may already have raw messages. They remain searchable
@@ -124,10 +181,11 @@ def iter_history_blocks(
     if before_user_message_id is not None:
         legacy = legacy.filter(ChatMessage.id < before_user_message_id)
     order = ChatMessage.id.desc() if newest_first else ChatMessage.id.asc()
-    for message in legacy.order_by(order).yield_per(64):
+    for message, sources in _validated_sources_in_batches(
+        db, session, legacy.order_by(order).yield_per(64), lambda row: row
+    ):
         if message.role not in {"user", "ai"} or not message.content:
             continue
-        sources = message_web_sources(message)
         yield HistoryBlock(
             None,
             message.node_key,
@@ -139,6 +197,8 @@ def iter_history_blocks(
                 }
             ],
             compact_web_references(sources),
+            bool((message.metadata_json or {}).get("attachment_derived"))
+            or any(source.get("kind") in {"document", "image"} for source in sources),
         )
 
 
@@ -209,7 +269,16 @@ def topic_context_notes(db: Session, session: ChatSession, *, node_key: str) -> 
         .all()
     )
     for candidate in candidates:
+        raw_summary = candidate.summary_json or {}
+        # This provenance flag is computed by the server and propagated even
+        # when the model omits source markers in a later derived conclusion.
+        if raw_summary.get("attachment_derived"):
+            continue
         summary = hydrate_summary_web_sources(db, candidate, candidate.summary_json or {})
+        if any(
+            source.get("kind") in {"document", "image"} for source in summary.get("web_sources", [])
+        ):
+            continue
         if not related_keys.intersection(summary.get("node_keys", [])):
             continue
         notes.append(
@@ -236,8 +305,16 @@ def assemble_chat_context(
     kind: str,
     regenerate: bool = False,
     quote_source: ChatMessage | None = None,
+    attachments: PreparedAttachments | None = None,
 ) -> PreparedChatContext:
     policy = get_context_policy(model_id)
+    attachments = attachments or PreparedAttachments()
+    if not user_input.strip() and attachments.attachment_derived and kind == "qa":
+        user_input = (
+            "结合当前节点，从资料中提出一个引导问题"
+            if mode == "socratic"
+            else "概括资料并提示可以继续提问"
+        )
     prompt_args = dict(
         node_label=node_label,
         node_sub=node_sub,
@@ -245,11 +322,18 @@ def assemble_chat_context(
         mode=mode,
         ai_style=ai_style,
         kind=kind,
+        image_parts=attachments.image_parts,
     )
-    required_notes = []
+    required_notes = list(attachments.context_notes)
+    quote_derived = False
     if quote_source:
         quote_sources = (
-            message_web_sources(quote_source)
+            message_web_sources(
+                quote_source,
+                sources=hydrate_message_sources(
+                    db, user_id=session.user_id, messages=[quote_source]
+                ).get(quote_source.id, []),
+            )
             if (
                 quote_source.user_id == session.user_id
                 and quote_source.session_id == session.session_id
@@ -257,6 +341,9 @@ def assemble_chat_context(
                 and quote_source.mode == session.mode
             )
             else []
+        )
+        quote_derived = bool((quote_source.metadata_json or {}).get("attachment_derived")) or any(
+            source.get("kind") in {"document", "image"} for source in quote_sources
         )
         required_notes.append(
             f"用户明确引用的消息原文（消息 {quote_source.id}）：\n{quote_source.content}"
@@ -325,6 +412,7 @@ def assemble_chat_context(
                     for message in block.messages
                 ],
                 block.web_references,
+                block.attachment_derived,
             )
         cost = count_messages(block.messages, model_id) - count_messages([], model_id)
         if cost > remaining:
@@ -371,6 +459,10 @@ def assemble_chat_context(
         or history_cost >= policy.summary_trigger_tokens
         or tokens >= policy.summary_trigger_tokens,
         omitted,
+        attachments.attachment_derived
+        or quote_derived
+        or any(block.attachment_derived for block in selected)
+        or bool((summary or {}).get("attachment_derived")),
     )
 
 

@@ -49,6 +49,7 @@ SocraticMind 是一个基于 **Vue 3 + TypeScript + FastAPI + MySQL** 构建的 
 - SSE 流式响应，实时逐字输出 AI 回复
 - AI 快捷回复建议，辅助用户进入下一步
 - 对话历史持久化，随时回顾学习过程
+- 普通聊天及已有学习节点支持图片、Word、PDF、PowerPoint 附件，带来源引用、追问与重生成
 
 ### 学习统计与成就
 
@@ -216,6 +217,39 @@ VITE_API_BASE=http://127.0.0.1:8000
 ---
 
 ## 环境变量说明
+
+### 附件运行环境与部署
+
+附件支持 `.jpg/.jpeg/.png/.webp`、`.doc/.docx`、`.pdf`、`.ppt/.pptx`。仅在普通聊天与已有节点问答开放；主题创建、诊断、测评和计划确认暂不接入。文档提取文字后供模型阅读，扫描 PDF 首期不做 OCR；混合 PDF 必须先确认可用文字范围。图片直接交给所选模型接口处理，无需手动启用视觉能力，也不会自动切换模型。
+
+在 `backend/` 下更新依赖并升级数据库：
+
+```bash
+python -m pip install -r requirements.txt
+alembic upgrade head
+```
+
+`0012_chat_attachments` 新增附件、分块、消息关联、清理任务、worker 槽位，以及模型视觉能力和聊天准备状态字段。部署前对数据库与附件持久卷配套备份。后端启动时会校验迁移版本；不要以 `create_all` 代替迁移。
+
+Linux 部署需安装 LibreOffice、中文字体与 Bubblewrap，例如 Debian/Ubuntu：
+
+```bash
+sudo apt-get install libreoffice fonts-noto-cjk bubblewrap
+```
+
+macOS 安装 LibreOffice，并使用系统 `sandbox-exec`。解析运行在禁止联网、限定文件访问、可终止的独立进程中；Linux 必须允许 Bubblewrap 所需的用户命名空间。缺少隔离程序会拒绝上传；缺少 LibreOffice 会拒绝 `.doc/.ppt`。当前没有 Windows 原生解析沙箱，请在 Linux 环境运行附件后端。
+
+```bash
+python scripts/check_attachment_runtime.py
+```
+
+上述诊断检查隔离能力、真实旧版 Office 转换和字体。配置 `ATTACHMENT_STORAGE_DIR` 可指定私有持久目录，默认 `backend/private_attachments`；配置 `ATTACHMENT_LIBREOFFICE_PATH` 可指定 `soffice` 路径。不要把附件目录挂载到公开静态服务。API 与随应用生命周期启动的 worker 共用文件卷；任务使用数据库租约与两个全局槽位，无需新增 Redis/Celery。
+
+默认每条消息最多 9 个附件、图片 10 MiB、文档 20 MiB、合计 50 MiB；用户配额 500 MiB。配额除原件外，还预留每张图片 12 MiB、每份文档 20 MiB 的派生内容空间，所以实际可上传原件总量可能低于 500 MiB。图片限制 40 MP，PDF/PPT 限制 200 页/张。未发送草稿 24 小时过期，删除先撤销读取权限，再由持久清理任务删除磁盘文件。
+
+上传图片后直接交给当前所选模型处理，无需手动配置图片能力、数量、字节或 token 上界。数量和大小限制复用附件服务的统一规则；图片压缩至最长边 2048 像素，每张按系统内部 20000 token 估算参与上下文裁剪，实际用量以供应商 usage 为准。旧配置中的 `image_input`、`max_images`、`max_image_bytes`、`vision_token_budget` 仍兼容读取，但不再阻止图片发送。实际识别能力取决于模型和接入接口，不支持时提示切换模型。文档正文及图片会交给当前所选模型处理；附件内容与派生摘要不会自动进入公开搜索查询。
+
+全文整理有 90 秒准备上限，附件问答总上限 240 秒；超限时会明确报错并保留已绑定资料。长文档按结构分段处理并缓存覆盖范围，断线通过 `/api/chat/requests/{request_id}` 观察原请求状态，不会再次启动同一轮生成。
 
 ### 后端 `backend/.env`
 

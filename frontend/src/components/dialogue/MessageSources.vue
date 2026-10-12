@@ -1,6 +1,13 @@
 <template>
-  <div v-if="web && web.status !== 'off'" class="message-sources">
-    <p v-if="!web.sources.length || web.status !== 'ready'" class="web-status" role="status">
+  <div
+    v-if="
+      web &&
+      (web.status !== 'off' || web.sources.length) &&
+      (showStatus || visibleWarnings.length || web.sources.length)
+    "
+    class="message-sources"
+  >
+    <p v-if="showStatus" class="web-status" role="status">
       {{
         !pending && ['deciding', 'searching'].includes(web.status)
           ? '联网过程已中断'
@@ -19,7 +26,11 @@
               ? `引用 ${citedCount} 条来源`
               : '本回答未直接引用来源'
         }}
-        <span> · 检索到 {{ web.sources.length }} 条资料</span>
+        <span>
+          ·
+          {{ web.sources.every((source) => !source.kind || source.kind === 'web') ? '检索到 ' : ''
+          }}{{ web.sources.length }} 条资料</span
+        >
       </summary>
       <p v-if="web.searched_at" class="search-time">
         检索于 {{ displayTime(web.searched_at) }} · 依据相关片段
@@ -31,9 +42,26 @@
           :class="{ cited: citedIds.has(source.id) }"
         >
           <div>
+            <button
+              v-if="source.kind === 'document' || source.kind === 'image'"
+              class="file-source"
+              type="button"
+              :disabled="source.deleted"
+              @click="activeSource = source"
+            >
+              [{{ web.sources.findIndex((item) => item.id === source.id) + 1 }}]
+              {{ source.title }} ·
+              {{
+                source.deleted
+                  ? '资料已删除'
+                  : source.summary
+                    ? `分段摘要 · ${source.coverage?.map(attachmentLocation).join('、') || attachmentLocation(source.locator)}`
+                    : attachmentLocation(source.locator) || '图片'
+              }}
+            </button>
             <a
-              v-if="safeWebUrl(source.url)"
-              :href="safeWebUrl(source.url)!"
+              v-else-if="sourceUrl(source)"
+              :href="sourceUrl(source)!"
               target="_blank"
               rel="noopener noreferrer"
             >
@@ -44,25 +72,55 @@
               citedIds.has(source.id) ? '已引用' : pending ? '候选资料' : '仅检索'
             }}</span>
           </div>
-          <span class="source-domain">{{ source.domain }}</span>
-          <span v-if="source.published_at" class="source-domain">
+          <span v-if="'domain' in source" class="source-domain">{{ source.domain }}</span>
+          <span v-if="'published_at' in source && source.published_at" class="source-domain">
             · 发布于 {{ displayTime(source.published_at) }}</span
           >
           <p v-if="source.excerpt">{{ source.excerpt }}</p>
         </li>
       </ol>
     </details>
+    <AttachmentViewer
+      v-if="activeSource"
+      :open="true"
+      :attachment-id="activeSource.attachment_id"
+      :name="activeSource.title"
+      :image="activeSource.kind === 'image'"
+      :chunk-id="activeSource.chunk_id"
+      :revision="activeSource.revision"
+      :deleted="activeSource.deleted"
+      :summary-text="activeSource.summary ? activeSource.excerpt : undefined"
+      :summary-coverage="activeSource.coverage?.map(attachmentLocation).join('、')"
+      @close="activeSource = null"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
+import AttachmentViewer from '../attachments/AttachmentViewer.vue'
+import { attachmentLocation } from '../../types/attachments'
+import type { FileSource, AnswerSource } from '../../types/webSearch'
 import type { WebSnapshot } from '../../types/webSearch'
 import { safeWebUrl, webStatusText } from '../../utils/webSearch'
 
+const activeSource = ref<FileSource | null>(null)
 const props = defineProps<{ web?: WebSnapshot; pending?: boolean }>()
+const showStatus = computed(() => {
+  const web = props.web
+  return (
+    web &&
+    !['off', 'skipped'].includes(web.status) &&
+    web.status !== 'failed' &&
+    (!web.sources.length || web.status !== 'ready') &&
+    (!web.sources.length || web.sources.some((source) => !source.kind || source.kind === 'web'))
+  )
+})
 const visibleWarnings = computed(
-  () => props.web?.warnings?.filter((warning) => warning.code !== 'WEB_EVIDENCE_TRUNCATED') ?? [],
+  () =>
+    props.web?.warnings?.filter(
+      (warning) => !['WEB_EVIDENCE_TRUNCATED', 'WEB_DECISION_FAILED'].includes(warning.code),
+    ) ?? [],
 )
 const citedIds = computed(() => new Set(props.web?.cited_source_ids ?? []))
 const citedCount = computed(
@@ -73,6 +131,9 @@ const orderedSources = computed(() =>
     (a, b) => Number(citedIds.value.has(b.id)) - Number(citedIds.value.has(a.id)),
   ),
 )
+function sourceUrl(source: AnswerSource) {
+  return 'url' in source ? safeWebUrl(source.url) : null
+}
 function displayTime(value: string) {
   const date = new Date(value)
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString('zh-CN')
@@ -80,6 +141,15 @@ function displayTime(value: string) {
 </script>
 
 <style scoped>
+.file-source {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--blue);
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
 .message-sources {
   font-size: 12px;
   color: var(--ink-3);

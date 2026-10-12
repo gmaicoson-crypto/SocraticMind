@@ -51,7 +51,16 @@ class MultilineLLMDotEnvSource(DotEnvSettingsSource):
         )
 
 
-class LLMContextCapabilities(BaseModel):
+class LLMImageCapabilities(BaseModel):
+    """Legacy image settings accepted for compatibility, without gating uploads."""
+
+    image_input: Literal["supported", "unsupported", "unknown"] = "unknown"
+    max_images: int = Field(default=9, ge=1, le=9)
+    max_image_bytes: int = Field(default=10 * 1024 * 1024, gt=0, le=10 * 1024 * 1024)
+    vision_token_budget: int | None = Field(default=None, gt=0, le=256_000)
+
+
+class LLMContextCapabilities(LLMImageCapabilities):
     """容量按实际服务配置，默认使用项目统一的 256K 窗口。"""
 
     context_window_tokens: int = Field(default=256_000, gt=0)
@@ -134,6 +143,9 @@ class Settings(BaseSettings):
     chat_stream_max_workers: int = Field(default=8, ge=1, le=128)
     web_search_max_pending: int = Field(default=8, ge=0, le=128)
     web_search_max_response_bytes: int = Field(default=1_000_000, ge=1_024, le=8_000_000)
+
+    attachment_storage_dir: str | None = None
+    attachment_libreoffice_path: str | None = None
 
     # 允许的前端源，逗号分隔；生产环境需改为实际域名，禁止保留 localhost
     cors_origins: str = "http://localhost:5173"

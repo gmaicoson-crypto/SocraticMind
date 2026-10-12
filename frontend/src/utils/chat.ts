@@ -1,4 +1,12 @@
 // chat 工具模块，提供可复用的纯函数。
+import type { Message } from '../types'
+
+export function hasMessageContent(
+  message: Pick<Message, 'text' | 'choices' | 'attachments'>,
+): boolean {
+  return Boolean(message.text.trim() || message.choices?.length || message.attachments?.length)
+}
+
 export function now(): string {
   return new Date().toISOString()
 }

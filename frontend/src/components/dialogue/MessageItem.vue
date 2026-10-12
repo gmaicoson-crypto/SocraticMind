@@ -25,7 +25,8 @@
     </div>
 
     <div class="msg-content" :class="message.role">
-      <div class="bubble" :class="message.role">
+      <AttachmentList :attachments="message.attachments" />
+      <div v-if="message.text.trim()" class="bubble" :class="message.role">
         <InlineMarkdown
           :text="message.text"
           :with-caret="false"
@@ -33,7 +34,13 @@
           :web="messageWeb(message.metadata)"
         />
       </div>
-      <MessageSources v-if="message.role === 'ai'" :web="messageWeb(message.metadata)" />
+      <p v-else-if="message.role === 'ai' && !hasContent" class="empty-reply" role="status">
+        本次未收到有效回复。
+      </p>
+      <MessageSources
+        v-if="message.role === 'ai' && hasContent"
+        :web="messageWeb(message.metadata)"
+      />
       <button
         v-if="message.quote && canJumpToQuote"
         type="button"
@@ -68,7 +75,10 @@
         </button>
       </div>
 
-      <div class="msg-actions" :class="{ visible: hovered }">
+      <div
+        class="msg-actions"
+        :class="{ visible: hovered || (message.role === 'user' && canRetry && !isThinking) }"
+      >
         <span class="msg-time"
           >{{ message.role === 'ai' ? 'Socrates AI' : '你' }} ·
           {{ formatMessageTime(message.time) }}
@@ -101,8 +111,10 @@
           </button>
           <button
             v-if="canRetry && !isThinking"
+            type="button"
             class="action-btn"
-            title="重新回答"
+            :title="message.role === 'user' ? '重试' : '重新回答'"
+            :aria-label="message.role === 'user' ? '重试' : '重新回答'"
             @click="emit('retry')"
           >
             <svg
@@ -113,13 +125,14 @@
               stroke="currentColor"
               stroke-width="2"
               stroke-linecap="round"
+              aria-hidden="true"
             >
               <path d="M1 4v6h6M23 20v-6h-6" />
               <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15" />
             </svg>
           </button>
           <button
-            v-if="message.role === 'ai'"
+            v-if="message.role === 'ai' && hasContent"
             class="action-btn"
             title="引用追问"
             @click="emit('quote')"
@@ -136,7 +149,12 @@
               <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
             </svg>
           </button>
-          <button class="action-btn" :title="copied ? '已复制' : '复制'" @click="copyMessage">
+          <button
+            v-if="message.text.trim()"
+            class="action-btn"
+            :title="copied ? '已复制' : '复制'"
+            @click="copyMessage"
+          >
             <svg
               v-if="!copied"
               width="12"
@@ -170,14 +188,15 @@
 </template>
 
 <script setup lang="ts">
-import { onBeforeUnmount, ref } from 'vue'
+import { computed, onBeforeUnmount, ref } from 'vue'
 import { ArrowUpRight } from '@lucide/vue'
 import type { Message } from '../../types'
-import { formatMessageTime } from '../../utils/chat'
+import { formatMessageTime, hasMessageContent } from '../../utils/chat'
 import { avatarSrc } from '../../utils/avatar'
 import { defaultUserAvatar } from '../../utils/avatarPresets'
 import InlineMarkdown from './InlineMarkdown.vue'
 import MessageSources from './MessageSources.vue'
+import AttachmentList from '../attachments/AttachmentList.vue'
 import { messageWeb } from '../../utils/webSearch'
 
 const props = defineProps<{
@@ -201,6 +220,7 @@ const emit = defineEmits<{
 }>()
 
 const hovered = ref(false)
+const hasContent = computed(() => hasMessageContent(props.message))
 const copied = ref(false)
 let copyTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -221,3 +241,11 @@ onBeforeUnmount(() => {
   if (copyTimer) clearTimeout(copyTimer)
 })
 </script>
+
+<style scoped>
+.empty-reply {
+  margin: 8px 0 0;
+  color: var(--ink-3);
+  font-size: 12px;
+}
+</style>

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, DateTime, ForeignKey, Index, Integer, String
+from sqlalchemy import Column, DateTime, ForeignKey, Index, Integer, String, JSON
 from sqlalchemy.sql import func
 
 from core.database import Base
@@ -32,6 +32,7 @@ class ChatTurn(Base):
     generation_token = Column(String(36), nullable=False)
     source_version = Column(Integer, nullable=False)
     error_code = Column(String(80), nullable=True)
+    preparation_json = Column(JSON, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     finished_at = Column(DateTime(timezone=True), nullable=True)
 

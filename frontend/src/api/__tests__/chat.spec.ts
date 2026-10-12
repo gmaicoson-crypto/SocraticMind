@@ -8,6 +8,45 @@ describe('chatStream terminal events', () => {
     vi.unstubAllGlobals()
   })
 
+  it('sends attachment ids and accepts preparation progress only for the current message', async () => {
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(
+          new TextEncoder().encode(
+            [
+              'data: {"msg_ids":{"user":1,"ai":2}}',
+              'data: {"type":"attachment_context_progress","request_id":"other","ai_message_id":2,"completed":1,"total":3}',
+              'data: {"type":"attachment_context_progress","request_id":"request-one","ai_message_id":2,"completed":2,"total":3}',
+              'data: [DONE]',
+            ].join('\n\n') + '\n\n',
+          ),
+        )
+        controller.close()
+      },
+    })
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, body })
+    vi.stubGlobal('fetch', fetchMock)
+    const onAttachmentContext = vi.fn()
+    await chatStream(
+      {
+        nodeKey: 'normal',
+        topicId: 0,
+        sessionId: 's',
+        userInput: '',
+        requestId: 'request-one',
+        mode: 'normal',
+        aiStyle: '标准',
+        attachmentIds: ['a', 'b'],
+      },
+      { onChunk: vi.fn(), onDone: vi.fn(), onError: vi.fn(), onAttachmentContext },
+    )
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body).attachment_ids).toEqual(['a', 'b'])
+    expect(onAttachmentContext).toHaveBeenCalledTimes(1)
+    expect(onAttachmentContext).toHaveBeenCalledWith(
+      expect.objectContaining({ completed: 2, total: 3 }),
+    )
+  })
+
   it('treats a structured error as the terminal event before DONE', async () => {
     const encoder = new TextEncoder()
     const body = new ReadableStream<Uint8Array>({

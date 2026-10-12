@@ -1,13 +1,29 @@
 import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
+import type { WebSource } from '../../../types/webSearch'
 import MessageSources from '../MessageSources.vue'
 import { webSnapshot } from '../../../test/fixtures/webSearch'
 
 describe('message source evidence', () => {
+  it.each([false, true])('hides no-search decisions while pending=%s', (pending) => {
+    const wrapper = mount(MessageSources, {
+      props: { web: webSnapshot({ status: 'skipped', sources: [] }), pending },
+    })
+    expect(wrapper.find('.message-sources').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('preserves real sources even when the search decision was skipped', () => {
+    const wrapper = mount(MessageSources, { props: { web: webSnapshot({ status: 'skipped' }) } })
+    expect(wrapper.find('.web-status').exists()).toBe(false)
+    expect(wrapper.get('summary').text()).toContain('引用 1 条来源')
+    wrapper.unmount()
+  })
+
   it('distinguishes cited sources from retrieved snippets without inventing publication dates', () => {
     const web = webSnapshot()
     web.sources.push({
-      ...web.sources[0],
+      ...(web.sources[0] as WebSource),
       id: 's2',
       title: '未引用资料',
       url: 'https://other.example.com/',
@@ -32,7 +48,7 @@ describe('message source evidence', () => {
         { code: 'SEARCH_TIMEOUT', message: '联网超时，未核实最新资料。', retryable: true },
       ],
     })
-    web.sources[0].url = 'javascript:alert(1)'
+    ;(web.sources[0] as WebSource).url = 'javascript:alert(1)'
     const wrapper = mount(MessageSources, { props: { web, pending: true } })
     expect(wrapper.text()).toContain('未核实最新资料')
     expect(wrapper.find('a').exists()).toBe(false)

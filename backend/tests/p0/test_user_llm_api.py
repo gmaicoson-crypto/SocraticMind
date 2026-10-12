@@ -90,3 +90,31 @@ def test_custom_model_delete_removes_runtime_profile(client):
         ).status_code
         == 404
     )
+
+
+def test_legacy_vision_settings_are_optional_and_roundtrip(client, db_session):
+    automatic = client.post("/api/llm/models", json={**model_payload(), "image_input": "supported"})
+    assert automatic.status_code == 201
+    assert automatic.json()["max_images"] == 9
+    assert resolve_llm_profile(automatic.json()["id"]).vision_token_budget is None
+    fields = {
+        "image_input": "supported",
+        "vision_token_budget": 2048,
+        "max_images": 3,
+        "max_image_bytes": 1048576,
+    }
+    response = client.post("/api/llm/models", json={**model_payload(), **fields})
+    assert response.status_code == 201
+    model_id = response.json()["id"]
+    assert {key: response.json()[key] for key in fields} == fields
+    assert resolve_llm_profile(model_id).vision_token_budget == 2048
+    listed = next(
+        model for model in client.get("/api/llm/models").json()["models"] if model["id"] == model_id
+    )
+    assert {key: listed[key] for key in fields} == fields
+    response = client.put(
+        f"/api/llm/models/{model_id}",
+        json={**model_payload(), **fields, "image_input": "unsupported"},
+    )
+    assert response.status_code == 200
+    assert resolve_llm_profile(model_id).image_input == "unsupported"

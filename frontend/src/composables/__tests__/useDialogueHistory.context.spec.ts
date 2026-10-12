@@ -4,6 +4,7 @@ import { getAllMessages, type StoredChatMessage } from '../../api/chat'
 import { useDialogueHistory } from '../useDialogueHistory'
 import { createDefaultSession } from '../useChatSessions'
 import { retryableAiIndex } from '../../utils/chat'
+import { attachment } from '../../test/fixtures/attachments'
 import { webSnapshot } from '../../test/fixtures/webSearch'
 
 vi.mock('../../api/chat', () => ({ getAllMessages: vi.fn() }))
@@ -139,6 +140,29 @@ describe('restoring server managed context', () => {
     })
     expect(retryableAiIndex(messages)).toBe(messages.length - 1)
   })
+  it('restores attachment-only messages as visible user messages and freezes their original ids', async () => {
+    const { sessions, history } = createHistory()
+    vi.mocked(getAllMessages).mockResolvedValue([
+      stored({ content: '', attachments: [attachment()] }),
+      stored({
+        id: 12,
+        role: 'ai',
+        content: '附件回答',
+        metadata: { user_message_id: 10, kind: 'qa' },
+      }),
+    ])
+    await history.rebuildFromBackend()
+    const user = sessions.value[0]!.messages.find((message) => message.db_id === 10)
+    expect(user).toMatchObject({ role: 'user', text: '', attachments: [{ id: 'attachment-1' }] })
+    const answer = sessions.value[0]!.messages.find((message) => message.db_id === 12)
+    expect(answer?.paired_db_id).toBeUndefined()
+    expect(answer?.chatRequest).toMatchObject({
+      kind: 'qa',
+      attachmentIds: ['attachment-1'],
+      userMessageId: 10,
+    })
+  })
+
   it('restores authoritative sources without creating a frontend search preference', async () => {
     const { sessions, history } = createHistory()
     const web = webSnapshot()

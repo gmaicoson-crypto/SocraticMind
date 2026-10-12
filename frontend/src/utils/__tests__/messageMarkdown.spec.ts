@@ -1,3 +1,4 @@
+import type { WebSource } from '../../types/webSearch'
 import { describe, expect, it } from 'vitest'
 import { createMessageMarkdownRenderer, webSnapshotForText } from '../messageMarkdown'
 import { webSnapshot } from '../../test/fixtures/webSearch'
@@ -83,7 +84,7 @@ describe('assistant source citations and untrusted Markdown', () => {
       webSnapshotForText(web, '部分 [[source:s1]] `[[source:s99]]`')?.cited_source_ids,
     ).toEqual(['s1'])
     expect(web.cited_source_ids).toEqual([])
-    web.sources[0].url = 'javascript:alert(1)'
+    ;(web.sources[0] as WebSource).url = 'javascript:alert(1)'
     expect(webSnapshotForText(web, '[[source:s1]]')?.cited_source_ids).toEqual([])
   })
 })

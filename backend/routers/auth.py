@@ -470,6 +470,11 @@ def delete_account(
     user_id = current_user.id
     user_email = current_user.email
 
+    # Queue private attachment cleanup transactionally before user/message rows vanish.
+    from services.attachments.service import delete_for_user
+
+    delete_for_user(db, user_id)
+
     # 先删磁盘文件：数据库回滚无法恢复文件，所以在校验通过后立即执行
     _delete_old_avatar(current_user.avatar_url)
     for image in UPLOAD_DIR.glob(f"ai_{user_id}_*"):

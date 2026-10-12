@@ -1,3 +1,10 @@
+from .attachment import (
+    Attachment,
+    AttachmentChunk,
+    MessageAttachment,
+    AttachmentCleanup,
+    AttachmentWorkerSlot,
+)
 from .user import User
 from .topic import Topic
 from .node import Node
@@ -16,6 +23,11 @@ from .mastery_event import MasteryEvent
 from .user_llm_profile import UserLLMProfile
 
 __all__ = [
+    "Attachment",
+    "AttachmentChunk",
+    "MessageAttachment",
+    "AttachmentCleanup",
+    "AttachmentWorkerSlot",
     "AgentRun",
     "AssessmentAttempt",
     "ArchivedChatActivity",

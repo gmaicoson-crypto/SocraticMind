@@ -1,10 +1,11 @@
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from copy import deepcopy
 import hashlib
 import json
 import logging
+import re
 import uuid
-from time import perf_counter
+from time import perf_counter, monotonic
 from typing import Any, List, Literal, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
@@ -39,6 +40,7 @@ from services.web_evidence import apply_web_context, cited_source_ids, invalid_s
 from services.web_search import iter_web_search, web_search_capabilities
 from services.web_search_quota import reserve_web_queries
 from services.chat_stream_runner import cancellable_chat_stream
+from services.attachments.config import LIMITS as ATTACHMENT_LIMITS
 from services.chat_summaries import run_one_summary_job, schedule_chat_summary
 from services.chat_lifecycle import (
     begin_chat_turn,
@@ -47,8 +49,10 @@ from services.chat_lifecycle import (
     refresh_generation_lease,
     checkpoint_interrupted_content,
     get_chat_turn,
+    recover_chat_turn,
 )
 from services.progress_archive import archive_and_delete_messages, delete_agent_runs
+from services.attachments.service import summaries_for_messages
 
 router = APIRouter(prefix="/api/chat", tags=["对话"])
 log = logging.getLogger(__name__)
@@ -87,6 +91,9 @@ class ChatRequest(BaseModel):
     model: str | None = Field(default=None, min_length=1, max_length=100)
     quote_text: str | None = Field(default=None, max_length=200)
     quote_source_id: int | None = Field(default=None, gt=0)
+    attachment_ids: list[str] = Field(
+        default_factory=list, max_length=ATTACHMENT_LIMITS["max_attachments"]
+    )
 
     @property
     def web_mode(self) -> Literal["auto", "off"]:
@@ -103,8 +110,19 @@ class ChatRequest(BaseModel):
 
     @model_validator(mode="after")
     def validate_request(self):
-        if self.kind == "qa" and not self.user_input.strip():
+        if (
+            self.kind == "qa"
+            and not self.user_input.strip()
+            and not self.attachment_ids
+            and self.regenerate_message_id is None
+        ):
             raise ValueError("user_input must not be blank for qa")
+        if len(self.attachment_ids) != len(set(self.attachment_ids)) or any(
+            not item or len(item) > 36 for item in self.attachment_ids
+        ):
+            raise ValueError("attachment_ids must be unique resource identifiers")
+        if self.kind != "qa" and self.attachment_ids:
+            raise ValueError("overview requests cannot contain attachments")
         if self.kind != "qa" and self.mode != "socratic":
             raise ValueError("overview requests must use socratic mode")
         return self
@@ -130,6 +148,7 @@ class HistoryResponse(BaseModel):
     message_type: str = "chat"
     metadata: dict[str, Any] | None = Field(default=None, validation_alias="metadata_json")
     created_at: datetime | None = None
+    attachments: list[dict[str, Any]] = Field(default_factory=list)
 
 
 @router.get("/capabilities")
@@ -212,6 +231,7 @@ def chat_stream_endpoint(
         quote_source_id=req.quote_source_id,
         regenerate_message_id=req.regenerate_message_id,
         web_mode=req.web_mode,
+        attachment_ids=req.attachment_ids,
     )
     user_id = current_user.id
     session_pk = started.session.id
@@ -228,6 +248,12 @@ def chat_stream_endpoint(
         return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
     if started.replayed:
+        from services.attachments.evidence import hydrate_message_sources
+
+        if initial_web is not None:
+            initial_web["sources"] = hydrate_message_sources(
+                db, user_id=user_id, messages=[ai_msg]
+            ).get(ai_msg.id, initial_web.get("sources", []))
         if started.turn.status == "generating":
             raise ApiError(
                 status_code=409,
@@ -279,8 +305,26 @@ def chat_stream_endpoint(
         regenerate=req.regenerate_message_id is not None,
         quote_source=quote_source,
     )
+    from models.attachment import Attachment
+
+    has_attachment_context = (
+        req.kind == "qa"
+        and db.query(Attachment.id)
+        .filter_by(
+            user_id=user_id,
+            session_id=req.session_id,
+        )
+        .first()
+        is not None
+    )
     try:
-        prepared = assemble_chat_context(db, session=started.session, **context_args)
+        # Resource preparation emits progress after SSE opens. Text-only requests
+        # retain their immediate HTTP context validation contract.
+        prepared = (
+            None
+            if has_attachment_context
+            else assemble_chat_context(db, session=started.session, **context_args)
+        )
     except Exception as error:
         finish_chat_turn(
             db,
@@ -307,14 +351,14 @@ def chat_stream_endpoint(
             )
         raise
 
-    input_tokens = prepared.input_tokens
+    input_tokens = prepared.input_tokens if prepared else 0
     log.info(
         "chat_context_prepared request=%s model=%s input_tokens=%d count_method=%s omitted_history=%s",
         req.request_id,
         model_id,
         input_tokens,
         count_method(model_id),
-        prepared.omitted_history,
+        prepared.omitted_history if prepared else False,
     )
     context_session_factory = sessionmaker(bind=db.get_bind())
     # No request-scoped read transaction is held while waiting for the provider.
@@ -328,9 +372,18 @@ def chat_stream_endpoint(
         first_chunk = True
         terminal = False
         active_context = prepared
+        attachment_evidence = None
+        deadline = monotonic() + 240
         web = deepcopy(initial_web)
 
         def check_active():
+            if has_attachment_context and monotonic() >= deadline:
+                raise ApiError(
+                    status_code=504,
+                    code="ATTACHMENT_CONTEXT_TIMEOUT",
+                    message="资料处理或回答超时，请缩小范围后重试",
+                    retryable=True,
+                )
             if not refresh_generation_lease(
                 db, user_id=user_id, request_id=req.request_id, generation_token=generation_token
             ):
@@ -373,7 +426,19 @@ def chat_stream_endpoint(
         try:
             yield event({"msg_ids": ids})
             if not refresh_generation_lease(
-                db, user_id=user_id, request_id=req.request_id, generation_token=generation_token
+                db,
+                user_id=user_id,
+                request_id=req.request_id,
+                generation_token=generation_token,
+                preparation={
+                    "status": "preparing",
+                    "deadline_at": (
+                        datetime.now(timezone.utc)
+                        + timedelta(seconds=max(0, deadline - monotonic()))
+                    ).isoformat(),
+                }
+                if has_attachment_context
+                else None,
             ):
                 raise ApiError(
                     status_code=409,
@@ -381,9 +446,93 @@ def chat_stream_endpoint(
                     message="本次生成已停止",
                     retryable=True,
                 )
+            if has_attachment_context:
+                from services.attachments.context import (
+                    iter_prepare_attachments,
+                    PreparedAttachments,
+                )
+
+                yield event(
+                    {
+                        "type": "attachment_context_preparing",
+                        "status": "preparing",
+                        "request_id": req.request_id,
+                        "ai_message_id": ids["ai"],
+                    }
+                )
+                for update in iter_prepare_attachments(
+                    db,
+                    session=started.session,
+                    user_message_id=ids["user"],
+                    model_id=model_id,
+                    user_input=model_user_input,
+                    mode=req.mode,
+                    check_active=check_active,
+                    deadline=min(deadline, monotonic() + 90),
+                    quote_source=quote_source,
+                ):
+                    check_active()
+                    if isinstance(update, PreparedAttachments):
+                        attachment_evidence = update
+                    else:
+                        if not refresh_generation_lease(
+                            db,
+                            user_id=user_id,
+                            request_id=req.request_id,
+                            generation_token=generation_token,
+                            preparation=update,
+                        ):
+                            check_active()
+                        yield event(
+                            {
+                                **update,
+                                "type": "attachment_context_progress",
+                                "request_id": req.request_id,
+                                "ai_message_id": ids["ai"],
+                            }
+                        )
+                if attachment_evidence is None:
+                    raise ApiError(
+                        status_code=502,
+                        code="ATTACHMENT_CONTEXT_FAILED",
+                        message="资料未能整理完成，请重试",
+                        retryable=True,
+                    )
+                context_args["attachments"] = attachment_evidence
+                context_session = db.get(ChatSession, session_pk)
+                if context_session is None:
+                    check_active()
+                active_context = assemble_chat_context(db, session=context_session, **context_args)
+                db.commit()
+                if not refresh_generation_lease(
+                    db,
+                    user_id=user_id,
+                    request_id=req.request_id,
+                    generation_token=generation_token,
+                    preparation={"status": "ready"},
+                    attachment_derived=attachment_evidence.attachment_derived,
+                ):
+                    check_active()
+                yield event(
+                    {
+                        "type": "attachment_context_ready",
+                        "status": "ready",
+                        "request_id": req.request_id,
+                        "ai_message_id": ids["ai"],
+                    }
+                )
             if active_context.omitted_history:
                 yield event({"type": "context_compacting"})
                 schedule_chat_summary(db, session_id=session_pk, model_id=model_id)
+                if has_attachment_context:
+                    # The independent summary worker owns historical compaction.
+                    # Do not let a synchronous summary outlive this turn's deadline.
+                    raise ApiError(
+                        status_code=503,
+                        code="CHAT_CONTEXT_NOT_READY",
+                        message="较早的对话正在后台整理，请稍后重试；问题与附件已保留",
+                        retryable=True,
+                    )
                 # Reuse the durable worker's lease and version checks. One bounded
                 # attempt avoids silently dropping unprocessed older turns.
                 run_one_summary_job(
@@ -420,11 +569,21 @@ def chat_stream_endpoint(
                         retryable=True,
                     )
                 yield event({"type": "context_ready"})
+            private_context = has_attachment_context or bool(
+                getattr(active_context, "attachment_derived", False)
+            )
+            explicit_search = bool(
+                re.search(
+                    r"联网|上网|搜索|查找公开|查阅公开|\b(?:search|browse|look up)\b",
+                    model_user_input,
+                    re.I,
+                )
+            )
             for payload in iter_web_search(
-                web_mode=req.web_mode,
+                web_mode="off" if private_context and not explicit_search else req.web_mode,
                 model_id=model_id,
                 user_input=model_user_input,
-                context_messages=active_context.messages,
+                context_messages=[] if private_context else active_context.messages,
                 request_id=req.request_id,
                 user_id=user_id,
                 check_active=check_active,
@@ -441,10 +600,21 @@ def chat_stream_endpoint(
             if req.kind == "qa":
                 previous_warnings = len(web.get("warnings", []))
                 active_context, web = apply_web_context(active_context, web, model_id)
+                if attachment_evidence:
+                    web["sources"] = [*web.get("sources", []), *attachment_evidence.sources]
                 persist_web()
                 for warning in web.get("warnings", [])[previous_warnings:]:
                     yield web_event({"type": "web_warning", "warning": warning, "web": web})
             check_active()
+            if getattr(active_context, "attachment_derived", False):
+                if not refresh_generation_lease(
+                    db,
+                    user_id=user_id,
+                    request_id=req.request_id,
+                    generation_token=generation_token,
+                    attachment_derived=True,
+                ):
+                    check_active()
             yield web_event({"type": "web_status", "status": web["status"], "web": web})
             yield web_event({"type": "web_sources", "web": web, "final": False})
             input_tokens = active_context.input_tokens
@@ -462,6 +632,11 @@ def chat_stream_endpoint(
                     model_id=model_id,
                     prepared_messages=active_context.messages,
                     on_stream=control.attach,
+                    **(
+                        {"timeout": max(0.1, deadline - monotonic())}
+                        if has_attachment_context
+                        else {}
+                    ),
                     on_usage=lambda usage: log.info(
                         "chat_token_usage request=%s estimated_input=%s input_delta=%s usage=%s",
                         req.request_id,
@@ -488,7 +663,15 @@ def chat_stream_endpoint(
                     check_active()
                     last_guard = now
 
-            stream = cancellable_chat_stream(start_answer, check_answer_active)
+            stream = cancellable_chat_stream(
+                start_answer,
+                check_answer_active,
+                **(
+                    {"timeout_seconds": max(0.1, deadline - monotonic())}
+                    if has_attachment_context
+                    else {}
+                ),
+            )
             for chunk in stream:
                 full_text.append(chunk)
                 now = perf_counter()
@@ -687,6 +870,65 @@ def cancel_chat_endpoint(
     }
 
 
+@router.get("/requests/{request_id}")
+def chat_request_state(
+    request_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    turn = recover_chat_turn(db, user_id=current_user.id, request_id=request_id)
+    session = db.get(ChatSession, turn.chat_session_id)
+    return {
+        "request_id": turn.request_id,
+        "session_id": session.session_id,
+        "status": turn.status,
+        "preparation": turn.preparation_json,
+        "error_code": turn.error_code,
+        "error": {
+            "code": turn.error_code,
+            "message": "此前请求未完成，请重试或重新生成",
+            "retryable": True,
+        }
+        if turn.error_code
+        else None,
+        "msg_ids": {"user": turn.user_message_id, "ai": turn.ai_message_id},
+    }
+
+
+def history_responses(db, messages):
+    from services.attachments.evidence import hydrate_message_sources
+
+    attachments = summaries_for_messages(db, [message.id for message in messages])
+    sources = (
+        hydrate_message_sources(db, user_id=messages[0].user_id, messages=messages)
+        if messages
+        else {}
+    )
+
+    def metadata(message):
+        result = deepcopy(message.metadata_json)
+        if result and result.get("web") is not None and message.id in sources:
+            result["web"]["sources"] = sources[message.id]
+        return result
+
+    return [
+        {
+            "id": message.id,
+            "role": message.role,
+            "content": message.content,
+            "node_key": message.node_key,
+            "mode": message.mode,
+            "topic_id": message.topic_id,
+            "session_id": message.session_id,
+            "message_type": message.message_type,
+            "metadata": metadata(message),
+            "created_at": message.created_at,
+            "attachments": attachments.get(message.id, []),
+        }
+        for message in messages
+    ]
+
+
 def visible_messages(query):
     hidden_retry = exists().where(
         ChatTurn.ai_message_id == ChatMessage.id,
@@ -706,7 +948,7 @@ def get_history(
     db: Session = Depends(get_db),
 ):
     """获取指定节点的对话历史，按消息 ID 升序排列，最多返回 50 条。"""
-    return (
+    messages = (
         visible_messages(db.query(ChatMessage))
         .filter(
             ChatMessage.user_id == current_user.id,
@@ -716,6 +958,7 @@ def get_history(
         .limit(50)
         .all()
     )
+    return history_responses(db, messages)
 
 
 @router.get("/messages", response_model=List[HistoryResponse])
@@ -736,21 +979,7 @@ def get_all_messages(
         .limit(limit)
         .all()
     )
-    return [
-        {
-            "id": message.id,
-            "role": message.role,
-            "content": message.content,
-            "node_key": message.node_key,
-            "mode": message.mode,
-            "topic_id": message.topic_id,
-            "session_id": message.session_id,
-            "message_type": message.message_type,
-            "metadata": message.metadata_json,
-            "created_at": message.created_at,
-        }
-        for message in messages
-    ]
+    return history_responses(db, messages)
 
 
 class DeleteMessagesRequest(BaseModel):

@@ -28,6 +28,7 @@ htmlcov/
 
 # User uploads
 backend/uploads/
+backend/private_attachments/
 
 # Logs
 **/*.log

@@ -8,7 +8,19 @@ from core.database import engine
 from core.avatar_uploads import UPLOAD_DIR
 from core.migrations import assert_database_at_head
 from services.chat_summaries import ChatSummaryWorker
-from routers import agent, auth, topics, nodes, chat, memories, plans, progress, llm
+from services.attachments.worker import AttachmentWorker
+from routers import (
+    agent,
+    auth,
+    topics,
+    nodes,
+    chat,
+    memories,
+    plans,
+    progress,
+    llm,
+    attachments,
+)
 import models  # noqa: F401 - ensure ORM relationships can resolve registered models
 
 # 头像文件存储目录，不存在时自动创建
@@ -20,9 +32,12 @@ async def lifespan(_app: FastAPI):
     assert_database_at_head(engine)
     summaries = ChatSummaryWorker()
     summaries.start()
+    attachment_worker = AttachmentWorker()
+    attachment_worker.start()
     try:
         yield
     finally:
+        attachment_worker.stop()
         summaries.stop()
 
 
@@ -33,6 +48,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 install_api_error_handler(app)
+app.add_middleware(attachments.AttachmentUploadLimitMiddleware)
 
 # 允许的前端源通过环境变量 CORS_ORIGINS 配置（逗号分隔），生产环境须改为实际域名
 app.add_middleware(
@@ -56,6 +72,7 @@ app.include_router(agent.router)
 app.include_router(plans.router)
 app.include_router(memories.router)
 app.include_router(llm.router)
+app.include_router(attachments.router)
 
 
 @app.get("/")

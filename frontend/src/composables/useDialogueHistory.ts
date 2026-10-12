@@ -170,6 +170,7 @@ export function useDialogueHistory(options: DialogueHistoryOptions) {
           input: user.content,
           kind: kind === 'topic_overview' || kind === 'node_overview' ? kind : 'qa',
           userMessageId: user.id,
+          attachmentIds: user.attachments?.map((attachment) => attachment.id),
         }
       }
 
@@ -179,7 +180,8 @@ export function useDialogueHistory(options: DialogueHistoryOptions) {
       ): Message | null => {
         if (message.role === 'ai') {
           const chatRequest = chatRequestFor(message)
-          const pairedMessageId = chatRequest?.input === '' ? chatRequest.userMessageId : undefined
+          const pairedMessageId =
+            chatRequest && chatRequest.kind !== 'qa' ? chatRequest.userMessageId : undefined
           if (!parseAiChoices) {
             return {
               role: 'ai',
@@ -205,10 +207,11 @@ export function useDialogueHistory(options: DialogueHistoryOptions) {
             metadata: message.metadata,
           }
         }
-        if (!message.content.trim()) return null
+        if (!message.content.trim() && !message.attachments?.length) return null
         const quoted = quotedUserContent(message.content, message.metadata)
         return {
           role: 'user',
+          attachments: message.attachments,
           text: quoted.text,
           quote: quoted.quote ?? undefined,
           quote_source_db_id: quoted.quoteSourceId,

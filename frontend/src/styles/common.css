@@ -254,6 +254,7 @@ body,
 
 .dlg-messages .msg-content {
   display: flex;
+  min-width: 0;
   flex-direction: column;
   gap: 4px;
 }
@@ -351,6 +352,9 @@ body,
 }
 
 .dlg-messages .bubble {
+  align-self: flex-start;
+  max-width: 100%;
+  min-width: 0;
   padding: 10px 14px;
   overflow-wrap: anywhere;
   border-radius: 12px;
@@ -365,6 +369,7 @@ body,
 }
 
 .dlg-messages .bubble.user {
+  align-self: flex-end;
   background: var(--bubble-user-bg);
   color: var(--bubble-user-text);
 }

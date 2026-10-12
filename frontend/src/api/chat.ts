@@ -3,9 +3,11 @@
 import api from './index'
 import { getToken } from '../utils/token'
 import { getSelectedModelId } from '../utils/modelSelection'
+import type { AttachmentSummary, AttachmentContextEvent } from '../types/attachments'
 import type { WebEvent } from '../types/webSearch'
 
 export interface ChatMessage {
+  attachments?: AttachmentSummary[]
   role: 'ai' | 'user'
   content: string
 }
@@ -89,6 +91,7 @@ export interface ChatStreamRequest {
   quote?: ChatQuote
   regenerateMessageId?: number
   modelId?: string | null
+  attachmentIds?: string[]
 }
 
 export interface ChatStreamCallbacks {
@@ -97,6 +100,7 @@ export interface ChatStreamCallbacks {
   onError: (err: unknown) => void
   onMsgIds?: (userMsgId: number, aiMsgId: number) => void
   onContextStatus?: (status: ChatContextStatus) => void
+  onAttachmentContext?: (event: AttachmentContextEvent) => void
   onWebEvent?: (event: WebEvent) => void
 }
 
@@ -164,6 +168,7 @@ export async function chatStream(request: ChatStreamRequest, callbacks: ChatStre
         request_id: requestId,
         mode,
         ai_style: aiStyle,
+        attachment_ids: request.attachmentIds ?? [],
         kind,
         ...(quote ? { quote_text: quote.text, quote_source_id: quote.sourceId } : {}),
         ...(model ? { model } : {}),
@@ -197,6 +202,16 @@ export async function chatStream(request: ChatStreamRequest, callbacks: ChatStre
         } catch {
           throw new ChatStreamError('回复流格式错误，请重试。', 'CHAT_STREAM_INVALID')
         }
+        if (
+          [
+            'attachment_context_preparing',
+            'attachment_context_progress',
+            'attachment_context_ready',
+          ].includes(json.type) &&
+          json.request_id === requestId &&
+          json.ai_message_id === aiMessageId
+        )
+          callbacks.onAttachmentContext?.(json)
         if (json.type === 'context_compacting') onContextStatus?.('compacting')
         if (json.type === 'context_ready') onContextStatus?.('ready')
         if (json.msg_ids) {
@@ -311,4 +326,16 @@ export async function getSuggestions(
   for (const value of exclude) params.append('exclude', value)
   const res = await api.get<SuggestionsResponse>('/api/chat/suggestions', { params })
   return res.data
+}
+
+export interface ChatRequestState {
+  request_id: string
+  session_id?: string
+  status: string
+  msg_ids?: { user: number; ai: number }
+  preparation?: { completed?: number; total?: number; status?: string }
+  error?: { code?: string; message?: string; retryable?: boolean }
+}
+export async function getChatRequestState(requestId: string): Promise<ChatRequestState> {
+  return (await api.get(`/api/chat/requests/${encodeURIComponent(requestId)}`)).data
 }
