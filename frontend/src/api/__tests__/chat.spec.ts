@@ -353,4 +353,37 @@ describe('chatStream terminal events', () => {
     expect(params.get('mode')).toBe('socratic')
     expect(params.getAll('exclude')).toEqual(['我想学 Python', '教我机器学习'])
   })
+
+  it('requests follow-up questions for the current learning session and node', async () => {
+    const get = vi.spyOn(api, 'get').mockResolvedValue({
+      data: { suggestions: ['检索为什么有帮助？'], source: 'ai' },
+    })
+    await getSuggestions('socratic', ['旧问题'], {
+      topicId: 7,
+      sessionId: 'rag-session',
+      nodeKey: 'rag-retrieval',
+    })
+    const params = get.mock.calls[0][1]?.params as URLSearchParams
+    expect(params.get('topic_id')).toBe('7')
+    expect(params.get('session_id')).toBe('rag-session')
+    expect(params.get('node_key')).toBe('rag-retrieval')
+    expect(params.getAll('exclude')).toEqual(['旧问题'])
+  })
+
+  it('requests normal follow-ups with the current session and without learning context', async () => {
+    const get = vi.spyOn(api, 'get').mockResolvedValue({
+      data: { suggestions: ['海边露营需要准备什么？'], source: 'ai' },
+    })
+    await getSuggestions('normal', ['旧建议'], {
+      sessionId: 'beach-session',
+      topicId: 7,
+      nodeKey: 'retrieval',
+    })
+    const params = get.mock.calls[0][1]?.params as URLSearchParams
+    expect(params.get('mode')).toBe('normal')
+    expect(params.get('session_id')).toBe('beach-session')
+    expect(params.has('topic_id')).toBe(false)
+    expect(params.has('node_key')).toBe(false)
+    expect(params.getAll('exclude')).toEqual(['旧建议'])
+  })
 })

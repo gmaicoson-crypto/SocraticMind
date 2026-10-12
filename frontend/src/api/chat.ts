@@ -316,13 +316,25 @@ export interface SuggestionsResponse {
   source?: 'ai' | 'fallback'
 }
 
+export interface SuggestionsContext {
+  topicId?: number
+  sessionId?: string
+  nodeKey?: string
+}
+
 export async function getSuggestions(
   mode: 'socratic' | 'normal',
   exclude: string[] = [],
+  context?: SuggestionsContext,
 ): Promise<SuggestionsResponse> {
   const model = getSelectedModelId()
   const params = new URLSearchParams({ mode })
   if (model) params.set('model', model)
+  if (context?.sessionId) params.set('session_id', context.sessionId)
+  if (mode === 'socratic' && context?.topicId) {
+    params.set('topic_id', String(context.topicId))
+    if (context.nodeKey) params.set('node_key', context.nodeKey)
+  }
   for (const value of exclude) params.append('exclude', value)
   const res = await api.get<SuggestionsResponse>('/api/chat/suggestions', { params })
   return res.data

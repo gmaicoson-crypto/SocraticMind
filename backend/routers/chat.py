@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from ai.agent import ChatStreamError, chat_stream
-from ai.prompts import build_socratic_suggestions_prompt, NORMAL_SUGGESTIONS_PROMPT
+from ai.prompts import build_normal_suggestions_prompt, build_socratic_suggestions_prompt
 from ai.util import extract_json_from_markdown
 from core.database import get_db
 from core.avatar_uploads import UPLOAD_DIR, read_avatar_upload
@@ -1075,32 +1075,97 @@ def delete_session_endpoint(
     return {"deleted": deleted}
 
 
+def _suggestion_history(
+    db: Session,
+    *,
+    user_id: int,
+    session_id: str | None,
+    mode: str,
+    topic_id: int | None = None,
+) -> list[dict[str, str]]:
+    """复用会话索引，限制推荐上下文的消息数量和单条长度。"""
+    if not session_id:
+        return []
+    query = db.query(ChatMessage).filter(
+        ChatMessage.user_id == user_id,
+        ChatMessage.session_id == session_id,
+        ChatMessage.mode == mode,
+        ChatMessage.message_type == "chat",
+    )
+    if mode == "socratic":
+        query = query.filter(ChatMessage.topic_id == topic_id)
+    recent_messages = query.order_by(ChatMessage.id.desc()).limit(6).all()
+    return [
+        {"角色": message.role, "内容": message.content[-800:]}
+        for message in reversed(recent_messages)
+        if message.content.strip()
+        and (message.metadata_json or {}).get("status", "complete") == "complete"
+    ]
+
+
 @router.get("/suggestions")
 def get_suggestions(
-    mode: str = "socratic",
+    mode: Literal["socratic", "normal"] = "socratic",
     model: str | None = None,
     exclude: list[str] = Query(default=[]),
+    topic_id: int | None = Query(default=None, gt=0),
+    session_id: str | None = Query(default=None, min_length=1, max_length=100),
+    node_key: str | None = Query(default=None, min_length=1, max_length=100),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """根据当前聊天模式，让 AI 生成快捷回复建议；生成失败时返回兜底的静态建议列表。"""
+    """新对话推荐开场主题，已有内容的对话根据当前会话生成后续建议。"""
     load_user_profiles(db, current_user.id)
+    subject = ""
+    normal_history = []
     if mode == "socratic":
-        # 取用户当前可学习的节点作为上下文，让建议更贴合学习进度
-        recent_nodes = (
-            db.query(Node)
-            .join(Topic)
-            .filter(
-                Topic.user_id == current_user.id,
-                Node.state == "available",
+        if topic_id is None:
+            topics = (
+                db.query(Topic.title)
+                .filter(Topic.user_id == current_user.id)
+                .order_by(Topic.id.desc())
+                .limit(12)
+                .all()
             )
-            .limit(3)
-            .all()
+            context = {"已有学习主题": [title for (title,) in topics]}
+        else:
+            topic = (
+                db.query(Topic)
+                .filter(Topic.id == topic_id, Topic.user_id == current_user.id)
+                .first()
+            )
+            if not topic:
+                raise HTTPException(status_code=404, detail="主题不存在")
+            subject = topic.title
+            context = {"当前主题": topic.title}
+            if node_key:
+                node = (
+                    db.query(Node)
+                    .filter(Node.topic_id == topic_id, Node.node_key == node_key)
+                    .first()
+                )
+                if not node:
+                    raise HTTPException(status_code=404, detail="当前主题中不存在该节点")
+                subject = node.label
+                context["当前节点"] = {"名称": node.label, "说明": node.sub}
+            if session_id:
+                context["最近对话"] = _suggestion_history(
+                    db,
+                    user_id=current_user.id,
+                    session_id=session_id,
+                    mode=mode,
+                    topic_id=topic_id,
+                )
+        prompt = build_socratic_suggestions_prompt(
+            json.dumps(context, ensure_ascii=False), has_topic=topic_id is not None
         )
-        context = "、".join([n.label for n in recent_nodes]) if recent_nodes else "编程基础"
-        prompt = build_socratic_suggestions_prompt(context)
     else:
-        prompt = NORMAL_SUGGESTIONS_PROMPT
+        normal_history = _suggestion_history(
+            db, user_id=current_user.id, session_id=session_id, mode=mode
+        )
+        prompt = build_normal_suggestions_prompt(
+            json.dumps({"最近对话": normal_history}, ensure_ascii=False) if normal_history else None
+        )
 
     excluded = list(dict.fromkeys(value.strip()[:80] for value in exclude if value.strip()))[:24]
     if excluded:
@@ -1111,7 +1176,7 @@ def get_suggestions(
         response = get_ai_client(profile.id).chat.completions.create(
             model=profile.model,
             messages=[{"role": "user", "content": prompt}],
-            max_tokens=500,
+            max_tokens=800,
             temperature=0.8,
         )
         payload = json.loads(extract_json_from_markdown(response.choices[0].message.content))
@@ -1121,30 +1186,76 @@ def get_suggestions(
         ):
             raise ValueError("invalid suggestions response")
         fresh = list(dict.fromkeys(value.strip() for value in suggestions if value.strip()))
+        if not fresh:
+            raise ValueError("empty suggestions response")
         return {
             "suggestions": [value for value in fresh if value not in excluded][:12],
             "source": "ai",
         }
     except Exception:
         if mode == "socratic":
+            if topic_id is not None:
+                return {
+                    "suggestions": [
+                        value
+                        for value in [
+                            f"{subject}的核心原理是什么？",
+                            f"{subject}有什么实际用途？",
+                            f"{subject}能举个例子吗？",
+                            f"{subject}有哪些常见误区？",
+                            f"{subject}与相关概念有何区别？",
+                            f"{subject}如何一步步实现？",
+                            "刚才的例子为什么成立？",
+                            "这个结论需要哪些前提？",
+                            "换个场景还适用吗？",
+                            "这一步可以再解释一下吗？",
+                            "有没有反例能帮助理解？",
+                            "如何检验我是否理解了？",
+                        ]
+                        if value not in excluded
+                    ],
+                    "source": "fallback",
+                }
             return {
                 "suggestions": [
                     "我想学 Python",
                     "教我机器学习",
                     "讲讲数据结构",
                     "学习 Web 开发",
-                    "解释一下算法",
-                    "复习编程基础",
-                    "练习逻辑思维",
+                    "学习算法基础",
+                    "学习编程基础",
+                    "学习逻辑思维",
                     "了解神经网络",
-                    "帮我制定计划",
-                    "讲讲数据库",
+                    "学习数据库",
                     "学习前端基础",
-                    "做一道练习题",
+                    "学习操作系统",
+                    "学习计算机网络",
                 ],
                 "source": "fallback",
             }
         else:
+            if normal_history:
+                return {
+                    "suggestions": [
+                        value
+                        for value in [
+                            "能展开说说刚才的内容吗？",
+                            "能结合我的情况举个例子吗？",
+                            "我接下来可以先做什么？",
+                            "有没有更简单的选择？",
+                            "刚才提到的方法怎么操作？",
+                            "这有哪些需要注意的地方？",
+                            "还有哪些相关细节值得了解？",
+                            "如果换个情况该怎么办？",
+                            "这几种选择有什么区别？",
+                            "能帮我梳理一下刚才的重点吗？",
+                            "这个建议为什么适合我？",
+                            "有没有其他可行的思路？",
+                        ]
+                        if value not in excluded
+                    ],
+                    "source": "fallback",
+                }
             return {
                 "suggestions": [
                     "今天天气怎么样",

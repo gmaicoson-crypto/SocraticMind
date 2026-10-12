@@ -59,6 +59,14 @@ def build_generate_prompt(topic: str) -> str:
 NORMAL_SUGGESTIONS_PROMPT = _load("suggestions_normal")
 
 
-def build_socratic_suggestions_prompt(context: str) -> str:
-    """根据用户当前学习的节点上下文，生成苏格拉底模式下的快捷建议 prompt。"""
-    return _load("suggestions_socratic").replace("__CONTEXT__", context)
+def build_normal_suggestions_prompt(context: str | None = None) -> str:
+    """新普通对话推荐日常主题，有消息后根据当前会话生成后续提问。"""
+    if context is None:
+        return NORMAL_SUGGESTIONS_PROMPT
+    return _load("suggestions_normal_followup").replace("__CONTEXT__", context)
+
+
+def build_socratic_suggestions_prompt(context: str, *, has_topic: bool = False) -> str:
+    """未绑定主题时推荐学习主题，已绑定时根据当前对话生成追问。"""
+    template = "suggestions_socratic" if has_topic else "suggestions_topics"
+    return _load(template).replace("__CONTEXT__", context)
