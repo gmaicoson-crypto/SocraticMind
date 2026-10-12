@@ -5,7 +5,7 @@
         v-if="showScrollBtn"
         class="scroll-to-bottom"
         title="滚动到底部"
-        @click="scrollToBottom"
+        @click="scrollToBottom(true)"
       >
         <svg
           width="16"
@@ -22,7 +22,12 @@
       </button>
     </Transition>
 
-    <div ref="scrollRef" class="dlg-messages" @scroll="onMessagesScroll">
+    <div
+      ref="scrollRef"
+      class="dlg-messages"
+      @scroll="onMessagesScroll"
+      @wheel.passive="onMessagesWheel"
+    >
       <!-- Vue v-memo codegen needs the parentheses around this key. -->
       <!-- prettier-ignore-attribute :key -->
       <MessageItem
@@ -30,6 +35,8 @@
         :key="(msg.db_id ?? `${msg.role}-${msg.time}-${visibleMessageIndexes[i]}`)"
         v-memo="[
           msg.text,
+          msg.attachments,
+          msg.choices,
           msg.metadata?.web,
           msg.metadata?.status,
           msg.quote,
@@ -65,7 +72,7 @@
 
       <slot name="agent" />
 
-      <div v-if="streamingText" class="msg-row ai">
+      <div v-if="isThinking || hasStreamingContent" class="msg-row ai">
         <button
           type="button"
           class="ai-avatar sm"
@@ -76,15 +83,25 @@
           <img :src="avatarSrc(aiAvatarUrl)" alt="" class="ui-avatar-image ai-avatar-image" />
         </button>
         <div class="msg-content ai">
-          <div class="bubble ai">
+          <div v-if="displayStreamingText.trim()" class="bubble ai">
             <InlineMarkdown
               :text="displayStreamingText"
-              :with-caret="true"
+              :with-caret="isThinking"
               :assistant="true"
               :web="streamingWeb"
             />
           </div>
-          <MessageSources :web="streamingWeb" :pending="true" />
+          <div
+            v-else-if="!streamingChoices?.length"
+            class="bubble ai thinking-bubble"
+            role="status"
+            aria-label="正在等待回复"
+          >
+            <span class="dot" style="animation-delay: 0ms" />
+            <span class="dot" style="animation-delay: 150ms" />
+            <span class="dot" style="animation-delay: 300ms" />
+          </div>
+          <MessageSources :web="streamingWeb" :pending="isThinking" />
           <div v-if="streamingChoices && streamingChoices.length" class="choices-row">
             <button
               v-for="c in streamingChoices"
@@ -98,29 +115,6 @@
           </div>
         </div>
       </div>
-
-      <div v-if="isThinking && !streamingText" class="msg-row ai">
-        <button
-          type="button"
-          class="ai-avatar sm"
-          title="更改此对话的 AI 头像"
-          aria-label="更改此对话的 AI 头像"
-          @click="$emit('change-ai-avatar')"
-        >
-          <img :src="avatarSrc(aiAvatarUrl)" alt="" class="ui-avatar-image ai-avatar-image" />
-        </button>
-        <div class="msg-content ai">
-          <div
-            class="bubble ai"
-            style="display: flex; gap: 4px; align-items: center; padding: 12px 14px"
-          >
-            <span class="dot" style="animation-delay: 0ms" />
-            <span class="dot" style="animation-delay: 150ms" />
-            <span class="dot" style="animation-delay: 300ms" />
-          </div>
-          <MessageSources :web="streamingWeb" :pending="true" />
-        </div>
-      </div>
     </div>
   </div>
 </template>
@@ -132,7 +126,7 @@ import type { Message } from '../../types'
 import type { WebSnapshot } from '../../types/webSearch'
 import MessageSources from './MessageSources.vue'
 import { avatarSrc } from '../../utils/avatar'
-import { retryableAiIndex } from '../../utils/chat'
+import { hasMessageContent, replyUserIndex, retryableAiIndex } from '../../utils/chat'
 import { SOCRATIC_WELCOME_TEXT } from '../../composables/useChatSessions'
 import InlineMarkdown from './InlineMarkdown.vue'
 import MessageItem from './MessageItem.vue'
@@ -148,9 +142,11 @@ defineEmits<{
 const props = defineProps<{
   messages: Message[]
   streamingText: string
+  streamingMessageId?: number
   streamingWeb?: WebSnapshot
   streamingChoices?: { label: string; text: string }[] | null
   isThinking: boolean
+  retryUserIndex?: number
   avatarUrl: string | null
   aiAvatarUrl: string
   hideWelcome?: boolean
@@ -165,10 +161,24 @@ const displayStreamingText = computed(() => {
   if (idx !== -1) text = text.slice(0, idx)
   return text
 })
+const hasStreamingContent = computed(() =>
+  hasMessageContent({
+    text: displayStreamingText.value,
+    choices: props.streamingChoices ?? undefined,
+  }),
+)
 
 const visibleMessageIndexes = computed(() =>
   props.messages.flatMap((message, index) => {
     if (message.messageType && message.messageType !== 'chat') return []
+    if (
+      props.isThinking &&
+      message.role === 'ai' &&
+      ((message.db_id != null && message.db_id === props.streamingMessageId) ||
+        (!hasMessageContent(message) &&
+          (message.metadata?.status === 'generating' || index === props.messages.length - 1)))
+    )
+      return []
     if (props.hideWelcome && message.role === 'ai' && message.text === SOCRATIC_WELCOME_TEXT) {
       return []
     }
@@ -178,7 +188,21 @@ const visibleMessageIndexes = computed(() =>
 const visibleMessages = computed(() =>
   visibleMessageIndexes.value.map((index) => props.messages[index]),
 )
-const retryableIndex = computed(() => retryableAiIndex(props.messages))
+const retryableIndex = computed(() => {
+  if (props.retryUserIndex != null) return props.retryUserIndex
+  const aiIndex = retryableAiIndex(props.messages)
+  const reply = props.messages[aiIndex]
+  if (
+    reply &&
+    (!hasMessageContent(reply) ||
+      reply.metadata?.status === 'failed' ||
+      reply.metadata?.status === 'interrupted')
+  ) {
+    const userIndex = replyUserIndex(props.messages, aiIndex)
+    if (userIndex >= 0) return userIndex
+  }
+  return aiIndex
+})
 const quoteTargets = computed(() => {
   const dbIds = new Map<number, number>()
   const localIds = new Map<string, number>()
@@ -204,6 +228,10 @@ function findQuoteIndex(message: Message): number {
 
 const scrollRef = ref<HTMLElement | null>(null)
 const showScrollBtn = ref(false)
+const bottomThreshold = 4
+let followingLatest = true
+let lastScrollTop = 0
+let bottomScrollPending = false
 const highlightedIndex = ref(-1)
 let highlightTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -211,6 +239,7 @@ function jumpToQuote(message: Message) {
   const index = findQuoteIndex(message)
   if (index < 0) return
   const target = scrollRef.value?.querySelector<HTMLElement>(`[data-message-index="${index}"]`)
+  followingLatest = false
   target?.scrollIntoView({ behavior: 'smooth', block: 'center' })
   highlightedIndex.value = index
   if (highlightTimer) clearTimeout(highlightTimer)
@@ -219,18 +248,37 @@ function jumpToQuote(message: Message) {
 
 let scrollFrame: number | null = null
 function onMessagesScroll() {
+  const el = scrollRef.value
+  if (!el) return
+  const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight <= bottomThreshold
+  // Pause immediately so a queued stream update cannot undo the user's scroll.
+  if (el.scrollTop < lastScrollTop && !atBottom) followingLatest = false
+  else if (atBottom) followingLatest = true
+  lastScrollTop = el.scrollTop
   if (scrollFrame !== null) return
   scrollFrame = requestAnimationFrame(() => {
     scrollFrame = null
     if (!scrollRef.value) return
     const { scrollTop, scrollHeight, clientHeight } = scrollRef.value
-    showScrollBtn.value = scrollHeight - scrollTop - clientHeight > 80
+    showScrollBtn.value = scrollHeight - scrollTop - clientHeight > bottomThreshold
   })
 }
 
-function scrollToBottom() {
+function onMessagesWheel(event: WheelEvent) {
+  if (event.deltaY < 0 && (scrollRef.value?.scrollTop ?? 0) > 0) followingLatest = false
+}
+
+function scrollToBottom(force = false) {
+  if (force) followingLatest = true
+  if (!followingLatest || bottomScrollPending) return
+  bottomScrollPending = true
   nextTick(() => {
-    if (scrollRef.value) scrollRef.value.scrollTop = scrollRef.value.scrollHeight
+    bottomScrollPending = false
+    const el = scrollRef.value
+    if (!followingLatest || !el) return
+    el.scrollTop = el.scrollHeight
+    lastScrollTop = el.scrollTop
+    showScrollBtn.value = false
   })
 }
 
@@ -267,6 +315,13 @@ defineExpose({ scrollToBottom })
   border-radius: 50%;
   background: var(--ink-3);
   animation: dot 1.2s infinite;
+}
+
+.thinking-bubble {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 12px 14px;
 }
 
 @keyframes dot {

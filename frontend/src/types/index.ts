@@ -64,6 +64,8 @@ export interface DialogueSession {
   updatedAt: string
   topicId?: number
   topicTitle?: string
+  // Node reference only; its display title comes from the topic graph.
+  nodeKey?: string | null
   awaitingTopicChoice?: boolean
   suggestedTopicId?: number
   suggestedTopicTitle?: string

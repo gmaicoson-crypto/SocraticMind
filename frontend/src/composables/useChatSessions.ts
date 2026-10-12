@@ -13,16 +13,50 @@ const STORAGE_KEYS = {
 
 export const SOCRATIC_WELCOME_TEXT =
   '你好！我是 Socrates，你的 AI 学习导师 ✦\n\n告诉我你想学什么，我来为你生成专属知识图谱，然后引导你一步步掌握它。'
+const NORMAL_WELCOME_TEXT =
+  '你好！我是你的 AI 助手 💬\n\n有任何问题都可以直接问我，我会直接给出答案。'
 
-export function createWelcomeMessage(mode: ChatMode): Message {
+export function createWelcomeMessage(mode: ChatMode, text?: string): Message {
   return {
     role: 'ai',
-    text:
-      mode === 'socratic'
-        ? SOCRATIC_WELCOME_TEXT
-        : '你好！我是你的 AI 助手 💬\n\n有任何问题都可以直接问我，我会直接给出答案。',
+    text: text ?? (mode === 'socratic' ? SOCRATIC_WELCOME_TEXT : NORMAL_WELCOME_TEXT),
     time: now(),
+    metadata: { is_welcome: true },
   }
+}
+
+export function isWelcomeMessage(message: Message): boolean {
+  if (
+    message.role !== 'ai' ||
+    message.db_id != null ||
+    message.chatRequest ||
+    (message.messageType && message.messageType !== 'chat')
+  )
+    return false
+  // Older caches have no marker and may have sorted the opening after saved replies.
+  return (
+    message.metadata?.is_welcome === true ||
+    message.text === SOCRATIC_WELCOME_TEXT ||
+    message.text === NORMAL_WELCOME_TEXT ||
+    /^这是关于「\*\*[\s\S]+\*\*」的专属学习对话 ✦\n\n点击右侧知识图谱中的节点开始学习，或继续提问深入这个主题。$/.test(
+      message.text,
+    ) ||
+    /^你刚才学习的是「\*\*[\s\S]+\*\*」。这个新对话要继续该主题，还是创建一个全新的学习主题呢？$/.test(
+      message.text,
+    )
+  )
+}
+
+export function normalizeWelcomeMessages(messages: Message[]): Message[] {
+  let welcome: Message | undefined
+  const conversation = messages.filter((message) => {
+    if (!isWelcomeMessage(message)) return true
+    welcome ??= message
+    return false
+  })
+  if (!welcome || (messages[0] === welcome && conversation.length === messages.length - 1))
+    return messages
+  return [welcome, ...conversation]
 }
 
 //创建默认会话
@@ -51,6 +85,11 @@ function loadSessions(key: string, mode: ChatMode): DialogueSession[] {
           // Titles belong to the server; discard legacy names before displaying the cache.
           if ('name' in session) migrated = true
           session.name = '新对话'
+          const messages = normalizeWelcomeMessages(session.messages)
+          if (messages !== session.messages) {
+            session.messages = messages
+            migrated = true
+          }
           if (session.aiAvatarUrl) {
             const normalized = normalizeAiAvatarUrl(session.aiAvatarUrl)
             const nextUrl =

@@ -111,6 +111,7 @@ describe('restoring server managed context', () => {
       chatRequest: { nodeKey: 'original-node', input: '原问题', kind: 'qa', userMessageId: 10 },
     })
     expect(messages.filter((message) => message.db_id === 10)).toHaveLength(1)
+    expect(sessions.value[0].nodeKey).toBe('original-node')
   })
 
   it('restores a hidden overview question so its answer can be regenerated and deleted as a pair', async () => {
@@ -183,5 +184,30 @@ describe('restoring server managed context', () => {
     expect(
       sessions.value[0].messages.find((message) => message.db_id === 12)?.chatRequest,
     ).not.toHaveProperty('webMode')
+  })
+
+  it('clears the previous node binding when the latest saved reply is a topic overview', async () => {
+    const { sessions, history } = createHistory()
+    sessions.value[0].nodeKey = 'old-node'
+    vi.mocked(getAllMessages).mockResolvedValue([
+      stored({ id: 20, node_key: 'AI基础', content: '' }),
+      stored({
+        id: 21,
+        role: 'ai',
+        node_key: 'AI基础',
+        content: '主题介绍',
+        metadata: { user_message_id: 20, kind: 'topic_overview' },
+      }),
+      stored({
+        id: 12,
+        role: 'ai',
+        node_key: 'old-node',
+        content: '旧节点回答',
+        metadata: { user_message_id: 10 },
+      }),
+      stored({ id: 10, node_key: 'old-node' }),
+    ])
+    await history.rebuildFromBackend()
+    expect(sessions.value[0].nodeKey).toBeNull()
   })
 })

@@ -25,9 +25,10 @@
           <div class="history-item-content">
             <div v-if="editingSessionId === session.id" class="history-edit">
               <input
-                ref="editInputRef"
+                :ref="setEditInput"
                 :value="editingName"
                 class="history-name-input"
+                maxlength="40"
                 @input="$emit('update:editingName', ($event.target as HTMLInputElement).value)"
                 @keydown.enter="$emit('saveName', session.id)"
                 @keydown.escape="$emit('cancelEdit')"
@@ -39,13 +40,19 @@
               <button class="history-cancel-btn" @click.stop="$emit('cancelEdit')">✕</button>
             </div>
             <div v-else class="history-name-wrap">
-              <span class="history-name">{{ session.name }}</span>
-              <span class="history-count">{{ session.messages.length - 1 }} 条</span>
+              <span class="history-name" :title="session.name">{{ session.name }}</span>
             </div>
-            <div class="history-time">{{ session.updatedAt }}</div>
+            <div class="history-time">
+              <span class="history-date">{{ historyTimes.get(session.id)?.date }}</span>
+              <span class="history-clock">{{ historyTimes.get(session.id)?.time }}</span>
+            </div>
           </div>
+          <span v-if="editingSessionId !== session.id" class="history-count"
+            >{{ messageCount(session) }} 条</span
+          >
           <div v-if="editingSessionId !== session.id" class="history-item-actions" @click.stop>
             <button
+              v-if="session.messages.some((message) => message.role === 'user')"
               class="history-action-btn"
               title="重命名"
               @click.stop="$emit('startEdit', session)"
@@ -103,9 +110,11 @@
 
 <script setup lang="ts">
 // DialogueHistoryPanel 组件，封装局部界面和交互逻辑。
-import { ref, watch, nextTick } from 'vue'
+import { computed, ref, watch, nextTick } from 'vue'
 import type { DialogueSession } from '../../types'
 import { avatarSrc } from '../../utils/avatar'
+import { isWelcomeMessage } from '../../composables/useChatSessions'
+import { formatSessionTime } from '../../utils/chat'
 
 const props = defineProps<{
   show: boolean
@@ -129,6 +138,18 @@ defineEmits<{
 }>()
 
 const editInputRef = ref<HTMLInputElement | null>(null)
+const historyTimes = computed(
+  () =>
+    new Map(props.sessions.map((session) => [session.id, formatSessionTime(session.updatedAt)])),
+)
+
+function setEditInput(element: unknown) {
+  editInputRef.value = element instanceof HTMLInputElement ? element : null
+}
+
+function messageCount(session: DialogueSession): number {
+  return session.messages.reduce((count, message) => count + Number(!isWelcomeMessage(message)), 0)
+}
 
 watch(
   () => props.editingSessionId,
@@ -188,7 +209,8 @@ watch(
   gap: 4px;
 }
 .history-item {
-  display: flex;
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) 36px 46px;
   align-items: center;
   gap: 4px;
   padding: 8px 10px;
@@ -204,7 +226,7 @@ watch(
   background: var(--blue-tint);
 }
 .history-item-content {
-  flex: 1;
+  grid-column: 2;
   min-width: 0;
 }
 .history-avatar {
@@ -215,30 +237,37 @@ watch(
   object-fit: cover;
 }
 .history-name-wrap {
-  display: flex;
-  align-items: center;
-  gap: 6px;
+  min-width: 0;
 }
 .history-name {
+  display: block;
   font-size: 12.5px;
   font-weight: 500;
   color: var(--ink);
-  flex: 1;
+  line-height: 18px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .history-count {
+  grid-column: 3;
+  align-self: start;
+  line-height: 18px;
   font-size: 10px;
   color: var(--ink-3);
   font-family: var(--font-mono);
-  flex-shrink: 0;
+  white-space: nowrap;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 .history-time {
+  display: flex;
+  flex-direction: column;
   font-size: 10px;
   color: var(--ink-3);
   font-family: var(--font-mono);
   margin-top: 2px;
+  line-height: 14px;
 }
 
 .history-edit {
@@ -288,8 +317,11 @@ watch(
 }
 
 .history-item-actions {
+  grid-column: 4;
   display: flex;
   gap: 2px;
+  justify-content: flex-end;
+  width: 46px;
   flex-shrink: 0;
   opacity: 0;
   transition: opacity 0.15s;

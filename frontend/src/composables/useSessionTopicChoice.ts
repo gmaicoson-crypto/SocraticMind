@@ -35,9 +35,10 @@ export function useSessionTopicChoice(options: SessionTopicChoiceOptions) {
     session.suggestedTopicTitle = title
     session.messages = [
       {
-        role: 'ai',
-        text: `你刚才学习的是「**${title}**」。这个新对话要继续该主题，还是创建一个全新的学习主题呢？`,
-        time: now(),
+        ...createWelcomeMessage(
+          'socratic',
+          `你刚才学习的是「**${title}**」。这个新对话要继续该主题，还是创建一个全新的学习主题呢？`,
+        ),
         choices: [
           { label: 'A', text: `继续「${title}」` },
           { label: 'B', text: '创建新的主题对话' },

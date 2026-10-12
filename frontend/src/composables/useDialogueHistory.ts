@@ -1,8 +1,9 @@
 import type { Ref } from 'vue'
 import { getAllMessages } from '../api/chat'
 import type { DialogueSession, Message, Topic } from '../types'
-import { genId, now, nowDate } from '../utils/chat'
+import { genId, now, nowDate, parseSessionDate } from '../utils/chat'
 import { randomAiAvatar } from '../utils/avatarPresets'
+import { createWelcomeMessage, normalizeWelcomeMessages } from './useChatSessions'
 
 interface DialogueHistoryOptions {
   socraticSessions: Ref<DialogueSession[]>
@@ -18,31 +19,11 @@ interface DialogueHistoryOptions {
 }
 
 function sessionUpdatedTimestamp(session: DialogueSession): number | null {
-  const localDate = /^(\d{1,2})\/(\d{1,2})\s+(\d{1,2}):(\d{2})$/.exec(session.updatedAt)
-  if (localDate) {
-    const [, month, day, hour, minute] = localDate
-    const currentDate = new Date()
-    let timestamp = new Date(
-      currentDate.getFullYear(),
-      Number(month) - 1,
-      Number(day),
-      Number(hour),
-      Number(minute),
-    ).getTime()
-    if (timestamp > currentDate.getTime() + 24 * 60 * 60 * 1000) {
-      timestamp = new Date(
-        currentDate.getFullYear() - 1,
-        Number(month) - 1,
-        Number(day),
-        Number(hour),
-        Number(minute),
-      ).getTime()
-    }
-    return Math.max(timestamp, sessionCreatedTimestamp(session) ?? timestamp)
-  }
-  const normalized = session.updatedAt.replace(' ', 'T').replaceAll('/', '-')
-  const timestamp = Date.parse(normalized)
-  return Number.isNaN(timestamp) ? null : timestamp
+  const timestamp = parseSessionDate(session.updatedAt)?.getTime()
+  if (timestamp == null) return null
+  return /^\d{1,2}[/-]/.test(session.updatedAt)
+    ? Math.max(timestamp, sessionCreatedTimestamp(session) ?? timestamp)
+    : timestamp
 }
 
 function sessionCreatedTimestamp(session: DialogueSession): number | null {
@@ -138,11 +119,10 @@ export function useDialogueHistory(options: DialogueHistoryOptions) {
       name: '新对话',
       aiAvatarUrl: randomAiAvatar('socratic'),
       messages: [
-        {
-          role: 'ai',
-          text: `这是关于「**${title}**」的专属学习对话 ✦\n\n点击右侧知识图谱中的节点开始学习，或继续提问深入这个主题。`,
-          time: now(),
-        },
+        createWelcomeMessage(
+          'socratic',
+          `这是关于「**${title}**」的专属学习对话 ✦\n\n点击右侧知识图谱中的节点开始学习，或继续提问深入这个主题。`,
+        ),
       ],
       updatedAt: nowDate(),
       topicId,
@@ -234,7 +214,7 @@ export function useDialogueHistory(options: DialogueHistoryOptions) {
 
         const rebuilt: DialogueSession[] = [...groups.entries()].map(([sessionId, group]) => {
           const existing = localSessions.find((session) => session.id === sessionId)
-          const messages = group
+          let messages = group
             .map((message) => convertMessage(message, mode === 'socratic'))
             .filter((message): message is Message => message != null)
           if (existing) {
@@ -272,9 +252,17 @@ export function useDialogueHistory(options: DialogueHistoryOptions) {
             if (b.db_id == null) return -1
             return a.db_id - b.db_id
           })
+          messages = normalizeWelcomeMessages(messages)
           if (mode === 'socratic') inferSelectedChoices(messages)
           const topicId = group[0]?.topic_id ?? undefined
           const topic = topics().find((item) => Number(item.id) === topicId)
+          const latestChat = group.reduce<(typeof group)[number] | undefined>(
+            (latest, message) =>
+              message.message_type === 'chat' && (!latest || message.id > latest.id)
+                ? message
+                : latest,
+            undefined,
+          )
           return {
             id: sessionId,
             aiAvatarUrl: existing?.aiAvatarUrl ?? randomAiAvatar(mode),
@@ -284,6 +272,14 @@ export function useDialogueHistory(options: DialogueHistoryOptions) {
             updatedAt: messages[messages.length - 1]?.time ?? nowDate(),
             topicId: mode === 'socratic' ? topicId : undefined,
             topicTitle: mode === 'socratic' ? (topic?.title ?? existing?.topicTitle) : undefined,
+            nodeKey:
+              mode === 'socratic'
+                ? latestChat
+                  ? latestChat.metadata?.kind === 'topic_overview'
+                    ? null
+                    : latestChat.node_key
+                  : existing?.nodeKey
+                : undefined,
           }
         })
 

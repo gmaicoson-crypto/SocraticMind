@@ -1,5 +1,15 @@
 // chat 工具模块，提供可复用的纯函数。
-import type { Message } from '../types'
+import type { DialogueSession, Message } from '../types'
+
+export function sessionNodeKey(session: DialogueSession | undefined): string | undefined {
+  if (!session) return
+  if (session.nodeKey !== undefined) return session.nodeKey ?? undefined
+  // Older caches already contain the node in their saved request context.
+  for (let index = session.messages.length - 1; index >= 0; index -= 1) {
+    const request = session.messages[index]?.chatRequest
+    if (request) return request.kind === 'topic_overview' ? undefined : request.nodeKey
+  }
+}
 
 export function hasMessageContent(
   message: Pick<Message, 'text' | 'choices' | 'attachments'>,
@@ -9,6 +19,48 @@ export function hasMessageContent(
 
 export function now(): string {
   return new Date().toISOString()
+}
+
+export function parseSessionDate(value: string, today = new Date()): Date | null {
+  const legacy = /^(?:(\d{4})[/-])?(\d{1,2})[/-](\d{1,2})[,，]?\s+(\d{1,2}):(\d{2})$/.exec(
+    value.trim(),
+  )
+  if (legacy) {
+    const [, year, month, day, hour, minute] = legacy
+    const date = new Date(
+      year ? Number(year) : today.getFullYear(),
+      Number(month) - 1,
+      Number(day),
+      Number(hour),
+      Number(minute),
+    )
+    if (
+      date.getMonth() !== Number(month) - 1 ||
+      date.getDate() !== Number(day) ||
+      Number(hour) > 23 ||
+      Number(minute) > 59
+    )
+      return null
+    if (!year && date.getTime() > today.getTime() + 24 * 60 * 60 * 1000)
+      date.setFullYear(date.getFullYear() - 1)
+    return date
+  }
+  const timestamp = Date.parse(value.trim().replace(' ', 'T').replaceAll('/', '-'))
+  return Number.isNaN(timestamp) ? null : new Date(timestamp)
+}
+
+export function formatSessionTime(
+  value: string,
+  today = new Date(),
+): { date: string; time: string } {
+  const date = parseSessionDate(value, today)
+  if (!date)
+    return { date: '—', time: /^\d{1,2}:\d{2}$/.test(value) ? value.padStart(5, '0') : '—' }
+  const pad = (part: number) => String(part).padStart(2, '0')
+  return {
+    date: `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`,
+    time: `${pad(date.getHours())}:${pad(date.getMinutes())}`,
+  }
 }
 
 export function formatMessageTime(value: string, today = new Date()): string {
@@ -38,13 +90,24 @@ export function retryableAiIndex(
   return -1
 }
 
+export function replyUserIndex(messages: Message[], aiIndex: number): number {
+  const reply = messages[aiIndex]
+  if (reply?.role !== 'ai') return -1
+  const userId = reply.chatRequest?.userMessageId ?? reply.metadata?.user_message_id
+  for (let i = aiIndex - 1; i >= 0; i--) {
+    const message = messages[i]
+    if (
+      message.role === 'user' &&
+      (!message.messageType || message.messageType === 'chat') &&
+      (userId == null || message.db_id === userId)
+    )
+      return i
+  }
+  return -1
+}
+
 export function nowDate(): string {
-  return new Date().toLocaleDateString('zh-CN', {
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
+  return now()
 }
 
 export function genId(): string {

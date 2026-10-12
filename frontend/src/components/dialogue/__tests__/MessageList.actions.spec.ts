@@ -18,6 +18,90 @@ function mountList(messages: Message[]) {
 }
 
 describe('MessageList actions', () => {
+  it('keeps whitespace-only streams in a single waiting row without a no-search decision', async () => {
+    const wrapper = mountList([])
+    await wrapper.setProps({
+      isThinking: true,
+      streamingText: ' \n\t ',
+      streamingWeb: webSnapshot({ status: 'skipped', sources: [] }),
+    })
+    expect(wrapper.findAll('.msg-row.ai')).toHaveLength(1)
+    expect(wrapper.findAll('.thinking-bubble .dot')).toHaveLength(3)
+    expect(wrapper.find('.md-inline').exists()).toBe(false)
+    expect(wrapper.find('.message-sources').exists()).toBe(false)
+    await wrapper.setProps({ isThinking: false })
+    expect(wrapper.find('.msg-row.ai').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('keeps restored empty failures retryable without rendering source-only replies', async () => {
+    const messages: Message[] = [
+      { role: 'user', text: '原问题', time: '10:00', db_id: 1 },
+      {
+        role: 'ai',
+        text: '',
+        time: '10:01',
+        db_id: 2,
+        metadata: { status: 'failed', web: webSnapshot({ status: 'skipped', sources: [] }) },
+      },
+    ]
+    const wrapper = mountList(messages)
+    expect(wrapper.get('.empty-reply').text()).toContain('未收到有效回复')
+    expect(wrapper.find('.message-sources').exists()).toBe(false)
+    expect(wrapper.find('button[title="复制"]').exists()).toBe(true) // User text remains copyable.
+    expect(wrapper.find('button[title="引用追问"]').exists()).toBe(false)
+    const retry = wrapper.get('[data-message-index="0"] button[aria-label="重试"]')
+    expect(retry.find('svg').exists()).toBe(true)
+    expect(wrapper.get('[data-message-index="0"] .msg-actions').classes()).toContain('visible')
+    expect(wrapper.find('button[title="重新回答"]').exists()).toBe(false)
+    await retry.trigger('click')
+    expect(wrapper.emitted('retry')).toEqual([[0]])
+    await wrapper.setProps({ isThinking: true, streamingMessageId: 2 })
+    expect(wrapper.findAll('.msg-row.ai')).toHaveLength(1)
+    expect(wrapper.findAll('.thinking-bubble .dot')).toHaveLength(3)
+    expect(wrapper.find('.empty-reply').exists()).toBe(false)
+    expect(wrapper.find('button[aria-label="重试"]').exists()).toBe(false)
+    expect(wrapper.props('messages')).toHaveLength(2)
+    wrapper.unmount()
+  })
+
+  it('shows recovered partial replies once while keeping completed history visible', async () => {
+    const wrapper = mountList([
+      { role: 'ai', text: '已完成的回答', time: '10:00', db_id: 1 },
+      { role: 'user', text: '下一问', time: '10:01', db_id: 2 },
+      {
+        role: 'ai',
+        text: '部分回答',
+        time: '10:02',
+        db_id: 3,
+        metadata: { status: 'interrupted' },
+      },
+    ])
+    await wrapper.setProps({ isThinking: true, streamingMessageId: 3, streamingText: '部分回答' })
+    expect(wrapper.find('[data-message-index="2"]').exists()).toBe(false)
+    expect(wrapper.get('[data-message-index="0"]').text()).toContain('已完成的回答')
+    expect(wrapper.findAll('.msg-row.ai')).toHaveLength(2)
+    expect(wrapper.find('.thinking-bubble').exists()).toBe(false)
+    expect(wrapper.props('messages')).toHaveLength(3)
+    wrapper.unmount()
+  })
+
+  it('renders choice-only replies without an empty bubble or an extra waiting row', async () => {
+    const wrapper = mountList([])
+    await wrapper.setProps({
+      isThinking: true,
+      streamingText: '[CHOICES]\nA. 选项一\nB. 选项二\n[ECHOICES]',
+      streamingChoices: [
+        { label: 'A', text: '选项一' },
+        { label: 'B', text: '选项二' },
+      ],
+    })
+    expect(wrapper.findAll('.msg-row.ai')).toHaveLength(1)
+    expect(wrapper.find('.bubble').exists()).toBe(false)
+    expect(wrapper.findAll('.choice-btn')).toHaveLength(2)
+    wrapper.unmount()
+  })
+
   it('shows retry only on the latest AI reply', async () => {
     const wrapper = mountList([
       { role: 'ai', text: '欢迎', time: '10:00' },
@@ -31,6 +115,43 @@ describe('MessageList actions', () => {
     expect(retry).toHaveLength(1)
     await retry[0].trigger('click')
     expect(wrapper.emitted('retry')).toEqual([[4]])
+  })
+
+  it('updates the user retry action when the failed request changes despite memoized rows', async () => {
+    const wrapper = mountList([
+      { role: 'user', text: '第一问', time: '10:00' },
+      { role: 'user', text: '第二问', time: '10:01' },
+    ])
+    expect(wrapper.find('button[aria-label="重试"]').exists()).toBe(false)
+    await wrapper.setProps({ retryUserIndex: 1 })
+    expect(wrapper.get('[data-message-index="1"] .msg-actions').classes()).toContain('visible')
+    await wrapper.get('[data-message-index="1"] button[aria-label="重试"]').trigger('click')
+    expect(wrapper.emitted('retry')).toEqual([[1]])
+    await wrapper.setProps({ retryUserIndex: 0 })
+    expect(wrapper.find('[data-message-index="1"] button[aria-label="重试"]').exists()).toBe(false)
+    expect(wrapper.find('[data-message-index="0"] button[aria-label="重试"]').exists()).toBe(true)
+    await wrapper.setProps({ isThinking: true })
+    expect(wrapper.find('button[aria-label="重试"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('places restored interrupted reply retry on its paired user and keeps partial text', async () => {
+    const wrapper = mountList([
+      { role: 'user', text: '原问题', time: '10:00', db_id: 1 },
+      { role: 'user', text: '其他问题', time: '10:01', db_id: 2 },
+      {
+        role: 'ai',
+        text: '部分回答',
+        time: '10:02',
+        db_id: 3,
+        metadata: { status: 'interrupted', user_message_id: 1 },
+      },
+    ])
+    expect(wrapper.get('[data-message-index="2"]').text()).toContain('部分回答')
+    expect(wrapper.find('[data-message-index="1"] button[aria-label="重试"]').exists()).toBe(false)
+    await wrapper.get('[data-message-index="0"] button[aria-label="重试"]').trigger('click')
+    expect(wrapper.emitted('retry')).toEqual([[0]])
+    wrapper.unmount()
   })
 
   it('allows deleting the first persisted message after history restoration', async () => {
