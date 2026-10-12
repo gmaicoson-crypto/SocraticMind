@@ -24,6 +24,7 @@ from models import User
 from routers import (
     agent,
     chat,
+    chat_titles,
     llm,
     memories,
     nodes,
@@ -77,6 +78,7 @@ def app(db_session, auth_user):
     test_app.include_router(topics.router)
     test_app.include_router(nodes.router)
     test_app.include_router(chat.router)
+    test_app.include_router(chat_titles.router)
     test_app.include_router(progress.router)
     test_app.include_router(agent.router)
     test_app.include_router(plans.router)

@@ -10,6 +10,7 @@ from .topic import Topic
 from .node import Node
 from .progress import ChatMessage, LearningRecord
 from .chat_session import ChatSession
+from .chat_session_title import ChatSessionTitle
 from .chat_turn import ChatTurn
 from .chat_cancellation import ChatCancellation
 from .web_search_quota import WebSearchQuota
@@ -34,6 +35,7 @@ __all__ = [
     "ArchivedMastery",
     "ChatMessage",
     "ChatSession",
+    "ChatSessionTitle",
     "ChatTurn",
     "ChatCancellation",
     "WebSearchQuota",

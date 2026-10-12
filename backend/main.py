@@ -8,6 +8,7 @@ from core.database import engine
 from core.avatar_uploads import UPLOAD_DIR
 from core.migrations import assert_database_at_head
 from services.chat_summaries import ChatSummaryWorker
+from services.chat_titles import ChatTitleWorker
 from services.attachments.worker import AttachmentWorker
 from routers import (
     agent,
@@ -15,6 +16,7 @@ from routers import (
     topics,
     nodes,
     chat,
+    chat_titles,
     memories,
     plans,
     progress,
@@ -32,11 +34,14 @@ async def lifespan(_app: FastAPI):
     assert_database_at_head(engine)
     summaries = ChatSummaryWorker()
     summaries.start()
+    titles = ChatTitleWorker()
+    titles.start()
     attachment_worker = AttachmentWorker()
     attachment_worker.start()
     try:
         yield
     finally:
+        titles.stop()
         attachment_worker.stop()
         summaries.stop()
 
@@ -67,6 +72,7 @@ app.include_router(auth.router)
 app.include_router(topics.router)
 app.include_router(nodes.router)
 app.include_router(chat.router)
+app.include_router(chat_titles.router)
 app.include_router(progress.router)
 app.include_router(agent.router)
 app.include_router(plans.router)

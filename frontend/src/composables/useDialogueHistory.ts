@@ -135,7 +135,7 @@ export function useDialogueHistory(options: DialogueHistoryOptions) {
     const title = topic?.title ?? '新学习对话'
     const session: DialogueSession = {
       id: genId(),
-      name: title.slice(0, 12),
+      name: '新对话',
       aiAvatarUrl: randomAiAvatar('socratic'),
       messages: [
         {
@@ -279,10 +279,7 @@ export function useDialogueHistory(options: DialogueHistoryOptions) {
             id: sessionId,
             aiAvatarUrl: existing?.aiAvatarUrl ?? randomAiAvatar(mode),
             aiAvatarSelected: existing?.aiAvatarSelected,
-            name:
-              existing?.name ??
-              topic?.title?.slice(0, 12) ??
-              (mode === 'normal' ? '历史对话' : '学习对话'),
+            name: existing?.name ?? '新对话',
             messages,
             updatedAt: messages[messages.length - 1]?.time ?? nowDate(),
             topicId: mode === 'socratic' ? topicId : undefined,

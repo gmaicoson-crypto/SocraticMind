@@ -1,4 +1,11 @@
-from models import AgentRun, ArchivedChatActivity, ArchivedMastery, ChatMessage, Node
+from models import (
+    AgentRun,
+    ArchivedChatActivity,
+    ArchivedMastery,
+    ChatMessage,
+    ChatSessionTitle,
+    Node,
+)
 from sqlalchemy import String, and_, func, or_
 from sqlalchemy.orm import Session
 
@@ -59,6 +66,18 @@ def archive_and_delete_messages(
         for row in counts
     )
     message_ids = [value for (value,) in messages.with_entities(ChatMessage.id)]
+    if session_id is not None:
+        db.query(ChatSessionTitle).filter_by(user_id=user_id, session_id=session_id).delete(
+            synchronize_session=False
+        )
+    elif topic_id is not None:
+        session_ids = {value for (value,) in messages.with_entities(ChatMessage.session_id)} | set(
+            run_sessions
+        )
+        db.query(ChatSessionTitle).filter(
+            ChatSessionTitle.user_id == user_id,
+            ChatSessionTitle.session_id.in_(session_ids),
+        ).delete(synchronize_session=False)
     delete_for_messages(db, message_ids)
     if session_id is not None or topic_id is not None:
         delete_for_scope(db, user_id=user_id, session_id=session_id, topic_id=topic_id)

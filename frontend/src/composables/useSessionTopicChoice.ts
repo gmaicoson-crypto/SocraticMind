@@ -68,7 +68,6 @@ export function useSessionTopicChoice(options: SessionTopicChoiceOptions) {
       inheritTopicAvatar(session, Number(topic.id))
       session.topicId = Number(topic.id)
       session.topicTitle = topic.title
-      session.name = topic.title.slice(0, 12)
       clearTopicChoice(session)
       saveSessions()
       await setActiveTopic(topic.id)
@@ -92,7 +91,6 @@ export function useSessionTopicChoice(options: SessionTopicChoiceOptions) {
           ? [newTopicRequest]
           : []),
       ]
-      if (choseNewTopicOption) session.name = '新学习对话'
       if (!session.aiAvatarSelected) session.aiAvatarUrl = randomAiAvatar('socratic')
       clearTopicChoice(session)
       saveSessions()

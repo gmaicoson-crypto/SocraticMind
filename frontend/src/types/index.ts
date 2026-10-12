@@ -56,6 +56,7 @@ export type ChatMode = 'socratic' | 'normal'
 
 export interface DialogueSession {
   id: string
+  // In-memory display value fetched from the server; excluded from browser persistence.
   name: string
   aiAvatarUrl?: string
   aiAvatarSelected?: boolean

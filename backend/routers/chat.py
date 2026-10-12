@@ -42,6 +42,7 @@ from services.web_search_quota import reserve_web_queries
 from services.chat_stream_runner import cancellable_chat_stream
 from services.attachments.config import LIMITS as ATTACHMENT_LIMITS
 from services.chat_summaries import run_one_summary_job, schedule_chat_summary
+from services.chat_titles import schedule_title
 from services.chat_lifecycle import (
     begin_chat_turn,
     finish_chat_turn,
@@ -234,6 +235,27 @@ def chat_stream_endpoint(
         attachment_ids=req.attachment_ids,
     )
     user_id = current_user.id
+    if req.kind == "qa" and req.regenerate_message_id is None:
+        try:
+            source = req.user_input
+            if req.attachment_ids:
+                attached = summaries_for_messages(db, [started.user_message.id]).get(
+                    started.user_message.id, []
+                )
+                source += "\n附件：" + "、".join(item["name"] for item in attached)
+            if source.strip():
+                schedule_title(
+                    db,
+                    user_id=current_user.id,
+                    session_id=req.session_id,
+                    mode=req.mode,
+                    source_text=source,
+                    model_id=model_id,
+                )
+                db.commit()
+        except Exception as error:
+            db.rollback()
+            log.warning("chat_title_schedule_failed error_type=%s", type(error).__name__)
     session_pk = started.session.id
     generation_token = started.turn.generation_token
     user_msg, ai_msg = started.user_message, started.ai_message

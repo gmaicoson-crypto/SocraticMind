@@ -40,6 +40,7 @@ def test_empty_database_upgrades_to_head(tmp_path):
         "archived_chat_activity",
         "archived_mastery",
         "chat_sessions",
+        "chat_session_titles",
         "chat_turns",
         "chat_cancellations",
         "web_search_quotas",
@@ -248,6 +249,7 @@ def test_p0_downgrade_keeps_legacy_tables(tmp_path):
     assert "study_plans" not in tables
     assert "mastery_events" not in tables
     assert "chat_sessions" not in tables
+    assert "chat_session_titles" not in tables
     assert "chat_turns" not in tables
     assert "chat_cancellations" not in tables
     assert "estimated_minutes" not in {column["name"] for column in inspector.get_columns("nodes")}

@@ -42,13 +42,12 @@ describe('topic choice avatar inheritance', () => {
     const { session, choice, inheritTopicAvatar } = setup()
     vi.spyOn(Math, 'random').mockReturnValue(0)
     session.messages.push({ role: 'user', text: 'B. 创建新的主题对话', time: '00:44' })
-    session.name = 'B. 创建新的主题对话'
     await choice.handlePendingTopicChoice('B. 创建新的主题对话')
 
     expect(inheritTopicAvatar).toHaveBeenCalledOnce()
     expect(session.aiAvatarUrl).toBe(aiAvatarPresets[0])
     expect(session.topicId).toBeUndefined()
-    expect(session.name).toBe('新学习对话')
+    expect(session.name).toBe('新对话')
     expect(session.messages).toHaveLength(1)
     expect(session.messages[0]).toMatchObject({
       role: 'ai',

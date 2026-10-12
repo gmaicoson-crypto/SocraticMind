@@ -562,4 +562,15 @@ def sync_agent_run_message(
 
     if messages:
         db.add_all(messages)
+        if answer is not None:
+            from services.chat_titles import schedule_title
+
+            schedule_title(
+                db,
+                user_id=run.user_id,
+                session_id=run.session_id,
+                mode="socratic",
+                source_text=answer["answer"],
+                model_id=run.model,
+            )
         db.commit()

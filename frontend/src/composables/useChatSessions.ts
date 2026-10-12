@@ -29,11 +29,15 @@ export function createWelcomeMessage(mode: ChatMode): Message {
 export function createDefaultSession(mode: ChatMode): DialogueSession {
   return {
     id: genId(),
-    name: mode === 'socratic' ? '新学习对话' : '新普通对话',
+    name: '新对话',
     aiAvatarUrl: randomAiAvatar(mode),
     messages: [createWelcomeMessage(mode)],
     updatedAt: nowDate(),
   }
+}
+
+function serializeSessions(sessions: DialogueSession[]): string {
+  return JSON.stringify(sessions.map(({ name: _name, ...session }) => session))
 }
 
 function loadSessions(key: string, mode: ChatMode): DialogueSession[] {
@@ -44,6 +48,9 @@ function loadSessions(key: string, mode: ChatMode): DialogueSession[] {
       if (Array.isArray(sessions) && sessions.length > 0) {
         let migrated = false
         for (const session of sessions) {
+          // Titles belong to the server; discard legacy names before displaying the cache.
+          if ('name' in session) migrated = true
+          session.name = '新对话'
           if (session.aiAvatarUrl) {
             const normalized = normalizeAiAvatarUrl(session.aiAvatarUrl)
             const nextUrl =
@@ -58,9 +65,9 @@ function loadSessions(key: string, mode: ChatMode): DialogueSession[] {
         }
         if (migrated) {
           try {
-            localStorage.setItem(key, JSON.stringify(sessions))
+            localStorage.setItem(key, serializeSessions(sessions))
           } catch (error) {
-            console.warn(`本地会话 ${key} 头像迁移保存失败`, error)
+            console.warn(`本地会话 ${key} 迁移保存失败`, error)
           }
         }
         return sessions
@@ -90,8 +97,8 @@ export function useChatSessions() {
   let saveTimer: ReturnType<typeof setTimeout> | null = null
 
   function persistSessions() {
-    localStorage.setItem(STORAGE_KEYS.socratic, JSON.stringify(socraticSessions.value))
-    localStorage.setItem(STORAGE_KEYS.normal, JSON.stringify(normalSessions.value))
+    localStorage.setItem(STORAGE_KEYS.socratic, serializeSessions(socraticSessions.value))
+    localStorage.setItem(STORAGE_KEYS.normal, serializeSessions(normalSessions.value))
     localStorage.setItem(STORAGE_KEYS.socraticCurrent, socraticCurrentId.value)
     localStorage.setItem(STORAGE_KEYS.normalCurrent, normalCurrentId.value)
   }
@@ -104,7 +111,7 @@ export function useChatSessions() {
   }
 
   function disposeSessionPersistence() {
-    if (saveTimer) clearTimeout(saveTimer)
+    if (saveTimer) saveSessions(true)
   }
 
   return {

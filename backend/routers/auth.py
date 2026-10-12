@@ -22,6 +22,7 @@ from models.topic import Topic
 from models.node import Node
 from models.email_code import EmailCode
 from models.progress import ChatMessage, LearningRecord
+from models.chat_session_title import ChatSessionTitle
 
 CODE_TTL_MINUTES = 10
 EMAIL_RE = re.compile(r"^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$")
@@ -486,6 +487,9 @@ def delete_account(
     # 显式删除 ChatMessage / LearningRecord / EmailCode：
     # 这些模型未在 User 侧声明 cascade，不能依赖 ORM 自动级联
     db.query(ChatMessage).filter(ChatMessage.user_id == user_id).delete(synchronize_session=False)
+    db.query(ChatSessionTitle).filter(ChatSessionTitle.user_id == user_id).delete(
+        synchronize_session=False
+    )
     db.query(LearningRecord).filter(LearningRecord.user_id == user_id).delete(
         synchronize_session=False
     )
