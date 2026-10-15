@@ -1,6 +1,7 @@
 <template>
   <div
     v-if="
+      !pending &&
       web &&
       (web.status !== 'off' || web.sources.length) &&
       (showStatus || visibleWarnings.length || web.sources.length)
@@ -8,24 +9,14 @@
     class="message-sources"
   >
     <p v-if="showStatus" class="web-status" role="status">
-      {{
-        !pending && ['deciding', 'searching'].includes(web.status)
-          ? '联网过程已中断'
-          : webStatusText[web.status]
-      }}
+      {{ webStatusText[web.status] }}
     </p>
     <p v-for="warning in visibleWarnings" :key="warning.code" class="web-warning" role="status">
       {{ warning.message }}
     </p>
     <details v-if="web.sources.length" class="sources-details">
       <summary>
-        {{
-          pending
-            ? '正在整理来源'
-            : citedCount
-              ? `引用 ${citedCount} 条来源`
-              : '本回答未直接引用来源'
-        }}
+        {{ citedCount ? `引用 ${citedCount} 条来源` : '本回答未直接引用来源' }}
         <span>
           ·
           {{ web.sources.every((source) => !source.kind || source.kind === 'web') ? '检索到 ' : ''
@@ -68,9 +59,7 @@
               [{{ web.sources.findIndex((item) => item.id === source.id) + 1 }}] {{ source.title }}
             </a>
             <span v-else>{{ source.title }}（链接不可用）</span>
-            <span class="source-label">{{
-              citedIds.has(source.id) ? '已引用' : pending ? '候选资料' : '仅检索'
-            }}</span>
+            <span class="source-label">{{ citedIds.has(source.id) ? '已引用' : '仅检索' }}</span>
           </div>
           <span v-if="'domain' in source" class="source-domain">{{ source.domain }}</span>
           <span v-if="'published_at' in source && source.published_at" class="source-domain">
@@ -106,16 +95,7 @@ import { safeWebUrl, webStatusText } from '../../utils/webSearch'
 
 const activeSource = ref<FileSource | null>(null)
 const props = defineProps<{ web?: WebSnapshot; pending?: boolean }>()
-const showStatus = computed(() => {
-  const web = props.web
-  return (
-    web &&
-    !['off', 'skipped'].includes(web.status) &&
-    web.status !== 'failed' &&
-    (!web.sources.length || web.status !== 'ready') &&
-    (!web.sources.length || web.sources.some((source) => !source.kind || source.kind === 'web'))
-  )
-})
+const showStatus = computed(() => props.web?.status === 'unavailable')
 const visibleWarnings = computed(
   () =>
     props.web?.warnings?.filter(

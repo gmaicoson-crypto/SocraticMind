@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   extractTopic,
+  countCompletedChatTurns,
   formatMessageTime,
   formatSessionTime,
   isNewTopicIntent,
@@ -57,6 +58,33 @@ describe('session history dates and node references', () => {
 
 describe('chat message presentation', () => {
   const today = new Date(2026, 8, 29, 17, 20)
+
+  it('counts completed question and answer rounds, excluding welcomes, overviews and failed replies', () => {
+    const user: Message = { role: 'user', text: '问题', time: '' }
+    const reply: Message = { role: 'ai', text: '回答', time: '' }
+    const messages: Message[] = [
+      { ...reply, text: '欢迎' },
+      user,
+      reply,
+      { ...user, messageType: 'agent_answer' },
+      { ...reply, messageType: 'agent_result' },
+      { ...reply, chatRequest: { nodeKey: 'node', input: '', kind: 'node_overview' } },
+      user,
+      { ...reply, metadata: { status: 'interrupted' } },
+      user,
+      { ...reply, metadata: { status: 'failed' } },
+      user,
+      { ...reply, metadata: { status: 'generating' } },
+      user,
+      { ...reply, text: '' },
+      user,
+      { ...reply, text: '', choices: [{ label: 'A', text: '选项' }] },
+      user,
+    ]
+    expect(countCompletedChatTurns(messages)).toBe(2)
+    expect(countCompletedChatTurns([...messages, reply])).toBe(3)
+    expect(countCompletedChatTurns([user, { ...reply, text: '重新生成的回答' }])).toBe(1)
+  })
 
   it('shows only 24-hour time today, month/day this year, and full date in other years', () => {
     expect(formatMessageTime(new Date(2026, 8, 29, 9, 5).toISOString(), today)).toBe('09:05')

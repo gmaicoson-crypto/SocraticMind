@@ -27,6 +27,7 @@ class User(Base):
 
     # cascade="all, delete" 确保注销账号时，关联的主题和节点一并级联删除
     topics = relationship("Topic", back_populates="user", cascade="all, delete-orphan")
+    review_tasks = relationship("ReviewTask", back_populates="user", cascade="all, delete-orphan")
     agent_runs = relationship("AgentRun", back_populates="user", cascade="all, delete-orphan")
     memories = relationship("LearnerMemory", back_populates="user", cascade="all, delete-orphan")
     study_plans = relationship("StudyPlan", back_populates="user", cascade="all, delete-orphan")

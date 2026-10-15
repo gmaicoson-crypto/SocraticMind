@@ -36,7 +36,16 @@ vi.mock('../../api/progress', () => ({
 const wrappers: ReturnType<typeof shallowMount>[] = []
 async function mountDialogue(mode: ChatMode) {
   const wrapper = shallowMount(SocraticDialogue, {
-    global: { stubs: { MessageList: false, DialogueInputBar: false } },
+    global: {
+      stubs: {
+        MessageList: false,
+        DialogueInputBar: false,
+        ConfirmDialog: false,
+        BaseModal: false,
+        BaseButton: false,
+        teleport: true,
+      },
+    },
   })
   wrappers.push(wrapper)
   if (mode === 'normal') wrapper.findComponent(DialogueInputBar).vm.$emit('update:chatMode', mode)
@@ -81,6 +90,7 @@ describe('AI titles in learning and normal conversations', () => {
       }))
       const wrapper = await mountDialogue(mode)
       expect(wrapper.get('.dlg-title').text()).toBe('新对话')
+      expect(wrapper.get('[aria-label="编辑对话名称"]').attributes('disabled')).toBeDefined()
       expect(requestSessionTitle).not.toHaveBeenCalled()
       const input = wrapper.findComponent(DialogueInputBar)
       input.vm.$emit('update:input', '为什么递归需要终止条件？')
@@ -129,6 +139,127 @@ describe('AI titles in learning and normal conversations', () => {
     expect(wrapper.get('.dlg-title').text()).toBe('手动笔记')
     window.dispatchEvent(new Event('pagehide'))
     expect(JSON.parse(localStorage.getItem('sm_socratic_sessions')!)[0]).not.toHaveProperty('name')
+  })
+
+  it.each(['socratic', 'normal'] as const)(
+    'renames the %s session from the header and synchronizes history without changing its topic or node',
+    async (mode) => {
+      const session = createDefaultSession(mode)
+      session.messages.push({ role: 'user', text: 'Redis 和 MySQL 有什么区别？', time: '10:00' })
+      if (mode === 'socratic') {
+        session.topicId = 1
+        session.topicTitle = 'Redis'
+        session.nodeKey = 'redis-map'
+        const learning = useLearningStore()
+        learning.topics = [{ id: '1', title: 'Redis', emoji: '', nodes: 1, mastered: 0 }]
+        learning.activeTopicId = '1'
+        learning.nodes = [
+          {
+            id: 'redis-map',
+            label: '建立 Redis 学习地图',
+            sub: '',
+            x: 0,
+            y: 0,
+            state: 'available',
+          },
+        ]
+      }
+      localStorage.setItem(`sm_${mode}_sessions`, JSON.stringify([session]))
+      localStorage.setItem(`sm_${mode}_cur`, session.id)
+      vi.mocked(getSessionTitles).mockResolvedValue([
+        {
+          session_id: session.id,
+          title: 'Redis 与 MySQL 的区别',
+          status: 'ready',
+          retry_pending: false,
+        },
+      ])
+      vi.mocked(renameSessionTitle).mockResolvedValue({
+        session_id: session.id,
+        title: '我的 Redis 学习笔记',
+        status: 'manual',
+        retry_pending: false,
+      })
+      const wrapper = await mountDialogue(mode)
+      expect(wrapper.findComponent({ name: 'TopicNameBar' }).exists()).toBe(false)
+      const editButton = wrapper.get('[aria-label="编辑对话名称"]')
+      expect(editButton.attributes('disabled')).toBeUndefined()
+      await editButton.trigger('click')
+      const dialog = wrapper.get('[role="alertdialog"]')
+      const nameInput = dialog.get('input')
+      expect((nameInput.element as HTMLInputElement).value).toBe('Redis 与 MySQL 的区别')
+      expect(wrapper.findComponent(DialogueHistoryPanel).props('editingSessionId')).toBeNull()
+      await nameInput.setValue('  我的 Redis 学习笔记  ')
+      await nameInput.trigger('keydown.enter')
+      await flushPromises()
+      expect(renameSessionTitle).toHaveBeenCalledWith(session.id, '我的 Redis 学习笔记')
+      expect(wrapper.find('[role="alertdialog"]').exists()).toBe(false)
+      expect(wrapper.get(mode === 'socratic' ? '.dlg-sub' : '.dlg-title').text()).toBe(
+        '我的 Redis 学习笔记',
+      )
+      const renamed = wrapper.findComponent(DialogueHistoryPanel).props('sessions')[0]
+      expect(renamed.name).toBe('我的 Redis 学习笔记')
+      if (mode === 'socratic') {
+        expect(wrapper.get('.dlg-title').text()).toBe('建立 Redis 学习地图')
+        expect(renamed.topicTitle).toBe('Redis')
+        expect(useLearningStore().topics[0].title).toBe('Redis')
+      }
+    },
+  )
+
+  it('preserves an unsaved header name on failure and prevents blank or duplicate rename requests', async () => {
+    const session = createDefaultSession('normal')
+    session.messages.push({ role: 'user', text: '问题', time: '10:00' })
+    localStorage.setItem('sm_normal_sessions', JSON.stringify([session]))
+    vi.mocked(getSessionTitles).mockResolvedValue([
+      { session_id: session.id, title: '原名称', status: 'ready', retry_pending: false },
+    ])
+    const wrapper = await mountDialogue('normal')
+    await wrapper.get('[aria-label="编辑对话名称"]').trigger('click')
+    const input = wrapper.get('.session-name-field input')
+    await input.setValue('   ')
+    await input.trigger('keydown.enter')
+    expect(wrapper.get('.session-name-error').text()).toBe('请输入对话名称')
+    expect(renameSessionTitle).not.toHaveBeenCalled()
+    await input.setValue('新的名称')
+    await input.trigger('keydown.enter', { isComposing: true })
+    expect(renameSessionTitle).not.toHaveBeenCalled()
+    vi.mocked(renameSessionTitle).mockRejectedValueOnce(new Error('保存失败，请重试'))
+    await input.trigger('keydown.enter')
+    await flushPromises()
+    expect(wrapper.get('.session-name-error').text()).toBe('保存失败，请重试')
+    expect((input.element as HTMLInputElement).value).toBe('新的名称')
+    expect(wrapper.get('.dlg-title').text()).toBe('原名称')
+    const cancel = wrapper.get('[role="alertdialog"]').findAll('button')[0]
+    await cancel.trigger('click')
+    expect(wrapper.find('[role="alertdialog"]').exists()).toBe(false)
+    expect(wrapper.get('.dlg-title').text()).toBe('原名称')
+
+    await wrapper.get('[aria-label="编辑对话名称"]').trigger('click')
+    const retryInput = wrapper.get('.session-name-field input')
+    expect((retryInput.element as HTMLInputElement).value).toBe('原名称')
+    await retryInput.setValue('重试后的名称')
+    let resolveRename!: (value: Awaited<ReturnType<typeof renameSessionTitle>>) => void
+    vi.mocked(renameSessionTitle).mockImplementationOnce(
+      () => new Promise((resolve) => (resolveRename = resolve)),
+    )
+    await retryInput.trigger('keydown.enter')
+    await retryInput.trigger('keydown.enter')
+    await flushPromises()
+    expect(renameSessionTitle).toHaveBeenCalledTimes(2)
+    expect(wrapper.get('.session-name-field input').attributes('disabled')).toBeDefined()
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+    await flushPromises()
+    expect(wrapper.find('[role="alertdialog"]').exists()).toBe(true)
+    resolveRename({
+      session_id: session.id,
+      title: '重试后的名称',
+      status: 'manual',
+      retry_pending: false,
+    })
+    await flushPromises()
+    expect(wrapper.get('.dlg-title').text()).toBe('重试后的名称')
+    expect(wrapper.find('[role="alertdialog"]').exists()).toBe(false)
   })
 
   it('shows the session node above the AI summary and restores each node when switching history', async () => {

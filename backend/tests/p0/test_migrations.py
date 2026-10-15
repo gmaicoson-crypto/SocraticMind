@@ -44,10 +44,14 @@ def test_empty_database_upgrades_to_head(tmp_path):
         "chat_turns",
         "chat_cancellations",
         "web_search_quotas",
+        "review_tasks",
+        "review_attempts",
     }.issubset(set(inspector.get_table_names()))
-    assert {"estimated_minutes", "mastery_source", "mastery_confidence"}.issubset(
-        {column["name"] for column in inspector.get_columns("nodes")}
-    )
+    assert {
+        "estimated_minutes",
+        "mastery_source",
+        "mastery_confidence",
+    }.issubset({column["name"] for column in inspector.get_columns("nodes")})
     assert {"message_type", "metadata_json"}.issubset(
         {column["name"] for column in inspector.get_columns("chat_messages")}
     )
@@ -56,6 +60,9 @@ def test_empty_database_upgrades_to_head(tmp_path):
     }
     assert "config_id" not in {
         column["name"] for column in inspector.get_columns("user_llm_profiles")
+    }
+    assert "ix_review_user_status_due" in {
+        index["name"] for index in inspector.get_indexes("review_tasks")
     }
     assert {"summary_json", "summary_source_version", "generation_lease_token"}.issubset(
         {column["name"] for column in inspector.get_columns("chat_sessions")}
@@ -246,6 +253,8 @@ def test_p0_downgrade_keeps_legacy_tables(tmp_path):
     tables = set(inspector.get_table_names())
     assert {"users", "topics", "nodes", "chat_messages"}.issubset(tables)
     assert "agent_runs" not in tables
+    assert "review_tasks" not in tables
+    assert "review_attempts" not in tables
     assert "study_plans" not in tables
     assert "mastery_events" not in tables
     assert "chat_sessions" not in tables

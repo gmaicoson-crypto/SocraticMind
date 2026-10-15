@@ -17,6 +17,28 @@ export function hasMessageContent(
   return Boolean(message.text.trim() || message.choices?.length || message.attachments?.length)
 }
 
+export function countCompletedChatTurns(messages: Message[]): number {
+  let turns = 0
+  let awaitingReply = false
+  for (const message of messages) {
+    if (message.messageType && message.messageType !== 'chat') continue
+    if (message.role === 'user') {
+      awaitingReply = hasMessageContent(message)
+      continue
+    }
+    if (
+      awaitingReply &&
+      (!message.chatRequest || message.chatRequest.kind === 'qa') &&
+      hasMessageContent(message) &&
+      !['generating', 'interrupted', 'failed'].includes(String(message.metadata?.status ?? ''))
+    ) {
+      turns += 1
+    }
+    awaitingReply = false
+  }
+  return turns
+}
+
 export function now(): string {
   return new Date().toISOString()
 }

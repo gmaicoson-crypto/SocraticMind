@@ -8,6 +8,7 @@ from pydantic import BaseModel, ValidationError
 
 from ai.util import extract_json_from_markdown
 from core.ai_client import get_ai_client, resolve_llm_profile
+from core.config import settings
 from core.context_budget import completion_options, ensure_fits
 
 
@@ -107,7 +108,7 @@ def _call(
     profile_id: str,
     messages: list[dict],
     temperature: float,
-    timeout: float = 60,
+    timeout: float,
     output_tokens: int | None = None,
 ):
     ensure_fits(messages, profile_id)
@@ -141,7 +142,7 @@ def generate_structured(
     output_tokens: int | None = None,
     max_repairs: int = 1,
 ) -> StructuredResult[SchemaT]:
-    """Optional timeout covers all attempts; omitted preserves existing 60s calls."""
+    """All attempts share a deadline; callers may override the configured budget."""
     if timeout is not None and timeout <= 0:
         raise ValueError("timeout 必须大于零")
     if output_tokens is not None and output_tokens <= 0:
@@ -153,9 +154,20 @@ def generate_structured(
     started = perf_counter()
     total_tokens = 0
     usage_known = True
-    current_messages = messages
+    base_messages = [
+        {
+            "role": "system",
+            "content": (
+                "只返回符合以下 JSON Schema 的 JSON 对象，不要解释或添加额外字段："
+                + json.dumps(schema.model_json_schema(), ensure_ascii=False, separators=(",", ":"))
+            ),
+        },
+        *messages,
+    ]
+    current_messages = base_messages
+    budget = settings.structured_ai_timeout_seconds if timeout is None else timeout
     for attempt in range(max_repairs + 1):
-        remaining = 60 if timeout is None else timeout - (perf_counter() - started)
+        remaining = budget - (perf_counter() - started)
         try:
             if remaining <= 0:
                 raise TimeoutError()
@@ -198,14 +210,13 @@ def generate_structured(
                     "STRUCTURED_OUTPUT_INVALID", "模型结构化输出校验失败", retryable=True
                 ) from error
             current_messages = [
-                *messages,
+                *base_messages,
                 {"role": "assistant", "content": content},
                 {
                     "role": "user",
                     "content": (
-                        "修复上一条回复的 JSON 格式和字段，使其严格符合以下 JSON Schema。"
-                        "只返回 JSON，不要解释："
-                        + json.dumps(schema.model_json_schema(), ensure_ascii=False)
+                        "修复上一条回复的 JSON 格式和字段，使其严格符合系统消息中的 JSON Schema。"
+                        "只返回 JSON，不要解释。"
                     ),
                 },
             ]

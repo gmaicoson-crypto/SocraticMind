@@ -1,5 +1,5 @@
 <template>
-  <div class="message-list-shell">
+  <div class="message-list-shell" :style="{ '--message-overlay-height': `${overlayHeight}px` }">
     <Transition name="scroll-btn">
       <button
         v-if="showScrollBtn"
@@ -48,6 +48,7 @@
           avatarUrl,
           aiAvatarUrl,
           isThinking,
+          chatDisabled,
           visibleMessageIndexes[i] === messages.length - 1,
           visibleMessageIndexes[i] === retryableIndex,
           highlightedIndex === visibleMessageIndexes[i],
@@ -58,6 +59,7 @@
         :class="{ 'quote-target': highlightedIndex === visibleMessageIndexes[i] }"
         :is-last="visibleMessageIndexes[i] === messages.length - 1"
         :is-thinking="isThinking"
+        :chat-disabled="chatDisabled"
         :can-retry="visibleMessageIndexes[i] === retryableIndex"
         :can-jump-to-quote="findQuoteIndex(msg) !== -1"
         :avatar-url="avatarUrl"
@@ -116,12 +118,15 @@
         </div>
       </div>
     </div>
+    <div v-if="$slots.overlay" ref="overlayRef" class="message-overlay">
+      <slot name="overlay" />
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 // MessageList 组件，封装局部界面和交互逻辑。
-import { ref, computed, nextTick, onBeforeUnmount } from 'vue'
+import { ref, computed, nextTick, onBeforeUnmount, watch } from 'vue'
 import type { Message } from '../../types'
 import type { WebSnapshot } from '../../types/webSearch'
 import MessageSources from './MessageSources.vue'
@@ -143,9 +148,11 @@ const props = defineProps<{
   messages: Message[]
   streamingText: string
   streamingMessageId?: number
+  replacingMessageIndex?: number
   streamingWeb?: WebSnapshot
   streamingChoices?: { label: string; text: string }[] | null
   isThinking: boolean
+  chatDisabled?: boolean
   retryUserIndex?: number
   avatarUrl: string | null
   aiAvatarUrl: string
@@ -171,12 +178,12 @@ const hasStreamingContent = computed(() =>
 const visibleMessageIndexes = computed(() =>
   props.messages.flatMap((message, index) => {
     if (message.messageType && message.messageType !== 'chat') return []
+    if (message.role === 'ai' && !hasMessageContent(message)) return []
     if (
       props.isThinking &&
       message.role === 'ai' &&
-      ((message.db_id != null && message.db_id === props.streamingMessageId) ||
-        (!hasMessageContent(message) &&
-          (message.metadata?.status === 'generating' || index === props.messages.length - 1)))
+      (index === props.replacingMessageIndex ||
+        (message.db_id != null && message.db_id === props.streamingMessageId))
     )
       return []
     if (props.hideWelcome && message.role === 'ai' && message.text === SOCRATIC_WELCOME_TEXT) {
@@ -189,6 +196,7 @@ const visibleMessages = computed(() =>
   visibleMessageIndexes.value.map((index) => props.messages[index]),
 )
 const retryableIndex = computed(() => {
+  if (props.chatDisabled) return -1
   if (props.retryUserIndex != null) return props.retryUserIndex
   const aiIndex = retryableAiIndex(props.messages)
   const reply = props.messages[aiIndex]
@@ -227,6 +235,9 @@ function findQuoteIndex(message: Message): number {
 }
 
 const scrollRef = ref<HTMLElement | null>(null)
+const overlayRef = ref<HTMLElement | null>(null)
+const overlayHeight = ref(0)
+let overlayResizeObserver: ResizeObserver | null = null
 const showScrollBtn = ref(false)
 const bottomThreshold = 4
 let followingLatest = true
@@ -282,7 +293,28 @@ function scrollToBottom(force = false) {
   })
 }
 
+watch(
+  overlayRef,
+  (element) => {
+    overlayResizeObserver?.disconnect()
+    overlayResizeObserver = null
+    const measureOverlay = () => {
+      const height = element?.getBoundingClientRect().height ?? 0
+      if (height === overlayHeight.value) return
+      overlayHeight.value = height
+      scrollToBottom()
+    }
+    measureOverlay()
+    if (element && typeof ResizeObserver !== 'undefined') {
+      overlayResizeObserver = new ResizeObserver(measureOverlay)
+      overlayResizeObserver.observe(element)
+    }
+  },
+  { flush: 'post' },
+)
+
 onBeforeUnmount(() => {
+  overlayResizeObserver?.disconnect()
   if (scrollFrame !== null) cancelAnimationFrame(scrollFrame)
   if (highlightTimer) clearTimeout(highlightTimer)
 })
@@ -293,6 +325,7 @@ defineExpose({ scrollToBottom })
 <style scoped>
 .message-list-shell {
   position: relative;
+  isolation: isolate;
   display: flex;
   flex: 1;
   min-height: 0;
@@ -305,8 +338,18 @@ defineExpose({ scrollToBottom })
   flex-direction: column;
   gap: 14px;
   padding: 16px 20px;
+  padding-bottom: calc(16px + var(--message-overlay-height, 0px));
+  scroll-padding-bottom: calc(16px + var(--message-overlay-height, 0px));
   overflow-y: auto;
   background: var(--bg);
+}
+
+.message-overlay {
+  position: absolute;
+  inset: auto 0 0;
+  z-index: 2;
+  background: transparent;
+  pointer-events: none;
 }
 
 .dot {
@@ -340,7 +383,7 @@ defineExpose({ scrollToBottom })
 .scroll-to-bottom {
   position: absolute;
   right: 18px;
-  bottom: 12px;
+  bottom: calc(12px + var(--message-overlay-height, 0px));
   z-index: 10;
   display: flex;
   width: 34px;

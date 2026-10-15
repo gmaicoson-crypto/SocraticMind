@@ -34,9 +34,6 @@
           :web="messageWeb(message.metadata)"
         />
       </div>
-      <p v-else-if="message.role === 'ai' && !hasContent" class="empty-reply" role="status">
-        本次未收到有效回复。
-      </p>
       <MessageSources
         v-if="message.role === 'ai' && hasContent"
         :web="messageWeb(message.metadata)"
@@ -67,7 +64,7 @@
           :key="choice.label"
           class="choice-btn"
           :class="{ selected: message.selected_choice === choice.label }"
-          :disabled="!isLast || isThinking"
+          :disabled="!isLast || isThinking || chatDisabled"
           @click="emit('select-choice', `${choice.label}. ${choice.text}`)"
         >
           <span class="choice-label">{{ choice.label }}</span>
@@ -132,7 +129,7 @@
             </svg>
           </button>
           <button
-            v-if="message.role === 'ai' && hasContent"
+            v-if="message.role === 'ai' && hasContent && !chatDisabled"
             class="action-btn"
             title="引用追问"
             @click="emit('quote')"
@@ -204,6 +201,7 @@ const props = defineProps<{
   index: number
   isLast: boolean
   isThinking: boolean
+  chatDisabled?: boolean
   canRetry: boolean
   canJumpToQuote: boolean
   avatarUrl: string | null
@@ -241,11 +239,3 @@ onBeforeUnmount(() => {
   if (copyTimer) clearTimeout(copyTimer)
 })
 </script>
-
-<style scoped>
-.empty-reply {
-  margin: 8px 0 0;
-  color: var(--ink-3);
-  font-size: 12px;
-}
-</style>

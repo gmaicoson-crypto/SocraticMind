@@ -20,6 +20,7 @@ from .agent_run import AgentRun
 from .learner_memory import LearnerMemory
 from .study_plan import StudyPlan, StudyPlanItem
 from .assessment import AssessmentAttempt
+from .review import ReviewTask, ReviewAttempt
 from .mastery_event import MasteryEvent
 from .user_llm_profile import UserLLMProfile
 
@@ -31,6 +32,8 @@ __all__ = [
     "AttachmentWorkerSlot",
     "AgentRun",
     "AssessmentAttempt",
+    "ReviewTask",
+    "ReviewAttempt",
     "ArchivedChatActivity",
     "ArchivedMastery",
     "ChatMessage",

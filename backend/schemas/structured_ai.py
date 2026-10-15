@@ -71,8 +71,39 @@ class RubricCriterion(StrictModel):
     observable_standards: list[str] = Field(min_length=1, max_length=6)
 
 
+class ScoringRule(StrictModel):
+    score: int = Field(ge=0, le=100)
+    description: str = Field(min_length=1, max_length=500)
+
+
+class WeightedRubricCriterion(RubricCriterion):
+    criterion_id: str = Field(min_length=1, max_length=100)
+    max_score: int = Field(ge=2, le=100)
+    scoring_rules: list[ScoringRule] = Field(min_length=3, max_length=5)
+
+    @model_validator(mode="after")
+    def rules_cover_score_range(self):
+        points = {rule.score for rule in self.scoring_rules}
+        if (
+            len(points) != len(self.scoring_rules)
+            or min(points) != 0
+            or max(points) != self.max_score
+        ):
+            raise ValueError("scoring rules must have unique scores from zero to max_score")
+        return self
+
+
 class AssessmentQuestion(GeneratedQuestion):
-    rubric: list[RubricCriterion] = Field(min_length=1, max_length=6)
+    reference_answer: str = Field(min_length=1, max_length=4000)
+    rubric: list[WeightedRubricCriterion] = Field(min_length=1, max_length=6)
+
+    @model_validator(mode="after")
+    def rubric_totals_one_hundred(self):
+        if len({item.criterion_id for item in self.rubric}) != len(self.rubric):
+            raise ValueError("rubric criterion ids must be unique within a question")
+        if sum(item.max_score for item in self.rubric) != 100:
+            raise ValueError("rubric maximum scores must total 100")
+        return self
 
 
 class AssessmentQuestions(StrictModel):
@@ -85,24 +116,58 @@ class AssessmentQuestions(StrictModel):
         return self
 
 
-class QuestionScore(StrictModel):
+class QuestionFeedback(StrictModel):
     question_id: str = Field(min_length=1, max_length=100)
-    score: int = Field(ge=0, le=4)
+    rationale: str = Field(min_length=1, max_length=2000)
+
+
+class QuestionEvaluation(QuestionFeedback):
+    score: int = Field(ge=0, le=100)
+    mastery_analysis: str = Field(min_length=1, max_length=1500)
+    suggestions: list[str] = Field(min_length=1, max_length=4)
+
+
+class CriterionScore(StrictModel):
+    criterion_id: str = Field(min_length=1, max_length=100)
+    score: int = Field(ge=0, le=100)
     rationale: str = Field(min_length=1, max_length=1000)
+
+
+class QuestionScore(QuestionEvaluation):
+    criterion_scores: list[CriterionScore] = Field(min_length=1, max_length=6)
+
+    @model_validator(mode="after")
+    def criterion_scores_match_question(self):
+        if len({item.criterion_id for item in self.criterion_scores}) != len(self.criterion_scores):
+            raise ValueError("criterion score ids must be unique")
+        if sum(item.score for item in self.criterion_scores) != self.score:
+            raise ValueError("question score must equal the sum of criterion scores")
+        return self
+
+
+class RemediationStep(StrictModel):
+    title: str = Field(min_length=1, max_length=100)
+    action: str = Field(min_length=1, max_length=800)
+    checkpoint: str = Field(min_length=1, max_length=500)
 
 
 class AssessmentScore(StrictModel):
     scores: list[QuestionScore] = Field(min_length=3, max_length=3)
-    total_score: int = Field(ge=0, le=12)
-    evaluation_confidence: float = Field(ge=0, le=1)
-    critical_misconception: bool
+    total_score: int = Field(ge=0, le=100)
     evidence: str = Field(min_length=1, max_length=3000)
     weaknesses: list[str] = Field(default_factory=list, max_length=10)
+    remediation_route: list[RemediationStep] = Field(min_length=1, max_length=5)
 
     @model_validator(mode="after")
     def total_matches_question_scores(self):
         if len({score.question_id for score in self.scores}) != 3:
             raise ValueError("score question ids must be unique")
-        if self.total_score != sum(score.score for score in self.scores):
-            raise ValueError("total_score must equal the sum of question scores")
+        if self.total_score != round(sum(score.score for score in self.scores) / 3):
+            raise ValueError("total_score must equal the rounded average of question scores")
         return self
+
+
+class LegacyAssessmentScore(AssessmentScore):
+    """Finish already-started assessments without inventing retrospective scoring weights."""
+
+    scores: list[QuestionEvaluation] = Field(min_length=3, max_length=3)

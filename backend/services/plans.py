@@ -77,6 +77,8 @@ def serialize_plan(plan: StudyPlan) -> dict:
 
 
 def get_today_plan(db: Session, *, user_id: int, timezone_name: str | None) -> dict:
+    from services.reviews import due_reviews
+
     current_date, effective_timezone = today_in_timezone(timezone_name)
     rows = (
         db.query(StudyPlanItem, StudyPlan, Topic, Node)
@@ -133,6 +135,7 @@ def get_today_plan(db: Session, *, user_id: int, timezone_name: str | None) -> d
             "date": current_date,
             "effective_timezone": effective_timezone,
             "replan_suggested": bool(result["overdue"]),
+            "reviews": due_reviews(db, user_id=user_id, current_date=current_date),
         }
     )
     return result

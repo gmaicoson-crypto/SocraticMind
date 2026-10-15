@@ -13,6 +13,7 @@ import {
   deleteMessages,
   getAllMessages,
   getChatRequestState,
+  getSuggestions,
 } from '../../api/chat'
 
 import { webSnapshot } from '../../test/fixtures/webSearch'
@@ -25,7 +26,7 @@ vi.mock('../../api/chat', () => ({
   deleteChatSession: vi.fn(),
   deleteMessages: vi.fn(),
   getAllMessages: vi.fn().mockResolvedValue([]),
-  getSuggestions: vi.fn().mockResolvedValue([]),
+  getSuggestions: vi.fn(),
 }))
 vi.mock('../../api/attachments', () => ({
   getAttachmentCapabilities: vi.fn(),
@@ -75,6 +76,10 @@ describe('server managed conversation lifecycle', () => {
   beforeEach(() => {
     localStorage.clear()
     vi.clearAllMocks()
+    vi.mocked(getSuggestions).mockResolvedValue({
+      suggestions: Array.from({ length: 12 }, (_, index) => `推荐问题${index}`),
+      source: 'ai',
+    })
     vi.mocked(getAttachmentCapabilities).mockResolvedValue(attachmentCapabilities)
     setActivePinia(createPinia())
     Object.defineProperty(window, 'matchMedia', {
@@ -354,14 +359,16 @@ describe('server managed conversation lifecycle', () => {
     await flushPromises()
     expect(getChatRequestState).toHaveBeenCalledWith(first[0].requestId)
     expect(chatStream).toHaveBeenCalledTimes(1)
-    expect(wrapper.get('.dlg-sub').text()).toContain('1/3')
+    expect(wrapper.get('.dlg-sub').text()).toBe('正在思考…')
+    expect(wrapper.text()).not.toContain('正在整理资料')
+    expect(wrapper.text()).not.toContain('1/3')
     expect(input.props('isThinking')).toBe(true)
     expect(wrapper.get('.ui-toast').text()).toBe('断开')
     expect(wrapper.find('button[aria-label="重试"]').exists()).toBe(false)
     wrapper.unmount()
   })
 
-  it('keeps the original answer until regeneration succeeds and reuses its question', async () => {
+  it('hides the original answer immediately throughout regeneration and reuses its question', async () => {
     const { wrapper } = await mountDialogue()
     const list = wrapper.findComponent(MessageList)
     list.vm.$emit('retry', 2)
@@ -371,8 +378,18 @@ describe('server managed conversation lifecycle', () => {
     expect(call[0].requestId).toMatch(/^[\da-f-]{36}$/)
     expect(list.props('messages').filter((message) => message.role === 'user')).toHaveLength(1)
     expect(list.props('messages')[2].text).toBe('原回答')
+    expect(list.text()).not.toContain('原回答')
+    expect(list.findAll('.thinking-bubble')).toHaveLength(1)
     call[1].onMsgIds?.(10, 12)
+    await flushPromises()
+    expect(list.text()).not.toContain('原回答')
     call[1].onChunk('新回答')
+    await flushPromises()
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+    await flushPromises()
+    expect(list.text()).not.toContain('原回答')
+    expect(list.text()).toContain('新回答')
+    expect(list.findAll('.msg-row.ai')).toHaveLength(2) // Welcome and the new stream.
     call[1].onDone()
     await flushPromises()
     expect(list.props('messages').map((message) => message.text)).toContain('新回答')
@@ -380,6 +397,48 @@ describe('server managed conversation lifecycle', () => {
     expect(list.props('messages')[2].db_id).toBe(12)
     wrapper.unmount()
     expect(cancelChatStream).not.toHaveBeenCalled()
+  })
+
+  it('updates recommendations after three more completed rounds and skips regeneration', async () => {
+    const { wrapper } = await mountDialogue()
+    const input = wrapper.findComponent(DialogueInputBar)
+    const list = wrapper.findComponent(MessageList)
+    expect(getSuggestions).toHaveBeenCalledTimes(1)
+    const originalChips = [...input.props('chips')]
+
+    for (const turn of [2, 3]) {
+      input.vm.$emit('update:input', `第${turn}问`)
+      input.vm.$emit('send')
+      await flushPromises()
+      expect(input.props('chips')).toEqual(originalChips)
+      currentCall()[1].onMsgIds?.(turn * 10, turn * 10 + 1)
+      currentCall()[1].onChunk(`第${turn}答`)
+      currentCall()[1].onDone()
+      await flushPromises()
+      expect(getSuggestions).toHaveBeenCalledTimes(1)
+      expect(input.props('chips')).toEqual(originalChips)
+    }
+
+    list.vm.$emit('retry', list.props('messages').length - 1)
+    await flushPromises()
+    currentCall()[1].onMsgIds?.(30, 32)
+    currentCall()[1].onChunk('重新生成的第三答')
+    currentCall()[1].onDone()
+    await flushPromises()
+    expect(getSuggestions).toHaveBeenCalledTimes(1)
+
+    const nextChips = Array.from({ length: 12 }, (_, index) => `更新后的问题${index}`)
+    vi.mocked(getSuggestions).mockResolvedValue({ suggestions: nextChips, source: 'ai' })
+    input.vm.$emit('update:input', '第四问')
+    input.vm.$emit('send')
+    await flushPromises()
+    expect(getSuggestions).toHaveBeenCalledTimes(1)
+    currentCall()[1].onChunk('第四答')
+    currentCall()[1].onDone()
+    await flushPromises()
+    expect(getSuggestions).toHaveBeenCalledTimes(2)
+    expect(input.props('chips')).toEqual(nextChips)
+    wrapper.unmount()
   })
 
   it('preserves the original answer after regeneration fails and retries the failed generation', async () => {
@@ -391,6 +450,7 @@ describe('server managed conversation lifecycle', () => {
     first[1].onError(new Error('上下文过长'))
     await flushPromises()
     expect(wrapper.findComponent(MessageList).props('messages')[2].text).toBe('原回答')
+    expect(wrapper.findComponent(MessageList).text()).toContain('原回答')
     expect(wrapper.get('.ui-toast').text()).toContain('上下文过长')
     await wrapper.get('button[aria-label="重试"]').trigger('click')
     const retry = currentCall()
@@ -734,7 +794,7 @@ describe('server managed conversation lifecycle', () => {
     wrapper.unmount()
   })
 
-  it('shows context preparation only while the current request needs it', async () => {
+  it('keeps a generic waiting hint without exposing internal preparation or search stages', async () => {
     const { wrapper } = await mountDialogue()
     const input = wrapper.findComponent(DialogueInputBar)
     input.vm.$emit('update:input', '下一问')
@@ -744,10 +804,27 @@ describe('server managed conversation lifecycle', () => {
     expect(wrapper.get('.dlg-sub').text()).toBe('正在思考…')
     call[1].onContextStatus?.('compacting')
     await flushPromises()
-    expect(wrapper.get('.dlg-sub').text()).toBe('正在整理较早的对话')
+    expect(wrapper.get('.dlg-sub').text()).toBe('正在思考…')
+    expect(wrapper.text()).not.toContain('正在整理较早的对话')
     call[1].onContextStatus?.('ready')
     await flushPromises()
     expect(wrapper.get('.dlg-sub').text()).toBe('正在思考…')
+    call[1].onMsgIds?.(13, 14)
+    for (const status of ['deciding', 'searching'] as const) {
+      call[1].onWebEvent?.({
+        type: 'web_status',
+        request_id: call[0].requestId,
+        ai_message_id: 14,
+        status,
+        web: webSnapshot({ status }),
+      })
+      await flushPromises()
+      expect(wrapper.get('.dlg-sub').text()).toBe('正在思考…')
+      expect(wrapper.find('.thinking-bubble').exists()).toBe(true)
+      expect(wrapper.find('.message-sources').exists()).toBe(false)
+      expect(wrapper.text()).not.toContain('正在判断是否需要联网')
+      expect(wrapper.text()).not.toContain('正在搜索资料')
+    }
     call[1].onContextStatus?.('compacting')
     call[1].onChunk('回答')
     await flushPromises()
@@ -968,7 +1045,7 @@ describe('server managed conversation lifecycle', () => {
     wrapper.unmount()
   })
 
-  it('shows search unavailability on the message only when reported by the backend', async () => {
+  it('shows search unavailability with the finished answer when reported by the backend', async () => {
     const { wrapper } = await mountDialogue()
     expect(wrapper.text()).not.toContain('联网暂不可用')
     const input = wrapper.findComponent(DialogueInputBar)
@@ -985,10 +1062,14 @@ describe('server managed conversation lifecycle', () => {
       warning: { code: 'WEB_UNAVAILABLE', message: '当前无法核实最新资料。', retryable: true },
     })
     await flushPromises()
+    expect(wrapper.findComponent(MessageList).text()).not.toContain('联网暂不可用')
+    expect(wrapper.findComponent(MessageList).text()).not.toContain('当前无法核实最新资料')
+    call[1].onChunk('目前无法核实最新情况。')
+    call[1].onDone()
+    await flushPromises()
     expect(wrapper.findComponent(MessageList).text()).toContain('联网暂不可用')
     expect(wrapper.findComponent(MessageList).text()).toContain('当前无法核实最新资料')
     expect(input.text()).not.toContain('联网暂不可用')
-    call[1].onError(new Error('停止'))
     wrapper.unmount()
   })
 })

@@ -6,13 +6,13 @@
       :sessions="currentSessions"
       :fallback-avatar-url="chatMode === 'normal' ? defaultNormalAiAvatar : defaultAiAvatar"
       :current-session-id="currentSessionId"
-      :editing-session-id="editingSessionId"
+      :editing-session-id="editingSessionInHeader ? null : editingSessionId"
       :editing-name="editingName"
       @close="showHistory = false"
       @switch="switchSession"
       @new-session="newSession"
       @start-edit="startEdit"
-      @cancel-edit="editingSessionId = null"
+      @cancel-edit="cancelSessionNameEdit"
       @save-name="saveSessionName"
       @delete="deleteSession"
       @update:editing-name="editingName = $event"
@@ -32,8 +32,21 @@
           <span v-if="isThinking" class="thinking-dot" />
         </button>
         <div class="dlg-heading">
-          <div class="dlg-title" :title="currentSessionTitle">
-            {{ currentSessionTitle }}
+          <div class="dlg-title-row">
+            <div class="dlg-title" :title="currentSessionTitle">
+              {{ currentSessionTitle }}
+            </div>
+            <button
+              ref="sessionNameButtonRef"
+              type="button"
+              class="session-name-edit"
+              :title="canRenameCurrentSession ? '编辑对话名称' : '发送消息后可编辑对话名称'"
+              aria-label="编辑对话名称"
+              :disabled="!canRenameCurrentSession || savingSessionName"
+              @click="currentSession && startEdit(currentSession, true)"
+            >
+              <Pencil :size="13" aria-hidden="true" />
+            </button>
           </div>
           <div
             class="dlg-sub"
@@ -48,7 +61,12 @@
         </div>
       </div>
       <div class="dlg-actions">
-        <button class="hdr-btn" title="对话历史" @click="showHistory = !showHistory">
+        <button
+          class="hdr-btn"
+          title="对话历史"
+          :disabled="assessmentActive"
+          @click="showHistory = !showHistory"
+        >
           <svg
             width="13"
             height="13"
@@ -62,7 +80,7 @@
             <path d="M3 4v4h4" />
           </svg>
         </button>
-        <button class="hdr-btn" title="新建对话" @click="newSession">
+        <button class="hdr-btn" title="新建对话" :disabled="assessmentActive" @click="newSession">
           <svg
             width="13"
             height="13"
@@ -78,27 +96,18 @@
       </div>
     </div>
 
-    <TopicNameBar
-      v-if="chatMode === 'socratic' && currentSession?.topicId"
-      :topic-title="currentSession.topicTitle ?? ''"
-      :editing="editingTopicName"
-      :editing-value="editingTopicInput"
-      @start-edit="startTopicEdit"
-      @save="saveTopicName"
-      @cancel="editingTopicName = false"
-      @update:editing-value="editingTopicInput = $event"
-    />
-
     <MessageList
       ref="messageListRef"
       :messages="messages"
       :hide-welcome="hideSocraticWelcome"
       :streaming-text="streamingText"
       :streaming-message-id="activeStreamMessageIds?.ai"
+      :replacing-message-index="replacingMessageIndex"
       :streaming-web="streamingWeb"
       :streaming-choices="streamingChoices"
       :is-thinking="isThinking"
       :retry-user-index="retryUserIndex"
+      :chat-disabled="assessmentActive"
       :avatar-url="store.userInfo?.avatar_url ?? null"
       :ai-avatar-url="aiAvatarUrl"
       @delete="deleteMessage"
@@ -119,9 +128,11 @@
           @cancel="cancelOnboardingDraft"
         />
         <AgentStepMessage
-          v-else-if="chatMode === 'socratic' && agentStore.run?.step && activeAgentRun"
+          v-else-if="
+            chatMode === 'socratic' && agentStore.run?.step && activeAgentRun && !assessmentActive
+          "
           :step="agentStore.run.step"
-          :kind="agentStore.run.type === 'assessment' ? 'assessment' : 'diagnostic'"
+          kind="diagnostic"
           :busy="agentStore.submitting"
           @answer="submitChoiceAnswer"
           @cancel="cancelAgentFlow"
@@ -138,16 +149,10 @@
           @confirm="confirmPlan"
           @cancel="cancelAgentFlow"
         />
-        <AssessmentResult
-          v-else-if="chatMode === 'socratic' && assessmentResult"
-          :result="assessmentResult"
-          :busy="agentStore.submitting"
-          @continue="continueLearning"
-          @retry="startAssessment"
-          @revert="requestMasteryAction('revert')"
-        />
         <div
-          v-else-if="chatMode === 'socratic' && agentStore.run?.status === 'failed'"
+          v-else-if="
+            chatMode === 'socratic' && agentStore.run?.status === 'failed' && !assessmentActive
+          "
           class="agent-error"
           :class="{ 'is-retrying': agentStore.retrying }"
           role="status"
@@ -175,24 +180,61 @@
           </div>
         </div>
       </template>
+      <template #overlay>
+        <div v-if="assessmentActive" class="assessment-overlay">
+          <AgentStepMessage
+            v-if="assessmentCanAnswer && agentStore.run?.step"
+            :step="agentStore.run.step"
+            kind="assessment"
+            :busy="agentStore.submitting"
+            :error="agentStore.error?.message"
+            @answer="submitChoiceAnswer"
+            @cancel="cancelAgentFlow"
+          />
+          <div
+            v-else
+            class="agent-error"
+            :class="{ 'is-retrying': startingAssessment || agentStore.retrying }"
+            role="status"
+            aria-live="polite"
+          >
+            <strong>{{
+              startingAssessment
+                ? '评估中，请稍候…'
+                : (agentStore.error?.message ?? '评估尚未完成，请重试或放弃评估。')
+            }}</strong>
+            <div>
+              <button
+                v-if="agentStore.canRetry"
+                :disabled="agentStore.submitting"
+                @click="retryAgentFlow"
+              >
+                重试
+              </button>
+              <button :disabled="agentStore.submitting" @click="cancelAgentFlow">放弃评估</button>
+            </div>
+          </div>
+        </div>
+        <NodeMasteryControls
+          v-else-if="chatMode === 'socratic' && store.activeNode && !draftTopic && !activeAgentRun"
+          :node="store.activeNode"
+          :busy="agentStore.submitting"
+          :error="agentStore.error?.message"
+          @assess="startAssessment"
+          @self-report="requestMasteryAction('self_report')"
+          @revert="requestMasteryAction('revert')"
+        />
+      </template>
     </MessageList>
-
-    <NodeMasteryControls
-      v-if="chatMode === 'socratic' && store.activeNode && !draftTopic && !activeAgentRun"
-      :node="store.activeNode"
-      :busy="agentStore.submitting"
-      :error="agentStore.error?.message"
-      @assess="startAssessment"
-      @self-report="requestMasteryAction('self_report')"
-      @revert="requestMasteryAction('revert')"
-    />
 
     <BaseToast v-model:message="chatError" />
 
     <DialogueInputBar
       ref="inputBarRef"
       v-model:input="input"
-      v-model:chat-mode="chatMode"
+      :chat-mode="chatMode"
+      :mode-switch-disabled="assessmentActive"
+      @update:chat-mode="changeChatMode"
       v-model:ai-style="aiStyle"
       :ai-style-options="aiStyleOptions"
       :chips="chips"
@@ -200,7 +242,11 @@
       :quoted-text="quotedText"
       :is-thinking="isThinking"
       :is-generating="isGenerating || agentStore.submitting"
-      :send-disabled="agentStore.run?.status === 'awaiting_confirmation'"
+      :send-disabled="
+        agentStore.run?.status === 'awaiting_confirmation' ||
+        (assessmentActive && !assessmentCanAnswer)
+      "
+      :send-label="assessmentActive ? '提交答案' : '发送'"
       :attachments="attachmentDrafts.drafts.value"
       :attachments-ready="attachmentDrafts.ready.value"
       :attachments-disabled="!attachmentsEnabled"
@@ -221,6 +267,15 @@
       @clear-quote="clearQuote"
       @refresh-chips="refreshSuggestions"
       @send-suggestion="sendSuggestion"
+    />
+    <AssessmentResultModal
+      v-if="chatMode === 'socratic' && assessmentResult && !assessmentActive"
+      :result="assessmentResult"
+      :busy="agentStore.submitting"
+      :close-disabled="masteryConfirm !== null"
+      @continue="continueLearning"
+      @retry="startAssessment"
+      @revert="requestMasteryAction('revert')"
     />
     <AiAvatarPickerModal
       v-if="avatarPickerSessionId"
@@ -251,12 +306,41 @@
           : '自报掌握不会生成评估分数。如需可验证结果，请先选择“开始评估”。'
       }}
     </ConfirmDialog>
+    <ConfirmDialog
+      :model-value="editingSessionInHeader && editingSessionId !== null"
+      title="编辑对话名称"
+      confirm-text="保存名称"
+      loading-text="保存中…"
+      :loading="savingSessionName"
+      @close="cancelSessionNameEdit"
+      @update:model-value="(value) => !value && cancelSessionNameEdit()"
+      @confirm="editingSessionId && saveSessionName(editingSessionId)"
+    >
+      <label class="session-name-field">
+        <span>对话名称</span>
+        <input
+          ref="sessionNameInputRef"
+          v-model="editingName"
+          type="text"
+          maxlength="40"
+          :disabled="savingSessionName"
+          :aria-invalid="Boolean(sessionNameError)"
+          :aria-describedby="sessionNameError ? 'session-name-error' : undefined"
+          @input="sessionNameError = ''"
+          @keydown.enter="saveSessionNameOnEnter"
+        />
+      </label>
+      <p v-if="sessionNameError" id="session-name-error" class="session-name-error" role="alert">
+        {{ sessionNameError }}
+      </p>
+    </ConfirmDialog>
   </div>
 </template>
 
 <script setup lang="ts">
 // SocraticDialogue 组件，封装局部界面和交互逻辑。
 import { ref, watch, nextTick, computed, onMounted, onBeforeUnmount } from 'vue'
+import { Pencil } from '@lucide/vue'
 import { useAttachmentDrafts } from '../composables/useAttachmentDrafts'
 import { useModelsStore } from '../stores/models'
 import { useLearningStore } from '../stores/learning'
@@ -280,7 +364,6 @@ import {
   uploadChatAvatar,
   deleteChatAvatar,
 } from '../api/chat'
-import { updateTopicTitle } from '../api/topic'
 import {
   now,
   nowDate,
@@ -288,13 +371,14 @@ import {
   retryableAiIndex,
   replyUserIndex,
   hasMessageContent,
+  countCompletedChatTurns,
   extractTopic,
   isNewTopicIntent,
   sessionNodeKey,
 } from '../utils/chat'
 import { getSelectedModelId } from '../utils/modelSelection'
 import type { WebSnapshot } from '../types/webSearch'
-import { messageWeb, webStatusText } from '../utils/webSearch'
+import { messageWeb } from '../utils/webSearch'
 import { webSnapshotForText } from '../utils/messageMarkdown'
 import { avatarSrc } from '../utils/avatar'
 import { defaultAiAvatar, defaultNormalAiAvatar } from '../utils/avatarPresets'
@@ -309,14 +393,13 @@ import { useOnboardingFlow } from '../composables/useOnboardingFlow'
 import { useAssessment } from '../composables/useAssessment'
 
 import DialogueHistoryPanel from './dialogue/DialogueHistoryPanel.vue'
-import TopicNameBar from './dialogue/TopicNameBar.vue'
 import MessageList from './dialogue/MessageList.vue'
 import AiAvatarPickerModal from './dialogue/AiAvatarPickerModal.vue'
 import DialogueInputBar from './dialogue/DialogueInputBar.vue'
 import OnboardingForm from './agent/OnboardingForm.vue'
 import AgentStepMessage from './agent/AgentStepMessage.vue'
 import PlanPreview from './agent/PlanPreview.vue'
-import AssessmentResult from './agent/AssessmentResult.vue'
+import AssessmentResultModal from './agent/AssessmentResultModal.vue'
 import NodeMasteryControls from './agent/NodeMasteryControls.vue'
 import ConfirmDialog from './ui/ConfirmDialog.vue'
 import BaseToast from './ui/BaseToast.vue'
@@ -346,6 +429,7 @@ const messageListRef = ref<InstanceType<typeof MessageList> | null>(null)
 const inputBarRef = ref<InstanceType<typeof DialogueInputBar> | null>(null)
 let streamEpoch = 0
 const activeStreamMessageIds = ref<{ user: number; ai: number } | null>(null)
+const activeReplacementMessage = ref<Message | null>(null)
 let activeStreamUserMessage: Message | null = null
 let activeStream: StreamContext | null = null
 const chatError = ref('')
@@ -354,8 +438,6 @@ const retryUserMessage = ref<Message | null>(null)
 
 const input = ref('')
 const isThinking = ref(false)
-const contextCompacting = ref(false)
-const attachmentPreparation = ref('')
 const isGenerating = ref(false)
 const streamingText = ref('')
 const streamingWeb = ref<WebSnapshot>()
@@ -368,13 +450,16 @@ const avatarPickerBusy = ref(false)
 const avatarPickerError = ref('')
 const editingSessionId = ref<string | null>(null)
 const editingName = ref('')
+const editingSessionInHeader = ref(false)
+const savingSessionName = ref(false)
+const sessionNameError = ref('')
+const sessionNameInputRef = ref<HTMLInputElement | null>(null)
+const sessionNameButtonRef = ref<HTMLButtonElement | null>(null)
 const masteryConfirm = ref<'self_report' | 'revert' | null>(null)
 const dismissedAssessmentNodeId = ref<number | null>(null)
+const startingAssessment = ref(false)
 
 let isHydrated = false
-
-const editingTopicName = ref(false)
-const editingTopicInput = ref('')
 
 const currentTopicId = computed(() => Number(store.activeTopicId) || 0)
 const chatMode = ref<'socratic' | 'normal'>('socratic')
@@ -421,9 +506,26 @@ const pickerAvatarUrl = computed(
     (chatMode.value === 'normal' ? defaultNormalAiAvatar : defaultAiAvatar),
 )
 const currentSessionName = computed(() => currentSession.value?.name ?? '新对话')
+const canRenameCurrentSession = computed(
+  () =>
+    !currentSession.value?.awaitingTopicChoice &&
+    currentSession.value?.messages.some((message) => message.role === 'user'),
+)
 const activeAgentRun = computed(() =>
   Boolean(agentStore.run && !['completed', 'cancelled'].includes(agentStore.run.status)),
 )
+const assessmentActive = computed(
+  () => startingAssessment.value || (agentStore.run?.type === 'assessment' && activeAgentRun.value),
+)
+const assessmentCanAnswer = computed(
+  () => agentStore.run?.status === 'assessing' && Boolean(agentStore.run.step),
+)
+watch(assessmentActive, (active) => {
+  if (active) {
+    showHistory.value = false
+    clearQuote()
+  }
+})
 const draftTopic = computed(
   () => agentStore.onboardingTopic ?? agentStore.topicPlanDraft?.title ?? null,
 )
@@ -441,14 +543,7 @@ const currentSessionNode = computed(() => {
 const currentSessionTitle = computed(
   () => currentSessionNode.value?.label ?? currentSessionName.value,
 )
-const dialogueStatus = computed(() => {
-  if (!isThinking.value) return '通过提问引导你发现答案'
-  if (attachmentPreparation.value) return attachmentPreparation.value
-  if (contextCompacting.value) return '正在整理较早的对话'
-  if (streamingWeb.value && ['deciding', 'searching'].includes(streamingWeb.value.status))
-    return webStatusText[streamingWeb.value.status]
-  return '正在思考…'
-})
+const dialogueStatus = computed(() => (isThinking.value ? '正在思考…' : '通过提问引导你发现答案'))
 const currentSessionSubtitle = computed(() =>
   currentSessionNode.value ? currentSessionName.value : dialogueStatus.value,
 )
@@ -537,6 +632,9 @@ const messages = computed({
     saveSessions()
   },
 })
+const replacingMessageIndex = computed(() =>
+  activeReplacementMessage.value ? messages.value.indexOf(activeReplacementMessage.value) : -1,
+)
 const retryUserIndex = computed(() => {
   if (!retryUserMessage.value) return undefined
   if (!retryRequest.value) return -1
@@ -585,12 +683,7 @@ const { chips, chipsLoading, refreshSuggestions } = useDialogueSuggestions(
       ...(topicId || hasConversation
         ? {
             sessionId: session?.id,
-            conversationVersion: JSON.stringify(
-              session?.messages
-                .filter((message) => !message.messageType || message.messageType === 'chat')
-                .slice(-6)
-                .map((message) => [message.db_id, message.role, message.text.slice(-800)]),
-            ),
+            completedTurns: countCompletedChatTurns(session?.messages ?? []),
           }
         : {}),
       ...(chatMode.value === 'normal' ? { hasConversation } : {}),
@@ -695,6 +788,7 @@ function cancelOnboardingDraft() {
 }
 
 async function submitChoiceAnswer(answer: string) {
+  if (agentStore.submitting || (assessmentActive.value && !assessmentCanAnswer.value)) return
   const runId = agentStore.run?.run_id
   const stepId = agentStore.run?.step?.step_id
   recordCurrentAgentStep()
@@ -757,25 +851,34 @@ async function retryAgentFlow() {
 }
 
 async function startAssessment() {
+  if (assessmentActive.value || agentStore.submitting || isThinking.value) return
   const nodeId = store.activeNode?.dbId
   if (!nodeId || store.activeNode?.state === 'locked') return
   dismissedAssessmentNodeId.value = null
+  startingAssessment.value = true
   resetScrollToBottom()
-  await assessmentFlow.start(nodeId)
+  try {
+    await assessmentFlow.start(nodeId)
+  } finally {
+    startingAssessment.value = false
+  }
   scrollToBottom()
 }
 
 function continueLearning() {
+  if (blockDuringAssessment()) return
   dismissedAssessmentNodeId.value = store.activeNode?.dbId ?? null
   agentStore.clearRun()
   resetScrollToBottom()
 }
 
 function requestMasteryAction(action: 'self_report' | 'revert') {
+  if (blockDuringAssessment()) return
   masteryConfirm.value = action
 }
 
 async function confirmMasteryAction() {
+  if (blockDuringAssessment()) return
   const action = masteryConfirm.value
   const nodeId = store.activeNode?.dbId
   if (!action || !nodeId) return
@@ -868,6 +971,7 @@ async function uploadAiAvatar(file: File) {
 
 function switchSession(id: string) {
   if (id === currentSessionId.value) return
+  if (blockDuringAssessment()) return
   resetSessionInteraction()
   if (chatMode.value === 'socratic') {
     socraticCurrentId.value = id
@@ -887,6 +991,7 @@ function syncSessionTopic(session: Session) {
 }
 
 function newSession() {
+  if (blockDuringAssessment()) return
   resetSessionInteraction()
   const previous =
     currentSocraticSession.value?.topicId != null
@@ -908,6 +1013,10 @@ function newSession() {
 }
 
 function resetSessionInteraction() {
+  editingSessionId.value = null
+  editingSessionInHeader.value = false
+  sessionNameError.value = ''
+  activeReplacementMessage.value = null
   clearQuote()
   cancelActiveStream()
   chatError.value = ''
@@ -920,7 +1029,6 @@ function resetSessionInteraction() {
   streamingText.value = ''
   streamingWeb.value = undefined
   streamingChoices.value = null
-  attachmentPreparation.value = ''
   isThinking.value = false
   agentStore.clearRun()
   agentStore.closeOnboarding()
@@ -947,6 +1055,17 @@ watch(
   },
   { immediate: true },
 )
+
+function blockDuringAssessment() {
+  if (!assessmentActive.value) return false
+  chatError.value = '请先完成评估或点击“放弃评估”，再继续对话。'
+  return true
+}
+
+function changeChatMode(mode: 'socratic' | 'normal') {
+  if (mode === chatMode.value || blockDuringAssessment()) return
+  chatMode.value = mode
+}
 
 watch(chatMode, (mode, previousMode) => {
   if (mode !== previousMode) resetSessionInteraction()
@@ -1012,6 +1131,15 @@ watch(
 watch(
   [() => store.activeTopicId, chatMode],
   async ([activeTopicId, mode], previous) => {
+    if (assessmentActive.value) {
+      const topicId = currentSocraticSession.value?.topicId
+      if (topicId && activeTopicId !== String(topicId)) {
+        blockDuringAssessment()
+        await store.setActiveTopic(String(topicId))
+      }
+      store.requestTopicOverview(null)
+      return
+    }
     const previousTopicId = previous?.[0]
     if (mode !== 'socratic') {
       if (previousTopicId !== undefined && activeTopicId !== previousTopicId) {
@@ -1078,6 +1206,7 @@ watch(
 )
 
 async function deleteSession(id: string) {
+  if (id === currentSessionId.value && blockDuringAssessment()) return
   if (deletingSessionIds.has(id)) return
   const sessions = chatMode.value === 'socratic' ? socraticSessions.value : normalSessions.value
   const session = sessions.find((s) => s.id === id)
@@ -1125,26 +1254,65 @@ async function deleteSession(id: string) {
   saveSessions()
 }
 
-function startEdit(session: Session) {
+function startEdit(session: Session, inHeader = false) {
+  if (savingSessionName.value) return
   editingSessionId.value = session.id
   editingName.value = session.name
+  editingSessionInHeader.value = inHeader
+  sessionNameError.value = ''
+  if (inHeader) {
+    showHistory.value = false
+    nextTick(() => {
+      sessionNameInputRef.value?.focus()
+      sessionNameInputRef.value?.select()
+    })
+  }
+}
+
+function cancelSessionNameEdit() {
+  if (savingSessionName.value) return
+  const restoreHeaderFocus = editingSessionInHeader.value
+  editingSessionId.value = null
+  editingSessionInHeader.value = false
+  sessionNameError.value = ''
+  if (restoreHeaderFocus) nextTick(() => sessionNameButtonRef.value?.focus())
+}
+
+function saveSessionNameOnEnter(event: KeyboardEvent) {
+  if (event.isComposing) return
+  event.preventDefault()
+  if (editingSessionId.value) void saveSessionName(editingSessionId.value)
 }
 
 async function saveSessionName(id: string) {
-  const sessions = chatMode.value === 'socratic' ? socraticSessions.value : normalSessions.value
-  const session = sessions.find((s) => s.id === id)
-  if (session && editingName.value.trim()) {
-    try {
-      await sessionTitles.renameTitle(session, editingName.value.trim())
-    } catch (error) {
-      chatError.value = error instanceof Error ? error.message : '标题保存失败，请重试'
-      return
-    }
+  if (savingSessionName.value || editingSessionId.value !== id) return
+  const name = editingName.value.trim()
+  const session = [...socraticSessions.value, ...normalSessions.value].find((s) => s.id === id)
+  if (!session) return
+  if (!name) {
+    if (editingSessionInHeader.value) sessionNameError.value = '请输入对话名称'
+    else chatError.value = '请输入对话名称'
+    return
   }
-  editingSessionId.value = null
+  savingSessionName.value = true
+  sessionNameError.value = ''
+  let saved = false
+  try {
+    await sessionTitles.renameTitle(session, name)
+    saved = true
+  } catch (error) {
+    if (editingSessionId.value !== id) return
+    const message = chatErrorMessage(error)
+    if (editingSessionInHeader.value) sessionNameError.value = message
+    else chatError.value = message
+  } finally {
+    savingSessionName.value = false
+  }
+  if (saved && editingSessionId.value === id) cancelSessionNameEdit()
 }
 
 function quoteMessage(msg: Message) {
+  if (blockDuringAssessment()) return
   quotedText.value = msg.text
     .replace(/[#*`>]/g, '')
     .replace(/\s+/g, ' ')
@@ -1277,9 +1445,6 @@ async function recoverRequest(
     if (state.status === 'generating') {
       isThinking.value = true
       retryRequest.value = null
-      attachmentPreparation.value = state.preparation?.total
-        ? `正在整理资料，已完成 ${state.preparation.completed ?? 0}/${state.preparation.total} 段`
-        : '正在恢复回复状态…'
       if (!activeStream)
         activeStream = {
           epoch,
@@ -1318,8 +1483,6 @@ async function recoverRequest(
     streamingText.value = ''
     streamingWeb.value = undefined
     streamingChoices.value = null
-    contextCompacting.value = false
-    attachmentPreparation.value = ''
     isThinking.value = false
     if (state.status !== 'complete') {
       chatError.value = state.error?.message || '此前回复已中断，可从消息重新生成。'
@@ -1343,8 +1506,6 @@ async function recoverRequest(
       streamingText.value = ''
       streamingWeb.value = undefined
       streamingChoices.value = null
-      contextCompacting.value = false
-      attachmentPreparation.value = ''
       isThinking.value = false
       chatError.value = '请求未被服务端接收，请重试。'
       retryRequest.value = failedStream?.retry ?? null
@@ -1390,6 +1551,7 @@ function cancelActiveStream(): Promise<boolean> {
 }
 
 function beginStream(sessionId: string, requestId: string = crypto.randomUUID()): StreamContext {
+  activeReplacementMessage.value = null
   cancelActiveStream()
   const controller = streamControl.beginRequest()
   const context = { epoch: ++streamEpoch, sessionId, requestId, controller, replacing: false }
@@ -1397,8 +1559,6 @@ function beginStream(sessionId: string, requestId: string = crypto.randomUUID())
   activeStreamUserMessage = null
   activeStream = context
   chatError.value = ''
-  contextCompacting.value = false
-  attachmentPreparation.value = ''
   retryRequest.value = null
   retryUserMessage.value = null
   return context
@@ -1436,7 +1596,6 @@ function abortChat() {
   streamingText.value = ''
   streamingWeb.value = undefined
   streamingChoices.value = null
-  attachmentPreparation.value = ''
   isThinking.value = false
   const { cleanText, choices } = parseChoices(partial)
   if (hasMessageContent({ text: cleanText, choices: choices ?? undefined }) && !replacing) {
@@ -1474,6 +1633,7 @@ interface DialogueRequest {
 }
 
 function streamDialogue(request: DialogueRequest): Promise<void> {
+  if (blockDuringAssessment()) return Promise.resolve()
   const session = currentSession.value
   if (!session) return Promise.resolve()
   // Freeze ids before dispatch; retry closures never read the current input draft.
@@ -1494,6 +1654,7 @@ function streamDialogue(request: DialogueRequest): Promise<void> {
   }
   const modelId = request.modelId !== undefined ? request.modelId : getSelectedModelId()
   stream.replacing = Boolean(request.replaceMessage)
+  activeReplacementMessage.value = request.replaceMessage ?? null
   stream.userMessage = request.userMessage
   activeStreamUserMessage = request.userMessage ?? null
   isThinking.value = true
@@ -1572,8 +1733,6 @@ function streamDialogue(request: DialogueRequest): Promise<void> {
       streamingWeb.value = undefined
       streamingChoices.value = null
       isThinking.value = false
-      contextCompacting.value = false
-      attachmentPreparation.value = ''
       scrollToBottom()
       resolve()
     }
@@ -1649,7 +1808,6 @@ function streamDialogue(request: DialogueRequest): Promise<void> {
       {
         onChunk: (chunk) => {
           if (!isCurrentStream(stream)) return
-          contextCompacting.value = false
           streamingText.value += chunk
           checkStreamingChoices()
           scrollToBottom()
@@ -1710,24 +1868,6 @@ function streamDialogue(request: DialogueRequest): Promise<void> {
               : event.web
           stream.web = web
           streamingWeb.value = web
-          contextCompacting.value = false
-        },
-        onAttachmentContext: (event) => {
-          if (
-            !isCurrentStream(stream) ||
-            (event.request_id && event.request_id !== stream.requestId)
-          )
-            return
-          attachmentPreparation.value =
-            event.type === 'attachment_context_ready'
-              ? ''
-              : event.total
-                ? `正在整理资料，已完成 ${event.completed ?? 0}/${event.total} 段`
-                : '正在整理资料…'
-        },
-        onContextStatus: (status) => {
-          if (!isCurrentStream(stream)) return
-          contextCompacting.value = status === 'compacting'
         },
       },
     )
@@ -1738,31 +1878,6 @@ function buildUserInput(v: string, quote?: string): string {
   return quote ? `> ${quote}\n\n${v}` : v
 }
 
-function startTopicEdit() {
-  editingTopicInput.value = currentSession.value?.topicTitle ?? ''
-  editingTopicName.value = true
-}
-
-async function saveTopicName() {
-  const newTitle = editingTopicInput.value.trim()
-  const topicId = currentSession.value?.topicId
-  if (!newTitle || !topicId) {
-    editingTopicName.value = false
-    return
-  }
-  try {
-    await updateTopicTitle(topicId, newTitle)
-    if (currentSession.value) {
-      currentSession.value.topicTitle = newTitle
-      saveSessions()
-    }
-    await store.fetchTopicsOnly()
-  } catch (err) {
-    console.warn('更新主题名称失败', err)
-  }
-  editingTopicName.value = false
-}
-
 function checkStreamingChoices() {
   if (!streamingChoices.value) {
     const { choices } = parseChoices(streamingText.value)
@@ -1771,6 +1886,7 @@ function checkStreamingChoices() {
 }
 
 function sendChoiceText(choiceText: string) {
+  if (blockDuringAssessment()) return
   if (isGenerating.value) return
   if (isThinking.value) abortChat()
 
@@ -1792,6 +1908,7 @@ function sendChoiceText(choiceText: string) {
 }
 
 function sendSuggestion(text: string) {
+  if (blockDuringAssessment()) return
   input.value = text
   void send({
     topicFollowUp: chatMode.value === 'socratic' && Boolean(currentSession.value?.topicId),
@@ -1799,6 +1916,10 @@ function sendSuggestion(text: string) {
 }
 
 async function send(options?: { topicFollowUp?: boolean }) {
+  if (assessmentActive.value && !assessmentCanAnswer.value) {
+    blockDuringAssessment()
+    return
+  }
   const v = input.value.trim()
   const newTopicIntent = !options?.topicFollowUp && isNewTopicIntent(v)
   if (
@@ -1962,6 +2083,7 @@ async function send(options?: { topicFollowUp?: boolean }) {
 }
 
 async function retryAt(messageIndex: number) {
+  if (blockDuringAssessment()) return
   if (isThinking.value) return
   if (messageIndex === retryUserIndex.value && retryRequest.value) {
     retryRequest.value()
@@ -2013,6 +2135,7 @@ function streamOverview(kind: 'topic' | 'node', identifier: string): Promise<voi
 watch(
   () => store.nodeDialogueRequest,
   async () => {
+    if (blockDuringAssessment()) return
     const node = store.activeNode
     if (!node) return
     if (chatMode.value !== 'socratic') {
@@ -2109,13 +2232,72 @@ onBeforeUnmount(() => {
   background: var(--green);
   border: 2px solid var(--surface);
 }
+.dlg-title-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
 .dlg-title {
+  min-width: 0;
   font-weight: 600;
   font-size: 13.5px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 200px;
+}
+.session-name-edit {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink-3);
+  cursor: pointer;
+}
+.session-name-edit:hover:not(:disabled) {
+  background: var(--bg-2);
+  color: var(--ink);
+}
+.session-name-edit:focus-visible {
+  outline: 2px solid var(--blue-2);
+  outline-offset: 2px;
+}
+.session-name-edit:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.session-name-field {
+  display: grid;
+  gap: 8px;
+}
+.session-name-field input {
+  width: 100%;
+  min-width: 0;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg-2);
+  color: var(--ink);
+  font: inherit;
+}
+.session-name-field input:focus {
+  border-color: var(--blue-2);
+  outline: 2px solid var(--focus-ring);
+}
+.session-name-field input[aria-invalid='true'] {
+  border-color: var(--danger-ink);
+}
+.session-name-error {
+  margin: 8px 0 0;
+  color: var(--danger-ink);
+  font-size: 12px;
 }
 
 .dlg-sub,
@@ -2146,6 +2328,23 @@ onBeforeUnmount(() => {
 }
 .hdr-btn:hover {
   background: var(--bg-2);
+}
+.hdr-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.assessment-overlay {
+  display: flex;
+  justify-content: center;
+  padding: 8px 14px 10px;
+  pointer-events: none;
+}
+.assessment-overlay > :deep(.step-tool),
+.assessment-overlay > .agent-error {
+  max-height: min(360px, 45vh);
+  overflow-y: auto;
+  box-shadow: var(--control-shadow);
+  pointer-events: auto;
 }
 .agent-error {
   display: grid;

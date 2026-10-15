@@ -13,7 +13,7 @@ const learningContext = {
   sessionId: 'rag-session',
   nodeKey: 'retrieval',
   nodeLabel: '检索器',
-  conversationVersion: 'first-answer',
+  completedTurns: 1,
 }
 const questions = (subject: string) =>
   Array.from({ length: 12 }, (_, index) => `${subject}的问题${index}？`)
@@ -61,7 +61,7 @@ describe('dialogue suggestions by conversation context', () => {
     expect(localStorage.getItem('sm_chips_socratic')).toBeNull()
   })
 
-  it('invalidates questions after node or dialogue changes and reuses the matching cache', async () => {
+  it('refreshes for node changes and reuses each matching context cache', async () => {
     const context = ref(learningContext)
     const suggestions = start(() => context.value)
     await flushPromises()
@@ -72,27 +72,27 @@ describe('dialogue suggestions by conversation context', () => {
     expect(suggestions.chips.value).toEqual(questions('生成器'))
     expect(vi.mocked(getSuggestions).mock.calls.at(-1)?.[2]?.nodeKey).toBe('generator')
 
-    context.value = { ...context.value, conversationVersion: 'new-answer' }
+    context.value = { ...context.value, completedTurns: 2 }
     await flushPromises()
-    expect(getSuggestions).toHaveBeenCalledTimes(3)
+    expect(getSuggestions).toHaveBeenCalledTimes(2)
 
     context.value = learningContext
     await flushPromises()
-    expect(getSuggestions).toHaveBeenCalledTimes(3)
+    expect(getSuggestions).toHaveBeenCalledTimes(2)
     expect(suggestions.chips.value).toEqual(questions('RAG'))
 
     context.value = { ...learningContext, sessionId: 'another-rag-session' }
     await flushPromises()
-    expect(getSuggestions).toHaveBeenCalledTimes(4)
+    expect(getSuggestions).toHaveBeenCalledTimes(3)
   })
 
   it('waits for the answer to finish before requesting updated questions', async () => {
     const context = ref(learningContext)
     const suggestions = start(() => context.value, false)
-    context.value = { ...learningContext, conversationVersion: 'user-question' }
+    context.value = { ...learningContext, completedTurns: 2 }
     await flushPromises()
     expect(getSuggestions).not.toHaveBeenCalled()
-    context.value = { ...learningContext, conversationVersion: 'completed-answer' }
+    context.value = { ...learningContext, completedTurns: 3 }
     suggestions.enabled.value = true
     await flushPromises()
     expect(getSuggestions).toHaveBeenCalledTimes(1)
@@ -176,12 +176,12 @@ describe('dialogue suggestions by conversation context', () => {
     expect(getSuggestions).toHaveBeenCalledTimes(1)
   })
 
-  it('updates normal follow-ups for new replies and isolates them between sessions', async () => {
+  it('refreshes follow-ups every three completed turns and isolates them between sessions', async () => {
     const initial = {
       mode: 'normal' as const,
       hasConversation: true,
       sessionId: 'beach-session',
-      conversationVersion: 'first-reply',
+      completedTurns: 1,
     }
     const context = ref(initial)
     vi.mocked(getSuggestions).mockResolvedValue({
@@ -195,7 +195,14 @@ describe('dialogue suggestions by conversation context', () => {
       suggestions: questions('露营装备'),
       source: 'ai',
     })
-    context.value = { ...initial, conversationVersion: 'second-reply' }
+    context.value = { ...initial, completedTurns: 2 }
+    await flushPromises()
+    expect(suggestions.chips.value).toEqual(questions('海边露营'))
+    context.value = { ...initial, completedTurns: 3 }
+    await flushPromises()
+    expect(suggestions.chips.value).toEqual(questions('海边露营'))
+    expect(getSuggestions).toHaveBeenCalledTimes(1)
+    context.value = { ...initial, completedTurns: 4 }
     await flushPromises()
     expect(suggestions.chips.value).toEqual(questions('露营装备'))
 
@@ -204,10 +211,80 @@ describe('dialogue suggestions by conversation context', () => {
     await flushPromises()
     expect(suggestions.chips.value).toEqual(questions('晚餐'))
 
-    context.value = initial
+    context.value = { ...initial, completedTurns: 4 }
     await flushPromises()
-    expect(suggestions.chips.value).toEqual(questions('海边露营'))
+    expect(suggestions.chips.value).toEqual(questions('露营装备'))
     expect(getSuggestions).toHaveBeenCalledTimes(3)
+  })
+
+  it('keeps current chips through streaming and background refresh, replacing them when ready', async () => {
+    const context = ref(learningContext)
+    const suggestions = start(() => context.value)
+    await flushPromises()
+    const previous = suggestions.chips.value
+
+    // Sending a message or regenerating its answer does not complete another turn.
+    suggestions.enabled.value = false
+    await flushPromises()
+    expect(suggestions.chips.value).toBe(previous)
+    suggestions.enabled.value = true
+    await flushPromises()
+    expect(getSuggestions).toHaveBeenCalledTimes(1)
+
+    let resolveRefresh!: (value: Awaited<ReturnType<typeof getSuggestions>>) => void
+    vi.mocked(getSuggestions).mockImplementationOnce(
+      () => new Promise((resolve) => (resolveRefresh = resolve)),
+    )
+    suggestions.enabled.value = false
+    context.value = { ...learningContext, completedTurns: 4 }
+    await flushPromises()
+    expect(getSuggestions).toHaveBeenCalledTimes(1)
+    expect(suggestions.chips.value).toBe(previous)
+
+    suggestions.enabled.value = true
+    await flushPromises()
+    expect(getSuggestions).toHaveBeenCalledTimes(2)
+    expect(suggestions.chipsLoading.value).toBe(true)
+    expect(suggestions.chips.value).toBe(previous)
+    resolveRefresh({ suggestions: questions('新追问'), source: 'ai' })
+    await flushPromises()
+    expect(suggestions.chips.value).toEqual(questions('新追问'))
+    expect(suggestions.chipsLoading.value).toBe(false)
+
+    context.value = { ...learningContext, completedTurns: 6 }
+    await flushPromises()
+    expect(getSuggestions).toHaveBeenCalledTimes(2)
+    context.value = { ...learningContext, completedTurns: 7 }
+    await flushPromises()
+    expect(getSuggestions).toHaveBeenCalledTimes(3)
+  })
+
+  it('keeps automatic failures quiet and lets manual refresh restart the turn interval', async () => {
+    const context = ref(learningContext)
+    const suggestions = start(() => context.value)
+    await flushPromises()
+    const previous = suggestions.chips.value
+    vi.mocked(getSuggestions).mockRejectedValue(new Error('offline'))
+    context.value = { ...learningContext, completedTurns: 4 }
+    await flushPromises()
+    expect(suggestions.chips.value).toEqual(previous)
+    context.value = { ...learningContext, completedTurns: 5 }
+    await flushPromises()
+    expect(getSuggestions).toHaveBeenCalledTimes(2)
+
+    vi.mocked(getSuggestions).mockResolvedValue({
+      suggestions: questions('手动刷新'),
+      source: 'ai',
+    })
+    suggestions.refreshSuggestions(previous)
+    await flushPromises()
+    expect(suggestions.chips.value).toEqual(questions('手动刷新'))
+    context.value = { ...learningContext, completedTurns: 7 }
+    await flushPromises()
+    expect(getSuggestions).toHaveBeenCalledTimes(3)
+    context.value = { ...learningContext, completedTurns: 8 }
+    await flushPromises()
+    expect(getSuggestions).toHaveBeenCalledTimes(4)
   })
 
   it('uses conversational fallbacks instead of unrelated daily topics after normal chat starts', async () => {

@@ -7,7 +7,7 @@ import type { Message } from '../../../types'
 const wrappers: VueWrapper<InstanceType<typeof MessageList>>[] = []
 const frames = new Map<number, FrameRequestCallback>()
 
-function mountList(messages: Message[] = []) {
+function mountList(messages: Message[] = [], overlay?: string) {
   const wrapper = mount(MessageList, {
     props: {
       messages,
@@ -16,6 +16,7 @@ function mountList(messages: Message[] = []) {
       avatarUrl: null,
       aiAvatarUrl: '/avatar.png',
     },
+    slots: overlay ? { overlay } : {},
   })
   wrappers.push(wrapper)
   return wrapper
@@ -39,8 +40,8 @@ function viewport(wrapper: ReturnType<typeof mountList>) {
     get top() {
       return top
     },
-    grow() {
-      height += 200
+    grow(amount = 200) {
+      height += amount
     },
     async moveTo(value: number) {
       ;(scroll.element as HTMLElement).scrollTop = value
@@ -199,5 +200,66 @@ describe('MessageList scrolling during AI replies', () => {
     wrapper.vm.scrollToBottom()
     await nextTick()
     expect(view.top).toBe(600)
+  })
+
+  it('reserves room for a separate overlay without moving a reader away from history', async () => {
+    let overlaySize = 180
+    let notifyResize = () => {}
+    const disconnect = vi.fn()
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        constructor(callback: ResizeObserverCallback) {
+          notifyResize = () => callback([], this as unknown as ResizeObserver)
+        }
+        observe() {}
+        disconnect = disconnect
+      },
+    )
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (
+      this: HTMLElement,
+    ) {
+      return { height: this.classList.contains('message-overlay') ? overlaySize : 0 } as DOMRect
+    })
+    const wrapper = mountList(
+      [{ role: 'ai', text: '正常对话内容', time: '10:00' }],
+      '<button class="node-card">当前知识节点</button>',
+    )
+    await nextTick()
+    const scroll = wrapper.get('.dlg-messages').element
+    expect(wrapper.get('.message-overlay .node-card').text()).toBe('当前知识节点')
+    expect(scroll.contains(wrapper.get('.node-card').element)).toBe(false)
+    expect(
+      (wrapper.element as HTMLElement).style.getPropertyValue('--message-overlay-height'),
+    ).toBe('180px')
+
+    const view = viewport(wrapper)
+    wrapper.vm.scrollToBottom()
+    await nextTick()
+    await view.moveTo(200)
+    overlaySize = 16
+    view.grow(-164)
+    notifyResize()
+    await nextTick()
+    expect(view.top).toBe(200)
+    expect(wrapper.get('.dlg-messages').element).toBe(scroll)
+    expect(wrapper.get('[data-message-index="0"]').text()).toContain('正常对话内容')
+    expect(
+      (wrapper.element as HTMLElement).style.getPropertyValue('--message-overlay-height'),
+    ).toBe('16px')
+
+    wrapper.vm.scrollToBottom(true)
+    await nextTick()
+    overlaySize = 220
+    view.grow(204)
+    notifyResize()
+    await nextTick()
+    expect(view.top).toBe(640)
+    expect(
+      (wrapper.element as HTMLElement).style.getPropertyValue('--message-overlay-height'),
+    ).toBe('220px')
+    wrappers.splice(wrappers.indexOf(wrapper), 1)
+    wrapper.unmount()
+    expect(disconnect).toHaveBeenCalledOnce()
   })
 })

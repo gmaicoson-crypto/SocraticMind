@@ -19,6 +19,36 @@
       </template>
     </EmptyState>
     <div v-else class="plan-scroll">
+      <ReviewPractice
+        v-if="selectedReviewId"
+        :key="selectedReviewId"
+        :review-id="selectedReviewId"
+        :timezone="plan?.effective_timezone || timezone"
+        @close="selectedReviewId = null"
+        @completed="loadPlan"
+      />
+      <section v-if="reviews.length" class="plan-section">
+        <div class="section-heading">
+          <h3>今日复习</h3>
+          <span>{{ reviews.length }} 道待巩固</span>
+        </div>
+        <p class="review-hint">单题低于 3/4 分会进入复习；通过后完成，未通过则安排到次日。</p>
+        <button
+          v-for="item in reviews"
+          :key="item.id"
+          type="button"
+          class="review-row"
+          :disabled="selectedReviewId !== null"
+          @click="selectedReviewId = item.id"
+        >
+          <strong>{{ item.node_label }}</strong>
+          <span>{{ item.prompt }}</span>
+          <small
+            >{{ item.topic_title }} · {{ item.due_date }} · 已复习
+            {{ item.attempt_count }} 次</small
+          >
+        </button>
+      </section>
       <section v-if="plan?.overdue.length" class="plan-section overdue-section">
         <div class="section-heading">
           <div>
@@ -76,7 +106,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onActivated, ref } from 'vue'
 import { useAgentStore } from '../stores/agent'
 import { useLearningStore } from '../stores/learning'
 import { usePlansStore } from '../stores/plans'
@@ -84,6 +114,7 @@ import type { TodayPlanItem } from '../types/learningAgent'
 import BaseButton from './ui/BaseButton.vue'
 import EmptyState from './ui/EmptyState.vue'
 import PlanTaskRow from './planning/PlanTaskRow.vue'
+import ReviewPractice from './planning/ReviewPractice.vue'
 
 const emit = defineEmits<{ navigated: [] }>()
 const learning = useLearningStore()
@@ -92,21 +123,30 @@ const agent = useAgentStore()
 const navigatingKey = ref<string | null>(null)
 const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
 const plan = computed(() => plans.todayPlan)
+const reviews = computed(() => plan.value?.reviews ?? [])
+const selectedReviewId = ref<number | null>(null)
 const activeTopic = computed(
   () => learning.topics.find((topic) => topic.id === learning.activeTopicId) ?? null,
 )
 const isEmpty = computed(
   () =>
-    !plan.value ||
-    (plan.value.today.length === 0 &&
-      plan.value.overdue.length === 0 &&
-      plan.value.upcoming.length === 0),
+    !selectedReviewId.value &&
+    !reviews.value.length &&
+    (!plan.value ||
+      (plan.value.today.length === 0 &&
+        plan.value.overdue.length === 0 &&
+        plan.value.upcoming.length === 0)),
 )
 const todayMinutes = computed(
   () => plan.value?.today.reduce((total, item) => total + item.estimated_minutes, 0) ?? 0,
 )
 
+let activated = false
 onMounted(loadPlan)
+onActivated(() => {
+  if (activated) void loadPlan()
+  activated = true
+})
 
 function loadPlan() {
   return plans.fetchToday(timezone)
@@ -156,6 +196,31 @@ function createTopicPlan() {
   border-radius: var(--radius);
   background: var(--surface);
   color: var(--ink);
+}
+.review-row {
+  display: grid;
+  gap: 6px;
+  text-align: left;
+  width: 100%;
+  margin: 8px 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--ink);
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.review-row:hover:not(:disabled) {
+  border-color: var(--blue-2);
+}
+.review-row span {
+  font-size: 12px;
+}
+.review-row small,
+.review-hint {
+  color: var(--ink-3);
+  font-size: 11px;
 }
 .plan-header {
   display: flex;

@@ -107,6 +107,8 @@ class DomainGenerator:
                 }
             )
         elif schema is AssessmentQuestions:
+            from tests.p0.test_assessment_service import rubric_for_score
+
             value = schema.model_validate(
                 {
                     "questions": [
@@ -114,10 +116,9 @@ class DomainGenerator:
                             "question_id": f"aq{index}",
                             "dimension": dimension,
                             "prompt": f"{self.domain} {dimension}",
+                            "reference_answer": f"{self.domain} reference for {dimension}",
                             "input_type": self.input_type,
-                            "rubric": [
-                                {"criterion": "observable", "observable_standards": ["specific"]}
-                            ],
+                            "rubric": rubric_for_score(),
                         }
                         for index, dimension in enumerate(("concept", "application", "boundary"), 1)
                     ]

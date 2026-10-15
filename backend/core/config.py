@@ -124,6 +124,8 @@ class Settings(BaseSettings):
     # JSON 数组必填 MODEL、API_KEY、BASE_URL、NAME，可附加上下文能力配置。
     llm_models: str = ""
     llm_default_model_id: str = ""
+    # 节点、评估和复习等结构化生成共用总预算，包含格式修复，低于复习任务租约。
+    structured_ai_timeout_seconds: float = Field(default=180, gt=0, le=240)
     secret_key: str
     database_url: str = "mysql+pymysql://root@localhost:3306/socraticmind"
     access_token_expire_minutes: int = 60 * 24 * 7  # 默认 7 天

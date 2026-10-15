@@ -75,6 +75,38 @@ describe('TodayPlanPanel', () => {
     expect(replan).toHaveBeenCalledWith([4], 'UTC')
   })
 
+  it('shows due reviews even when there is no active learning plan', async () => {
+    const plans = usePlansStore()
+    plans.todayPlan = {
+      ...groupedPlan(),
+      today: [],
+      overdue: [],
+      upcoming: [],
+      reviews: [
+        {
+          id: 1,
+          version: 1,
+          node_id: 20,
+          node_label: '数组',
+          topic_id: 2,
+          topic_title: '数据结构',
+          due_date: '2026-09-07',
+          attempt_count: 0,
+          prompt: '解释数组索引',
+        },
+      ],
+    }
+    vi.spyOn(plans, 'fetchToday').mockResolvedValue(plans.todayPlan)
+    const wrapper = mount(TodayPlanPanel, {
+      global: { stubs: { ReviewPractice: { template: '<div class="review-practice-stub" />' } } },
+    })
+    expect(wrapper.text()).toContain('今日复习')
+    expect(wrapper.text()).toContain('解释数组索引')
+    expect(wrapper.text()).not.toContain('还没有学习计划')
+    await wrapper.get('.review-row').trigger('click')
+    expect(wrapper.find('.review-practice-stub').exists()).toBe(true)
+  })
+
   it('waits for topic nodes before selecting the task node', async () => {
     const plans = usePlansStore()
     plans.todayPlan = { ...groupedPlan(), overdue: [], upcoming: [] }

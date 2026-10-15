@@ -68,27 +68,60 @@ export interface PlanPreview {
   risk_notice: string | null
 }
 
-export interface AssessmentScoreItem {
-  question_id: string
+export interface AssessmentRubricCriterion {
+  criterion_id?: string
+  criterion: string
+  observable_standards: string[]
+  max_score?: number
+  scoring_rules?: { score: number; description: string }[]
+}
+
+export interface AssessmentCriterionScore {
+  criterion_id: string
   score: number
   rationale: string
 }
 
+export interface AssessmentScoreItem {
+  question_id: string
+  score: number
+  max_score?: number
+  question?: string
+  answer?: string
+  reference_answer?: string
+  rationale: string
+  mastery_analysis?: string
+  suggestions?: string[]
+  rubric?: AssessmentRubricCriterion[]
+  criterion_scores?: AssessmentCriterionScore[]
+}
+
+export interface AssessmentRemediationStep {
+  title: string
+  action: string
+  checkpoint: string
+}
+
 export interface AssessmentResult {
+  review_count?: number
   node_id: number
   node_label: string
   scores: AssessmentScoreItem[]
   total_score: number
-  evaluation_confidence: number
-  critical_misconception: boolean
+  max_score?: number
+  scoring_version?: number
+  /** Legacy results only. */
+  evaluation_confidence?: number
+  critical_misconception?: boolean
   evidence: string
   weaknesses: string[]
+  remediation_route?: AssessmentRemediationStep[]
   passed: boolean
   professional_review_required: boolean
   threshold: {
     minimum_score: number
-    minimum_confidence: number
-    requires_no_critical_misconception: boolean
+    minimum_confidence?: number
+    requires_no_critical_misconception?: boolean
   }
   next_actions: string[]
 }
@@ -200,12 +233,48 @@ export interface TodayPlanItem {
 }
 
 export interface TodayPlan {
+  reviews?: ReviewTask[]
   date: string
   effective_timezone: string
   replan_suggested: boolean
   today: TodayPlanItem[]
   overdue: TodayPlanItem[]
   upcoming: TodayPlanItem[]
+}
+
+export interface ReviewTask {
+  id: number
+  version: number
+  topic_id: number
+  topic_title: string
+  node_id: number
+  node_label: string
+  due_date: string
+  attempt_count: number
+  prompt: string
+}
+
+export interface ReviewDetail {
+  id: number
+  version: number
+  status: 'pending' | 'resolved'
+  due_date: string
+  attempt_count: number
+  node_label: string
+  previous_answer: string
+  feedback: string
+  step: AgentStep
+}
+
+export interface ReviewResult {
+  review_id: number
+  version: number
+  passed: boolean
+  score: number
+  evaluation_confidence: number
+  critical_misconception: boolean
+  rationale: string
+  next_due_date: string | null
 }
 
 export interface MasteryResult {

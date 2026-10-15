@@ -118,7 +118,8 @@ const sourceLabel = computed(
 <style scoped>
 .mastery-dock {
   flex-shrink: 0;
-  background: var(--bg);
+  background: transparent;
+  pointer-events: none;
 }
 .mastery-panel-track {
   display: grid;
@@ -139,12 +140,16 @@ const sourceLabel = computed(
   flex: 0 1 680px;
   gap: 8px;
   min-width: 0;
+  max-height: min(360px, 45vh);
   margin: 8px 14px 10px;
   padding: 12px 14px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--surface);
+  box-shadow: var(--control-shadow);
   color: var(--ink);
+  overflow-y: auto;
+  pointer-events: auto;
 }
 .mastery-heading-actions {
   display: flex;
@@ -173,7 +178,10 @@ const sourceLabel = computed(
 }
 .mastery-boundary {
   position: relative;
+  width: 96px;
   height: 16px;
+  margin-inline: auto;
+  pointer-events: auto;
 }
 .mastery-expand {
   position: absolute;

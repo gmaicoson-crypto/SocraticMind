@@ -47,7 +47,7 @@ def test_existing_topic_plan_does_not_change_nodes(app, client, db_session, auth
             node_key="c",
             label="C",
             state="locked",
-            parent_keys="a,b",
+            parent_keys="a",
             estimated_minutes=20,
         ),
         Node(
@@ -55,7 +55,7 @@ def test_existing_topic_plan_does_not_change_nodes(app, client, db_session, auth
             node_key="d",
             label="D",
             state="locked",
-            parent_keys="c",
+            parent_keys="a",
             estimated_minutes=20,
         ),
         Node(
@@ -63,7 +63,7 @@ def test_existing_topic_plan_does_not_change_nodes(app, client, db_session, auth
             node_key="e",
             label="E",
             state="locked",
-            parent_keys="d",
+            parent_keys="b",
             estimated_minutes=20,
         ),
     ]
@@ -75,6 +75,7 @@ def test_existing_topic_plan_does_not_change_nodes(app, client, db_session, auth
     payload.pop("topic")
     started = client.post(f"/api/agent/topics/{topic.id}/plan-runs", json=payload)
     assert started.status_code == 201
+    assert started.json()["status"] == "awaiting_confirmation"
     assert len(started.json()["preview"]["plan_items"]) > 0
     assert all(item["node_key"] != "root" for item in started.json()["preview"]["plan_items"])
     confirmed = client.post(
@@ -100,15 +101,16 @@ def test_existing_topic_confirmation_rejects_a_stale_node_snapshot(
         Node(topic_id=topic.id, node_key="root", label="Root", state="available"),
         Node(topic_id=topic.id, node_key="a", label="A", state="locked", parent_keys="root"),
         Node(topic_id=topic.id, node_key="b", label="B", state="locked", parent_keys="root"),
-        Node(topic_id=topic.id, node_key="c", label="C", state="locked", parent_keys="a,b"),
-        Node(topic_id=topic.id, node_key="d", label="D", state="locked", parent_keys="c"),
-        Node(topic_id=topic.id, node_key="e", label="E", state="locked", parent_keys="d"),
+        Node(topic_id=topic.id, node_key="c", label="C", state="locked", parent_keys="a"),
+        Node(topic_id=topic.id, node_key="d", label="D", state="locked", parent_keys="a"),
+        Node(topic_id=topic.id, node_key="e", label="E", state="locked", parent_keys="b"),
     ]
     db_session.add_all(nodes)
     db_session.commit()
     payload = onboarding_payload(False)
     payload.pop("topic")
     run = client.post(f"/api/agent/topics/{topic.id}/plan-runs", json=payload).json()
+    assert run["status"] == "awaiting_confirmation"
 
     nodes[1].label = "Changed after preview"
     db_session.commit()

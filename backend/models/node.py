@@ -25,6 +25,7 @@ class Node(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     topic = relationship("Topic", back_populates="nodes")
+    review_tasks = relationship("ReviewTask", back_populates="node", cascade="all, delete-orphan")
     plan_items = relationship("StudyPlanItem", back_populates="node", cascade="all, delete-orphan")
     assessment_attempts = relationship(
         "AssessmentAttempt", back_populates="node", cascade="all, delete-orphan"

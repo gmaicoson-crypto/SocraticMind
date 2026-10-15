@@ -46,7 +46,8 @@ describe('MessageList actions', () => {
       },
     ]
     const wrapper = mountList(messages)
-    expect(wrapper.get('.empty-reply').text()).toContain('未收到有效回复')
+    expect(wrapper.find('[data-message-index="1"]').exists()).toBe(false)
+    expect(wrapper.find('.msg-row.ai').exists()).toBe(false)
     expect(wrapper.find('.message-sources').exists()).toBe(false)
     expect(wrapper.find('button[title="复制"]').exists()).toBe(true) // User text remains copyable.
     expect(wrapper.find('button[title="引用追问"]').exists()).toBe(false)
@@ -62,6 +63,57 @@ describe('MessageList actions', () => {
     expect(wrapper.find('.empty-reply').exists()).toBe(false)
     expect(wrapper.find('button[aria-label="重试"]').exists()).toBe(false)
     expect(wrapper.props('messages')).toHaveLength(2)
+    await wrapper.setProps({ isThinking: false })
+    expect(wrapper.find('.msg-row.ai').exists()).toBe(false)
+    expect(wrapper.find('button[aria-label="重试"]').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it.each([undefined, 'generating', 'complete', 'interrupted', 'failed'])(
+    'hides restored blank AI replies with status %s while keeping the original question retryable',
+    (status) => {
+      const wrapper = mountList([
+        { role: 'user', text: '原问题', time: '10:00', db_id: 1 },
+        {
+          role: 'ai',
+          text: ' \n\t ',
+          time: '10:01',
+          db_id: 2,
+          metadata: { status, web: webSnapshot() },
+        },
+      ])
+      expect(wrapper.findAll('.msg-row')).toHaveLength(1)
+      expect(wrapper.find('.ai-avatar').exists()).toBe(false)
+      expect(wrapper.find('.message-sources').exists()).toBe(false)
+      expect(wrapper.get('[data-message-index="0"]').text()).toContain('原问题')
+      expect(wrapper.find('[data-message-index="0"] button[aria-label="重试"]').exists()).toBe(true)
+      wrapper.unmount()
+    },
+  )
+
+  it('shows a valid answer arriving after a restored blank reply without changing action indexes', async () => {
+    const user: Message = { role: 'user', text: '原问题', time: '10:00', db_id: 1 }
+    const reply: Message = {
+      role: 'ai',
+      text: '',
+      time: '10:01',
+      db_id: 2,
+      metadata: { status: 'generating' },
+    }
+    const wrapper = mountList([user, reply])
+    expect(wrapper.find('.msg-row.ai').exists()).toBe(false)
+    await wrapper.setProps({
+      messages: [user, { ...reply, text: '有效回答', metadata: { status: 'complete' } }],
+    })
+    expect(wrapper.get('[data-message-index="1"]').text()).toContain('有效回答')
+    expect(wrapper.find('button[aria-label="重试"]').exists()).toBe(false)
+    await wrapper.get('button[aria-label="重新回答"]').trigger('click')
+    expect(wrapper.emitted('retry')).toEqual([[1]])
+    await wrapper.setProps({
+      messages: [user, { ...reply, choices: [{ label: 'A', text: '有效选项' }] }],
+    })
+    expect(wrapper.findAll('.msg-row.ai')).toHaveLength(1)
+    expect(wrapper.get('.choice-btn').text()).toContain('有效选项')
     wrapper.unmount()
   })
 

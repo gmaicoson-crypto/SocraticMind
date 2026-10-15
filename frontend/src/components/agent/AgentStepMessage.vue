@@ -6,6 +6,7 @@
     </div>
     <ProgressBar :value="progress" :label="`${label}进度`" />
     <p v-if="showPrompt" class="step-prompt">{{ step.prompt }}</p>
+    <p v-if="error" class="step-error" role="alert">{{ error }}</p>
     <div v-if="step.choices.length" class="step-choices">
       <button
         v-for="(choice, index) in step.choices"
@@ -36,14 +37,16 @@ import ProgressBar from '../ui/ProgressBar.vue'
 const props = withDefaults(
   defineProps<{
     step: AgentStep
-    kind?: 'diagnostic' | 'assessment'
+    kind?: 'diagnostic' | 'assessment' | 'review'
     busy?: boolean
     showPrompt?: boolean
+    error?: string
   }>(),
   {
     kind: 'diagnostic',
     busy: false,
     showPrompt: true,
+    error: '',
   },
 )
 
@@ -52,7 +55,9 @@ const emit = defineEmits<{
   cancel: []
 }>()
 
-const label = computed(() => (props.kind === 'assessment' ? '评估' : '测试'))
+const label = computed(
+  () => ({ diagnostic: '测试', assessment: '评估', review: '复习' })[props.kind],
+)
 const progress = computed(() =>
   props.step.total ? (props.step.current / props.step.total) * 100 : 0,
 )
@@ -89,6 +94,11 @@ const progress = computed(() =>
   display: grid;
   gap: 8px;
   margin-top: 14px;
+}
+.step-error {
+  margin: 12px 0 0;
+  color: var(--danger-strong);
+  font-size: 12px;
 }
 .step-choices button {
   display: flex;

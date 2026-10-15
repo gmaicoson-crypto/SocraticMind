@@ -11,7 +11,7 @@ from models import (
     StudyPlanItem,
     Topic,
 )
-from schemas.structured_ai import AssessmentQuestions, AssessmentScore
+from schemas.structured_ai import AssessmentQuestions, AssessmentScore, LegacyAssessmentScore
 from services.assessments import (
     retry_assessment,
     start_assessment,
@@ -20,11 +20,25 @@ from services.assessments import (
 from services.agent.structured_ai import StructuredAIError, StructuredResult
 
 
+def rubric_for_score(score=50):
+    return [
+        {
+            "criterion_id": "c1",
+            "criterion": "Observable evidence",
+            "observable_standards": ["Specific and correct"],
+            "max_score": 100,
+            "scoring_rules": [
+                {"score": points, "description": f"Observable requirements for {points} points"}
+                for points in sorted({0, 50, 100, score})
+            ],
+        }
+    ]
+
+
 class AssessmentGenerator:
-    def __init__(self, *, score=10, confidence=0.8, critical=False):
-        self.score = score
-        self.confidence = confidence
-        self.critical = critical
+    def __init__(self, *, score=85, question_scores=None):
+        self.parts = question_scores if question_scores is not None else [score] * 3
+        self.score = round(sum(self.parts) / 3)
         self.calls = []
 
     def __call__(self, schema, _messages, _context):
@@ -37,34 +51,47 @@ class AssessmentGenerator:
                         "question_id": f"aq{index}",
                         "dimension": dimension,
                         "prompt": f"Question {index}",
-                        "rubric": [
-                            {
-                                "criterion": "Observable evidence",
-                                "observable_standards": ["Specific and correct"],
-                            }
-                        ],
+                        "reference_answer": f"Reference answer {index}",
+                        "rubric": rubric_for_score(self.parts[index - 1]),
                     }
                 )
             value = schema.model_validate({"questions": questions})
         else:
-            parts = [self.score // 3] * 3
-            for index in range(self.score % 3):
-                parts[index] += 1
-            value = AssessmentScore.model_validate(
+            value = schema.model_validate(
                 {
                     "scores": [
                         {
                             "question_id": f"aq{index}",
                             "score": part,
-                            "rationale": "Evidence",
+                            "rationale": f"Evidence {index}",
+                            "mastery_analysis": f"Mastery analysis {index}",
+                            "suggestions": [f"Practice suggestion {index}"],
+                            **(
+                                {
+                                    "criterion_scores": [
+                                        {
+                                            "criterion_id": "c1",
+                                            "score": part,
+                                            "rationale": f"Award evidence {index}",
+                                        }
+                                    ]
+                                }
+                                if schema is AssessmentScore
+                                else {}
+                            ),
                         }
-                        for index, part in enumerate(parts, 1)
+                        for index, part in enumerate(self.parts, 1)
                     ],
                     "total_score": self.score,
-                    "evaluation_confidence": self.confidence,
-                    "critical_misconception": self.critical,
                     "evidence": "Overall evidence",
-                    "weaknesses": ["A weak point"] if self.score < 9 else [],
+                    "weaknesses": ["A weak point"] if self.score < 75 else [],
+                    "remediation_route": [
+                        {
+                            "title": "Close the gap",
+                            "action": "Practice with an example",
+                            "checkpoint": "Explain without notes",
+                        }
+                    ],
                 }
             )
         return StructuredResult(value=value, token_usage=5, latency_ms=2, attempts=1)
@@ -129,7 +156,7 @@ def complete_answers(db_session, user_id, run, generator):
 
 def test_passing_assessment_records_evidence_and_mastery(db_session, auth_user):
     node, item = create_assessable_node(db_session, auth_user)
-    generator = AssessmentGenerator(score=10, confidence=0.82)
+    generator = AssessmentGenerator(score=85)
     run = start_assessment(
         db_session,
         user_id=auth_user.id,
@@ -145,7 +172,12 @@ def test_passing_assessment_records_evidence_and_mastery(db_session, auth_user):
     db_session.refresh(item)
     assert run.status == "completed"
     assert run.result_json["passed"] is True
-    assert run.result_json["total_score"] == 10
+    assert run.result_json["total_score"] == 85
+    assert run.result_json["max_score"] == 100
+    assert run.result_json["threshold"] == {"minimum_score": 75}
+    assert "evaluation_confidence" not in run.result_json
+    assert "critical_misconception" not in run.result_json
+    assert run.result_json["remediation_route"][0]["checkpoint"] == "Explain without notes"
     assert node.state == "mastered"
     assert node.mastery_source == "assessment"
     assert item.status == "completed"
@@ -153,42 +185,39 @@ def test_passing_assessment_records_evidence_and_mastery(db_session, auth_user):
     assert memory.topic_id == node.topic_id
     assert memory.kind == "strength"
     assert memory.source == "assessment"
-    assert memory.confidence == pytest.approx(0.82)
+    assert memory.confidence is None
 
 
-@pytest.mark.parametrize(
-    ("score", "confidence", "critical"),
-    [(8, 0.9, False), (10, 0.6, False), (10, 0.9, True)],
-)
-def test_deterministic_gate_keeps_failed_assessment_available(
-    db_session, auth_user, score, confidence, critical
-):
+@pytest.mark.parametrize("score,passed", [(0, False), (74, False), (75, True), (100, True)])
+def test_percentage_threshold_controls_mastery(db_session, auth_user, score, passed):
     node, _item = create_assessable_node(db_session, auth_user)
-    generator = AssessmentGenerator(score=score, confidence=confidence, critical=critical)
+    generator = AssessmentGenerator(score=score)
     run = start_assessment(
         db_session,
         user_id=auth_user.id,
         node_id=node.id,
-        request_id=f"start-{score}-{confidence}-{critical}",
+        request_id=f"start-{score}",
         generator=generator,
     )
     run = complete_answers(db_session, auth_user.id, run, generator)
     db_session.refresh(node)
-    assert run.result_json["passed"] is False
-    assert node.state == "available"
+    assert run.status == "completed"
+    assert run.result_json["passed"] is passed
+    assert node.state == ("mastered" if passed else "available")
+    assert run.result_json["total_score"] == score
+    assert run.result_json["review_count"] == (3 if score < 75 else 0)
     memory = db_session.query(LearnerMemory).one()
-    assert memory.topic_id == node.topic_id
-    assert memory.kind == "weakness"
-    assert memory.source == "assessment"
-    expected = "A weak point" if score < 9 else "“Root”的评估尚未通过"
-    assert memory.content == expected
+    assert memory.kind == ("strength" if passed else "weakness")
+    assert memory.confidence is None
+    if not passed:
+        assert memory.content == "A weak point"
 
 
 def test_high_risk_practical_assessment_never_auto_masters(db_session, auth_user):
     node, _item = create_assessable_node(
         db_session, auth_user, domain="medical", outcome="procedure"
     )
-    generator = AssessmentGenerator(score=12, confidence=0.95)
+    generator = AssessmentGenerator(score=100)
     run = start_assessment(
         db_session,
         user_id=auth_user.id,
@@ -276,7 +305,7 @@ def test_failed_question_generation_can_retry(db_session, auth_user):
 
 def test_invalid_score_question_ids_fail_before_recording_evidence(db_session, auth_user):
     node, _item = create_assessable_node(db_session, auth_user)
-    good = AssessmentGenerator(score=10, confidence=0.8)
+    good = AssessmentGenerator(score=85)
 
     def invalid_score(schema, messages, context):
         result = good(schema, messages, context)
@@ -299,3 +328,106 @@ def test_invalid_score_question_ids_fail_before_recording_evidence(db_session, a
     attempt = db_session.query(AssessmentAttempt).filter_by(run_id=run.id).one()
     assert attempt.status == "failed"
     assert db_session.query(LearnerMemory).count() == 0
+
+
+def test_feedback_matches_original_questions_and_answers_by_id(db_session, auth_user):
+    node, _ = create_assessable_node(db_session, auth_user)
+    base = AssessmentGenerator(question_scores=[90, 75, 60])
+
+    def reversed_scores(schema, messages, context):
+        result = base(schema, messages, context)
+        if schema is AssessmentScore:
+            result.value.scores.reverse()
+        return result
+
+    run = start_assessment(
+        db_session,
+        user_id=auth_user.id,
+        node_id=node.id,
+        request_id="reordered-scores",
+        generator=reversed_scores,
+    )
+    run = complete_answers(db_session, auth_user.id, run, reversed_scores)
+    assert run.result_json["total_score"] == 75
+    for index, score in enumerate(run.result_json["scores"], 1):
+        assert score["question_id"] == f"aq{index}"
+        assert score["question"] == f"Question {index}"
+        assert score["answer"] == f"answer {index - 1}"
+        assert score["reference_answer"] == f"Reference answer {index}"
+        assert score["rationale"] == f"Evidence {index}"
+        assert score["mastery_analysis"] == f"Mastery analysis {index}"
+        assert score["suggestions"] == [f"Practice suggestion {index}"]
+        assert score["max_score"] == 100
+    attempt = db_session.query(AssessmentAttempt).one()
+    assert attempt.scores_json == run.result_json["scores"]
+
+
+@pytest.mark.parametrize(
+    "invalid", ["unknown_dimension", "out_of_band", "over_max", "missing", "sum"]
+)
+def test_invalid_dimension_scores_fail_before_mastery(db_session, auth_user, invalid):
+    node, _ = create_assessable_node(db_session, auth_user)
+    base = AssessmentGenerator()
+
+    def invalid_score(schema, messages, context):
+        result = base(schema, messages, context)
+        if schema is AssessmentScore:
+            item = result.value.scores[0]
+            if invalid == "unknown_dimension":
+                item.criterion_scores[0].criterion_id = "invented"
+            elif invalid == "missing":
+                item.criterion_scores = []
+            elif invalid == "sum":
+                item.score = 80
+            else:
+                item.score = 84 if invalid == "out_of_band" else 101
+                item.criterion_scores[0].score = item.score
+            result.value.total_score = round(sum(score.score for score in result.value.scores) / 3)
+        return result
+
+    run = start_assessment(
+        db_session,
+        user_id=auth_user.id,
+        node_id=node.id,
+        request_id=f"invalid-{invalid}",
+        generator=invalid_score,
+    )
+    run = complete_answers(db_session, auth_user.id, run, invalid_score)
+    assert run.status == "failed"
+    assert run.error_code == "ASSESSMENT_SCORE_INVALID"
+    assert node.state == "available"
+    assert db_session.query(AssessmentAttempt).one().scores_json is None
+    assert db_session.query(LearnerMemory).count() == 0
+
+
+def test_already_started_legacy_assessment_finishes_without_fabricated_weights(
+    db_session, auth_user
+):
+    from copy import deepcopy
+
+    node, _ = create_assessable_node(db_session, auth_user)
+    generator = AssessmentGenerator()
+    run = start_assessment(
+        db_session,
+        user_id=auth_user.id,
+        node_id=node.id,
+        request_id="legacy-active",
+        generator=generator,
+    )
+    state = deepcopy(run.state_json)
+    state.pop("scoring_version")
+    for question in state["questions"]:
+        question.pop("reference_answer", None)
+        question["rubric"] = [
+            {"criterion": "Observable evidence", "observable_standards": ["Specific and correct"]}
+        ]
+    run.state_json = state
+    db_session.query(AssessmentAttempt).one().questions_json = state["questions"]
+    db_session.commit()
+    run = complete_answers(db_session, auth_user.id, run, generator)
+    assert run.status == "completed"
+    assert LegacyAssessmentScore in generator.calls
+    assert run.result_json["scoring_version"] == 1
+    assert "criterion_scores" not in run.result_json["scores"][0]
+    assert "max_score" not in run.result_json["scores"][0]["rubric"][0]
+    assert run.result_json["scores"][0]["reference_answer"] == ""

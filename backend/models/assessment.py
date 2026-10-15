@@ -41,6 +41,7 @@ class AssessmentAttempt(Base):
     node = relationship("Node", back_populates="assessment_attempts")
     run = relationship("AgentRun", back_populates="assessment_attempt")
     mastery_events = relationship("MasteryEvent", back_populates="assessment")
+    review_tasks = relationship("ReviewTask", back_populates="assessment")
 
     __table_args__ = (
         UniqueConstraint("run_id", name="uq_assessment_attempts_run_id"),

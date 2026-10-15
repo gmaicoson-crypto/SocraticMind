@@ -101,6 +101,8 @@ def create_assessment(
 
 
 def serialize_run(run: AgentRun) -> AgentRunResponse:
+    from services.assessment_results import assessment_result_payload
+
     state = run.state_json or {}
     step = None
     if run.status in {"diagnosing", "assessing"} and state.get("step_id"):
@@ -126,7 +128,11 @@ def serialize_run(run: AgentRun) -> AgentRunResponse:
         version=run.version,
         step=step,
         preview=state.get("preview"),
-        result=run.result_json,
+        result=(
+            assessment_result_payload(run.result_json, state.get("questions"), state.get("answers"))
+            if run.run_type == "assessment"
+            else run.result_json
+        ),
         error=error,
     )
 

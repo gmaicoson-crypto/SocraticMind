@@ -1,10 +1,32 @@
 import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
-import type { WebSource } from '../../../types/webSearch'
+import type { WebSource, WebStatus } from '../../../types/webSearch'
 import MessageSources from '../MessageSources.vue'
 import { webSnapshot } from '../../../test/fixtures/webSearch'
 
 describe('message source evidence', () => {
+  it.each<WebStatus>(['deciding', 'searching', 'ready', 'failed', 'unavailable'])(
+    'hides %s progress and source details until the reply finishes',
+    async (status) => {
+      const wrapper = mount(MessageSources, {
+        props: {
+          web: webSnapshot({
+            status,
+            warnings: [{ code: 'SEARCH_TIMEOUT', message: '未能核实最新资料。', retryable: true }],
+          }),
+          pending: true,
+        },
+      })
+      expect(wrapper.find('.message-sources').exists()).toBe(false)
+      await wrapper.setProps({ pending: false })
+      expect(wrapper.get('summary').text()).toContain('引用 1 条来源')
+      expect(wrapper.text()).toContain('未能核实最新资料')
+      expect(wrapper.text()).not.toContain('正在')
+      expect(wrapper.text()).not.toContain('联网过程已中断')
+      wrapper.unmount()
+    },
+  )
+
   it.each([false, true])('hides no-search decisions while pending=%s', (pending) => {
     const wrapper = mount(MessageSources, {
       props: { web: webSnapshot({ status: 'skipped', sources: [] }), pending },
@@ -41,7 +63,7 @@ describe('message source evidence', () => {
     wrapper.unmount()
   })
 
-  it('shows warnings before answer text and prevents unsafe source links', () => {
+  it('preserves final evidence warnings and prevents unsafe source links', () => {
     const web = webSnapshot({
       status: 'failed',
       warnings: [
@@ -49,20 +71,22 @@ describe('message source evidence', () => {
       ],
     })
     ;(web.sources[0] as WebSource).url = 'javascript:alert(1)'
-    const wrapper = mount(MessageSources, { props: { web, pending: true } })
+    const wrapper = mount(MessageSources, { props: { web } })
     expect(wrapper.text()).toContain('未核实最新资料')
     expect(wrapper.find('a').exists()).toBe(false)
     wrapper.unmount()
   })
 
-  it('does not show an interrupted historical search as still running', () => {
-    const wrapper = mount(MessageSources, {
-      props: { web: webSnapshot({ status: 'searching', sources: [] }) },
-    })
-    expect(wrapper.text()).toContain('联网过程已中断')
-    expect(wrapper.text()).not.toContain('正在搜索')
-    wrapper.unmount()
-  })
+  it.each<WebStatus>(['deciding', 'searching', 'ready'])(
+    'hides historical %s process statuses without sources',
+    (status) => {
+      const wrapper = mount(MessageSources, {
+        props: { web: webSnapshot({ status, sources: [] }) },
+      })
+      expect(wrapper.find('.message-sources').exists()).toBe(false)
+      wrapper.unmount()
+    },
+  )
   it('hides capacity truncation details while preserving sources and evidence warnings', () => {
     const web = webSnapshot({
       warnings: [

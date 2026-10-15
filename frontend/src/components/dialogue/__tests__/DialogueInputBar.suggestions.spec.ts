@@ -62,11 +62,30 @@ describe('DialogueInputBar suggestions', () => {
     expect(wrapper.emitted('sendSuggestion')?.[0]).toEqual(['建议一'])
     expect(wrapper.emitted('update:input')).toBeUndefined()
 
+    const listElement = wrapper.get('.chips-list').element
+    await wrapper.setProps({ chipsLoading: true })
+    expect(wrapper.get('.chips-list').element).toBe(listElement)
+    expect(wrapper.findAll('.chips-list .chip').map((chip) => chip.text())).toEqual(
+      chips.slice(0, 5),
+    )
+    expect(wrapper.find('.chip-skeleton').exists()).toBe(false)
+    expect(wrapper.get('.chip-refresh').attributes('disabled')).toBeDefined()
+    await wrapper.get('.chips-list .chip').trigger('click')
+    expect(wrapper.emitted('sendSuggestion')).toHaveLength(2)
+    await wrapper.get('.chip-refresh').trigger('click')
+    expect(wrapper.emitted('refreshChips')).toBeUndefined()
+    await wrapper.setProps({ chipsLoading: false })
+
     await wrapper.setProps({ isThinking: true })
     await wrapper.get('.chips-list .chip').trigger('click')
-    expect(wrapper.emitted('sendSuggestion')).toHaveLength(1)
+    expect(wrapper.emitted('sendSuggestion')).toHaveLength(2)
     await wrapper.get('.chip-refresh').trigger('click')
     expect(wrapper.emitted('refreshChips')?.[0]).toEqual([chips.slice(0, 5)])
+    const nextChips = ['新建议一', '新建议二', '新建议三']
+    await wrapper.setProps({ chips: nextChips })
+    await flushPromises()
+    expect(wrapper.get('.chips-list').element).toBe(listElement)
+    expect(wrapper.findAll('.chips-list .chip').map((chip) => chip.text())).toEqual(nextChips)
     wrapper.unmount()
   })
 

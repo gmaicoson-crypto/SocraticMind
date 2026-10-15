@@ -15,6 +15,7 @@ from core.errors import ApiError
 from services.mastery import record_mastery
 from services.mastery import revert_mastery
 from schemas.mastery import MasteryRequest
+from services.assessment_results import assessment_result_payload
 
 router = APIRouter(prefix="/api/nodes", tags=["节点"])
 
@@ -195,7 +196,9 @@ def get_nodes(
                 mastery_source=node.mastery_source,
                 mastery_confidence=node.mastery_confidence,
                 assessment_result=(
-                    latest.run.result_json
+                    assessment_result_payload(
+                        latest.run.result_json, latest.questions_json, latest.answers_json
+                    )
                     if latest and latest.run and latest.run.result_json
                     else None
                 ),

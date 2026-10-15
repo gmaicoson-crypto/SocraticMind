@@ -5,6 +5,10 @@ from core.database import get_db
 from core.deps import get_current_user
 from models import User
 from schemas.plan import ReplanRequest
+from schemas.review import ReviewAnswerRequest
+from services.reviews import review_detail, answer_review
+from routers.agent import get_agent_generator, selected_model
+from core.user_llm import load_user_profiles
 from services.plans import (
     get_today_plan,
     get_topic_plan,
@@ -14,6 +18,32 @@ from services.plans import (
 
 
 router = APIRouter(tags=["学习计划"])
+
+
+@router.get("/api/plans/reviews/{review_id}")
+def read_review(
+    review_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)
+):
+    return review_detail(db, user_id=current_user.id, review_id=review_id)
+
+
+@router.post("/api/plans/reviews/{review_id}/answers")
+def submit_review(
+    review_id: int,
+    request: ReviewAnswerRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    generator=Depends(get_agent_generator),
+):
+    load_user_profiles(db, current_user.id)
+    return answer_review(
+        db,
+        user_id=current_user.id,
+        review_id=review_id,
+        request=request,
+        model_id=selected_model(request.model, current_user.id),
+        generator=generator,
+    )
 
 
 @router.get("/api/plans/today")

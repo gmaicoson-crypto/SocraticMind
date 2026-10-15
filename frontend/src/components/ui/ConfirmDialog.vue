@@ -16,7 +16,7 @@
         <div class="ui-confirm-dialog__content"><slot /></div>
         <div class="ui-confirm-dialog__actions">
           <BaseButton :disabled="loading" @click="emit('close')">{{ cancelText }}</BaseButton>
-          <BaseButton :loading="loading" @click="emit('confirm')">
+          <BaseButton class="primary" :loading="loading" @click="emit('confirm')">
             <template #loading>{{ loadingText }}</template>
             {{ confirmText }}
           </BaseButton>
@@ -79,7 +79,9 @@ const titleId = `confirm-title-${Math.random().toString(36).slice(2)}`
 .ui-confirm-dialog__title {
   margin: 0;
   color: var(--ink);
-  font-size: 15px;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.4;
 }
 .ui-confirm-dialog__content {
   margin-top: 12px;
@@ -89,8 +91,37 @@ const titleId = `confirm-title-${Math.random().toString(36).slice(2)}`
 }
 .ui-confirm-dialog__actions {
   display: flex;
+  flex-wrap: wrap;
   justify-content: flex-end;
   gap: 8px;
   margin-top: 18px;
+}
+.ui-confirm-dialog__actions :deep(.ui-button) {
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg-2);
+  color: var(--ink-2);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: filter var(--transition-fast);
+}
+.ui-confirm-dialog__actions :deep(.primary) {
+  border-color: var(--blue-2);
+  background: var(--blue-2);
+  color: var(--on-accent);
+}
+.ui-confirm-dialog__actions :deep(.ui-button:hover:not(:disabled)) {
+  filter: brightness(1.08);
+}
+.ui-confirm-dialog__actions :deep(.ui-button:focus-visible) {
+  outline: 2px solid var(--blue-2);
+  outline-offset: 3px;
+}
+.ui-confirm-dialog__actions :deep(.ui-button:disabled) {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 </style>

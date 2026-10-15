@@ -11,31 +11,27 @@
 
   <div v-if="showChips" class="chips-wrap">
     <div ref="chipsContentRef" class="chips-content">
-      <div v-if="chipsLoading" class="chips-list chips-loading">
-        <span v-for="i in 4" :key="i" class="chip-skeleton" />
-      </div>
-      <template v-else>
-        <div class="chips-list" :style="{ gap: `${chipGap}px` }">
-          <button
-            v-for="chip in visibleChips"
-            :key="chip"
-            class="chip"
-            :disabled="isThinking || isGenerating || sendDisabled"
-            @click="$emit('sendSuggestion', chip)"
-          >
-            {{ chip }}
-          </button>
-        </div>
+      <div class="chips-list" :style="{ gap: `${chipGap}px` }">
         <button
-          class="chip-refresh"
-          type="button"
-          title="换一批"
-          aria-label="换一批推荐对话"
-          @click="$emit('refreshChips', visibleChips)"
+          v-for="chip in visibleChips"
+          :key="chip"
+          class="chip"
+          :disabled="isThinking || isGenerating || sendDisabled"
+          @click="$emit('sendSuggestion', chip)"
         >
-          <RefreshCcw :size="14" aria-hidden="true" />
+          {{ chip }}
         </button>
-      </template>
+      </div>
+      <button
+        class="chip-refresh"
+        type="button"
+        title="换一批"
+        aria-label="换一批推荐对话"
+        :disabled="chipsLoading"
+        @click="$emit('refreshChips', visibleChips)"
+      >
+        <RefreshCcw :size="14" aria-hidden="true" />
+      </button>
       <div ref="chipsMeasureRef" class="chips-measure" aria-hidden="true">
         <button v-for="chip in chips" :key="chip" class="chip" tabindex="-1" type="button">
           {{ chip }}
@@ -50,6 +46,7 @@
         <button
           class="mode-btn"
           :class="{ active: chatMode === 'socratic' }"
+          :disabled="modeSwitchDisabled"
           title="学习模式"
           @click="$emit('update:chatMode', 'socratic')"
         >
@@ -70,6 +67,7 @@
         <button
           class="mode-btn"
           :class="{ active: chatMode === 'normal' }"
+          :disabled="modeSwitchDisabled"
           title="普通对话"
           @click="$emit('update:chatMode', 'normal')"
         >
@@ -164,7 +162,7 @@
       >
         <span v-if="isGenerating">处理中…</span>
         <template v-else>
-          发送
+          {{ sendLabel }}
           <svg
             width="13"
             height="13"
@@ -213,6 +211,8 @@ const props = withDefaults(
     attachmentError?: string
     sendDisabled?: boolean
     showChips?: boolean
+    modeSwitchDisabled?: boolean
+    sendLabel?: string
   }>(),
   {
     attachments: () => [],
@@ -223,6 +223,8 @@ const props = withDefaults(
     attachmentError: '',
     sendDisabled: false,
     showChips: true,
+    modeSwitchDisabled: false,
+    sendLabel: '发送',
   },
 )
 
@@ -497,17 +499,6 @@ defineExpose({ reset, focus })
   color: var(--ink);
   border-color: var(--line-2);
 }
-.chips-loading {
-  justify-content: center;
-}
-.chip-skeleton {
-  flex: 1 1 80px;
-  height: 24px;
-  background: var(--loading-gradient);
-  background-size: 200% 100%;
-  border-radius: 999px;
-  animation: shimmer 1.4s infinite;
-}
 .chips-measure {
   display: flex;
   gap: 6px;
@@ -521,15 +512,6 @@ defineExpose({ reset, focus })
 .chips-measure .chip {
   max-width: none;
 }
-@keyframes shimmer {
-  0% {
-    background-position: 200% 0;
-  }
-  100% {
-    background-position: -200% 0;
-  }
-}
-
 .input-wrap {
   flex-shrink: 0;
   padding: 10px 14px 12px;
@@ -584,6 +566,10 @@ defineExpose({ reset, focus })
   background: var(--surface);
   color: var(--blue-2);
   box-shadow: var(--control-shadow);
+}
+.mode-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 .mode-badge {
   display: inline-flex;

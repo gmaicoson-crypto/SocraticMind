@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import SocraticDialogue from '../SocraticDialogue.vue'
+import MessageList from '../dialogue/MessageList.vue'
+import DialogueInputBar from '../dialogue/DialogueInputBar.vue'
 import { createDefaultSession } from '../../composables/useChatSessions'
 import { useAgentStore } from '../../stores/agent'
 import { useLearningStore } from '../../stores/learning'
@@ -124,6 +126,30 @@ describe('learning session graph state', () => {
     expect(learning.nodes).toEqual([])
     expect(learning.activeNode).toBeNull()
     expect(dialogue.find('.mastery-dock').exists()).toBe(false)
+    dialogue.unmount()
+  })
+
+  it('keeps the node card in the overlay and preserves chat rows when it collapses', async () => {
+    startOnOldTopic()
+    const dialogue = mount(SocraticDialogue)
+    await flushPromises()
+    const list = dialogue.findComponent(MessageList)
+    const scroll = list.get('.dlg-messages').element
+    const messages = [...list.props('messages')]
+    const card = list.get('.mastery-dock')
+    expect(list.get('.message-overlay').element.contains(card.element)).toBe(true)
+    expect(scroll.contains(card.element)).toBe(false)
+
+    await card.get('button[aria-label="收起当前知识节点卡片"]').trigger('click')
+    expect(list.get('.dlg-messages').element).toBe(scroll)
+    expect(list.props('messages')).toEqual(messages)
+    await card.get('button[aria-label="展开当前知识节点卡片"]').trigger('click')
+    expect(card.get('.mastery-panel').attributes('aria-hidden')).toBe('false')
+    expect(list.get('.dlg-messages').element).toBe(scroll)
+
+    dialogue.findComponent(DialogueInputBar).vm.$emit('update:chatMode', 'normal')
+    await flushPromises()
+    expect(list.find('.mastery-dock').exists()).toBe(false)
     dialogue.unmount()
   })
 

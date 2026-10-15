@@ -143,7 +143,7 @@ def upsert_assessment_memories(
     node: Node,
     weaknesses: list[str],
     passed: bool,
-    confidence: float,
+    confidence: float | None,
 ) -> list[LearnerMemory]:
     entries: list[tuple[str, str]] = []
     if passed:

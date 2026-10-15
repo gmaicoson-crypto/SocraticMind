@@ -72,7 +72,24 @@ def test_parses_json_and_tracks_tokens():
     assert result.token_usage == 21
     assert result.attempts == 1
     assert calls[0]["temperature"] <= 0.3
-    assert calls[0]["timeout"] == 60
+    assert 0 < calls[0]["timeout"] <= settings.structured_ai_timeout_seconds
+
+
+def test_schema_is_provided_on_first_attempt_and_reused_without_mutating_messages():
+    original = [{"role": "user", "content": "Create questions"}]
+    client, calls = client_with(response("bad"), response(json.dumps(questions_payload())))
+    generate_structured(
+        DiagnosticQuestions,
+        original,
+        RunContext(run_id="schema-contract", call_type="diagnostic_questions"),
+        client=client,
+    )
+    assert original == [{"role": "user", "content": "Create questions"}]
+    for call in calls:
+        schema_messages = [message for message in call["messages"] if message["role"] == "system"]
+        assert len(schema_messages) == 1
+        content = schema_messages[0]["content"]
+        assert json.loads(content[content.index("{") :]) == DiagnosticQuestions.model_json_schema()
 
 
 @pytest.mark.parametrize(
@@ -172,16 +189,40 @@ def test_structured_schemas_enforce_question_count_and_score_total():
         DiagnosticQuestions.model_validate({"questions": questions_payload()["questions"][:2]})
 
     scores = [
-        QuestionScore(question_id=f"q{i}", score=4, rationale="Evidence") for i in range(1, 4)
+        QuestionScore(
+            question_id=f"q{i}",
+            score=80,
+            rationale="Evidence",
+            mastery_analysis="Understands concepts",
+            suggestions=["Practice examples"],
+            criterion_scores=[{"criterion_id": "c1", "score": 80, "rationale": "Band evidence"}],
+        )
+        for i in range(1, 4)
     ]
+    payload = {
+        "scores": [score.model_dump() for score in scores],
+        "total_score": 80,
+        "evidence": "Strong overall understanding",
+        "weaknesses": [],
+        "remediation_route": [
+            {"title": "Apply", "action": "Try a new example", "checkpoint": "Explain the result"}
+        ],
+    }
+    assert AssessmentScore.model_validate(payload).total_score == 80
+    with pytest.raises(ValidationError, match="rounded average"):
+        AssessmentScore.model_validate({**payload, "total_score": 79})
     with pytest.raises(ValidationError):
-        AssessmentScore(
-            scores=scores,
-            total_score=11,
-            evaluation_confidence=0.9,
-            critical_misconception=False,
-            evidence="Strong",
-            weaknesses=[],
+        AssessmentScore.model_validate(
+            {**payload, "scores": [dict(scores[0].model_dump(), score=101), *payload["scores"][1:]]}
+        )
+    with pytest.raises(ValidationError):
+        AssessmentScore.model_validate({**payload, "remediation_route": []})
+    with pytest.raises(ValidationError):
+        AssessmentScore.model_validate(
+            {
+                **payload,
+                "scores": [dict(scores[0].model_dump(), suggestions=[]), *payload["scores"][1:]],
+            }
         )
 
 
@@ -243,21 +284,42 @@ def test_optional_policy_respects_reasoning_model_temperature_and_token_paramete
     assert "max_tokens" not in calls[0]
 
 
-def test_optional_timeout_is_shared_by_repairs(monkeypatch):
+@pytest.mark.parametrize("explicit", [True, False])
+def test_timeout_is_shared_by_repairs(monkeypatch, explicit):
     from services.agent import structured_ai
 
     readings = iter([10, 10, 14, 14])
     monkeypatch.setattr(structured_ai, "perf_counter", lambda: next(readings))
+    monkeypatch.setattr(settings, "structured_ai_timeout_seconds", 5)
     client, calls = client_with(response("invalid"), response(json.dumps(questions_payload())))
     generate_structured(
         DiagnosticQuestions,
         [],
         RunContext(run_id="deadline", call_type="web_decision"),
         client=client,
-        timeout=5,
+        **({"timeout": 5} if explicit else {}),
     )
     assert calls[0]["timeout"] == 5
     assert calls[1]["timeout"] == 1
+
+
+def test_expired_budget_does_not_start_another_model_call(monkeypatch):
+    from services.agent import structured_ai
+
+    readings = iter([10, 10, 16])
+    monkeypatch.setattr(structured_ai, "perf_counter", lambda: next(readings))
+    monkeypatch.setattr(settings, "structured_ai_timeout_seconds", 5)
+    client, calls = client_with(response("invalid"))
+    with pytest.raises(StructuredAIError) as error:
+        generate_structured(
+            DiagnosticQuestions,
+            [],
+            RunContext(run_id="expired", call_type="assessment_questions"),
+            client=client,
+        )
+    assert error.value.code == "AI_TIMEOUT"
+    assert error.value.retryable is True
+    assert len(calls) == 1
 
 
 def test_absent_usage_preserves_legacy_count_but_is_explicitly_unknown():

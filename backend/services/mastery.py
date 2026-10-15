@@ -101,7 +101,7 @@ def record_mastery(
                 )
                 .first()
             )
-        if attempt is None or attempt.total_score is None or attempt.evaluation_confidence is None:
+        if attempt is None or attempt.total_score is None:
             raise ApiError(
                 status_code=409,
                 code="ASSESSMENT_EVIDENCE_REQUIRED",

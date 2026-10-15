@@ -13,10 +13,11 @@ interface DialogueSuggestionContext {
   nodeLabel?: string
   nodeSub?: string
   hasConversation?: boolean
-  conversationVersion?: string
+  completedTurns?: number
 }
 
 const CHIP_POOL_SIZE = 12
+const REFRESH_TURN_INTERVAL = 3
 const defaultChips = {
   socratic: [
     '我想学 Python',
@@ -189,23 +190,28 @@ export function useDialogueSuggestions(
   const chips = ref<string[]>([])
   const chipsLoading = ref(false)
   const context = computed(getContext)
-  const contextKey = computed(() => JSON.stringify(context.value))
-  // 对话追问仅保存在有上限的内存缓存中，按会话、节点和对话内容隔离。
-  const cache = new Map<string, string[]>()
+  const contextKey = computed(() => {
+    const { completedTurns: _, ...scope } = context.value
+    return JSON.stringify(scope)
+  })
+  // 按会话和节点复用推荐，每完成三轮对话再后台刷新，避免逐条回复触发请求。
+  const cache = new Map<string, { chips: string[]; completedTurns: number }>()
   let requestVersion = 0
   let loadingKey: string | null = null
+  let activeKey: string | undefined
 
   function cachedChips(key: string, scope: DialogueSuggestionContext) {
-    return cache.get(key) ?? loadCachedChips(scope)
+    return cache.get(key)?.chips ?? loadCachedChips(scope)
   }
 
   async function loadSuggestions(force = false, shown: string[] = []) {
     const scope = context.value
     const key = contextKey.value
     if (!enabled() || loadingKey === key) return
-    const cached = cachedChips(key, scope)
-    if (cached.length && !force) {
-      chips.value = cached
+    const completedTurns = scope.completedTurns ?? 0
+    const cached = cache.get(key)
+    if (cached && !force && completedTurns - cached.completedTurns < REFRESH_TURN_INTERVAL) {
+      chips.value = cached.chips
       return
     }
     const version = ++requestVersion
@@ -230,10 +236,8 @@ export function useDialogueSuggestions(
           : [...result.suggestions, ...previous, ...fallback],
         visible,
       )
+      rememberChips(key, completedTurns)
       if (result.source !== 'fallback' && chips.value.length === CHIP_POOL_SIZE) {
-        cache.delete(key)
-        cache.set(key, chips.value)
-        if (cache.size > 30) cache.delete(cache.keys().next().value!)
         const storageKey = cacheStorageKey(scope)
         if (storageKey) {
           try {
@@ -246,6 +250,7 @@ export function useDialogueSuggestions(
     } catch {
       if (version === requestVersion && key === contextKey.value) {
         chips.value = selectSuggestions([...previous, ...fallback], visible)
+        rememberChips(key, completedTurns)
       }
     } finally {
       if (version === requestVersion) {
@@ -255,15 +260,24 @@ export function useDialogueSuggestions(
     }
   }
 
+  function rememberChips(key: string, completedTurns: number) {
+    cache.delete(key)
+    cache.set(key, { chips: chips.value, completedTurns })
+    if (cache.size > 30) cache.delete(cache.keys().next().value!)
+  }
+
   watch(
-    [contextKey, enabled],
+    [contextKey, enabled, () => context.value.completedTurns ?? 0],
     ([key, canLoad]) => {
-      requestVersion += 1
-      loadingKey = null
-      chipsLoading.value = false
       const scope = context.value
-      const cached = cachedChips(key, scope)
-      chips.value = cached.length ? cached : fallbackChips(scope).slice(0, CHIP_POOL_SIZE)
+      if (key !== activeKey) {
+        activeKey = key
+        requestVersion += 1
+        loadingKey = null
+        chipsLoading.value = false
+        const cached = cachedChips(key, scope)
+        chips.value = cached.length ? cached : fallbackChips(scope).slice(0, CHIP_POOL_SIZE)
+      }
       if (canLoad && hasSuggestionContext(scope)) void loadSuggestions()
     },
     { immediate: true, flush: 'post' },
