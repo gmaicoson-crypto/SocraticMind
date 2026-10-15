@@ -20,7 +20,7 @@ from docx import Document
 from pptx import Presentation
 
 from services.attachments.config import isolation_available, libreoffice_path
-from services.attachments.worker import execute_parser
+from services.attachments.worker import _sandbox_command, execute_parser
 
 
 def cjk_fonts_present() -> bool:
@@ -77,8 +77,7 @@ def main() -> int:
                     str(directory),
                     str(source),
                 ],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
+                capture_output=True,
                 timeout=45,
                 env={
                     "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
@@ -97,6 +96,52 @@ def main() -> int:
             checks[legacy] = parsed.get("status") == "ready" and any(
                 "中文资料" in block["text"] for block in parsed.get("chunks", [])
             )
+            if not checks[legacy]:
+                # Controlled fixtures let us distinguish sandbox setup from parser resource limits.
+                diagnostic_output = directory / f"diagnostic-{legacy}"
+                diagnostic_output.mkdir()
+                command = _sandbox_command(old_source, diagnostic_output, executable)
+                converter = subprocess.run(
+                    [
+                        *command[: command.index(sys.executable)],
+                        executable,
+                        f"-env:UserInstallation={(diagnostic_output / 'profile').as_uri()}",
+                        "--headless",
+                        "--convert-to",
+                        modern,
+                        "--outdir",
+                        str(diagnostic_output),
+                        str(old_source),
+                    ],
+                    cwd=diagnostic_output,
+                    capture_output=True,
+                    timeout=45,
+                    env={
+                        "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
+                        "HOME": str(diagnostic_output),
+                        "TMPDIR": str(diagnostic_output),
+                        "LD_LIBRARY_PATH": str(Path(sys.base_prefix).resolve() / "lib"),
+                    },
+                )
+                print(
+                    json.dumps(
+                        {
+                            "format": legacy,
+                            "fixture_conversion_exit_code": result.returncode,
+                            "fixture_conversion_stderr": result.stderr.decode(errors="replace")[
+                                :2000
+                            ],
+                            "parser_result": parsed,
+                            "sandbox_conversion_exit_code": converter.returncode,
+                            "sandbox_conversion_stderr": converter.stderr.decode(errors="replace")[
+                                :2000
+                            ],
+                            "sandbox_converted_file": (diagnostic_output / source.name).exists(),
+                        },
+                        ensure_ascii=False,
+                        indent=2,
+                    )
+                )
     print(json.dumps({"ok": all(checks.values()), "checks": checks}, ensure_ascii=False, indent=2))
     return 0 if all(checks.values()) else 1
 
