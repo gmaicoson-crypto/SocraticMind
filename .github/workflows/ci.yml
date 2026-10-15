@@ -159,10 +159,24 @@ jobs:
           cache: pip
           cache-dependency-path: backend/requirements.txt
 
+      - name: Install attachment runtime
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            bubblewrap libreoffice-writer libreoffice-impress fonts-noto-cjk fontconfig
+
       - name: Install backend dependencies
         run: |
           python -m venv .venv
           .venv/bin/python -m pip install -r requirements.txt
+
+      - name: Check attachment runtime
+        env:
+          DATABASE_URL: sqlite://
+          SECRET_KEY: ci-test-secret
+        run: |
+          bwrap --unshare-all --die-with-parent --ro-bind / / /usr/bin/true
+          .venv/bin/python scripts/check_attachment_runtime.py
 
       - name: Check backend syntax
         run: .venv/bin/python -m compileall -q ai core models routers schemas services alembic main.py
