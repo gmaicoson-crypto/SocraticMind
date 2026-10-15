@@ -163,7 +163,19 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --yes --no-install-recommends \
-            bubblewrap libreoffice-writer libreoffice-impress fonts-noto-cjk fontconfig
+            apparmor bubblewrap fontconfig fonts-noto-cjk \
+            libreoffice-writer libreoffice-impress
+
+      - name: Allow Bubblewrap user namespaces on the CI runner
+        run: |
+          sudo tee /etc/apparmor.d/socraticmind-ci-bwrap >/dev/null <<'PROFILE'
+          abi <abi/4.0>,
+          include <tunables/global>
+          profile socraticmind-ci-bwrap /usr/bin/bwrap flags=(unconfined) {
+            userns,
+          }
+          PROFILE
+          sudo apparmor_parser --replace /etc/apparmor.d/socraticmind-ci-bwrap
 
       - name: Install backend dependencies
         run: |
