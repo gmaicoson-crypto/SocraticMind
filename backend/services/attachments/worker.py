@@ -135,6 +135,9 @@ def execute_parser(source: Path, output: Path, stop_event=None) -> dict:
         "LANG": "en_US.UTF-8",
         "PYTHONDONTWRITEBYTECODE": "1",
     }
+    if sys.platform == "linux":
+        # Shared Python builds need their own libraries; do not inherit arbitrary host paths.
+        environment["LD_LIBRARY_PATH"] = str(Path(sys.base_prefix).resolve() / "lib")
     started = time.monotonic()
     process = subprocess.Popen(
         command,

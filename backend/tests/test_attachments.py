@@ -527,3 +527,32 @@ def test_parser_deadline_terminates_process(tmp_path, monkeypatch):
     result = worker.execute_parser(source, output)
     assert result["error_code"] == "ATTACHMENT_PARSE_FAILED"
     assert "超时" in result["error_message"]
+
+
+@pytest.mark.parametrize("platform", ["linux", "darwin"])
+def test_parser_launch_uses_only_trusted_python_libraries(tmp_path, monkeypatch, platform):
+    from types import SimpleNamespace
+
+    source = tmp_path / "source.png"
+    source.write_bytes(image_bytes())
+    output = tmp_path / "out"
+    output.mkdir()
+    runtime = tmp_path / "python-runtime"
+    monkeypatch.setenv("LD_LIBRARY_PATH", "/untrusted-library-directory")
+    monkeypatch.setattr(worker, "sys", SimpleNamespace(platform=platform, base_prefix=str(runtime)))
+    monkeypatch.setattr(worker, "_sandbox_command", lambda *_: ["test-parser"])
+    monkeypatch.setattr(worker.os, "killpg", lambda *_: None)
+    launched = {}
+
+    def launch(command, **kwargs):
+        launched.update(kwargs)
+        (output / "result.json").write_text('{"status": "ready"}')
+        return SimpleNamespace(pid=12345, poll=lambda: 0, wait=lambda **_: 0)
+
+    monkeypatch.setattr(worker.subprocess, "Popen", launch)
+
+    assert worker.execute_parser(source, output)["status"] == "ready"
+    if platform == "linux":
+        assert launched["env"]["LD_LIBRARY_PATH"] == str(runtime / "lib")
+    else:
+        assert "LD_LIBRARY_PATH" not in launched["env"]
