@@ -105,7 +105,7 @@ def _sandbox_command(source: Path, output: Path, executable: str | None) -> list
     for path in {Path("/usr"), Path("/lib"), Path("/lib64"), Path("/bin"), *trusted}:
         if path.exists():
             result.extend(["--ro-bind", str(path), str(path)])
-    for path in (Path("/etc/fonts"), Path("/var/cache/fontconfig")):
+    for path in (Path("/etc/fonts"), Path("/etc/libreoffice"), Path("/var/cache/fontconfig")):
         if path.exists():
             result.extend(["--ro-bind", str(path), str(path)])
     result.extend(
