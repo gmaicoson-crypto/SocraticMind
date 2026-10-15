@@ -9,7 +9,7 @@
           </div>
           <button
             type="button"
-            class="close-button"
+            class="close-button ui-icon-button"
             aria-label="关闭"
             :disabled="busy"
             @click="close"
@@ -32,7 +32,12 @@
             class="file-input"
             @change="onFileChange"
           />
-          <button type="button" class="upload-button" :disabled="busy" @click="fileInput?.click()">
+          <button
+            type="button"
+            class="upload-button ui-icon-surface"
+            :disabled="busy"
+            @click="fileInput?.click()"
+          >
             <Upload :size="16" />
             {{ busy ? '上传中…' : '上传图片' }}
           </button>
@@ -123,15 +128,7 @@ function onFileChange(event: Event) {
   place-items: center;
   width: 28px;
   height: 28px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--ink-2);
   cursor: pointer;
-}
-
-.close-button:hover {
-  background: var(--bg-2);
 }
 
 .avatar-content {
@@ -157,17 +154,9 @@ function onFileChange(event: Event) {
   gap: 8px;
   width: 100%;
   min-height: 38px;
-  border: 1px solid var(--line);
-  border-radius: 7px;
-  background: var(--bg-2);
-  color: var(--ink);
   cursor: pointer;
   font: inherit;
   font-size: 13px;
-}
-
-.upload-button:hover:not(:disabled) {
-  border-color: var(--blue-2);
 }
 
 .upload-button:disabled,

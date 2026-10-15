@@ -1,21 +1,17 @@
 <template>
   <div class="dialogue-wrap">
     <DialogueHistoryPanel
+      ref="historyPanelRef"
       :show="showHistory"
       :chat-mode="chatMode"
       :sessions="currentSessions"
       :fallback-avatar-url="chatMode === 'normal' ? defaultNormalAiAvatar : defaultAiAvatar"
       :current-session-id="currentSessionId"
-      :editing-session-id="editingSessionInHeader ? null : editingSessionId"
-      :editing-name="editingName"
       @close="showHistory = false"
       @switch="switchSession"
       @new-session="newSession"
       @start-edit="startEdit"
-      @cancel-edit="cancelSessionNameEdit"
-      @save-name="saveSessionName"
-      @delete="deleteSession"
-      @update:editing-name="editingName = $event"
+      @delete="requestSessionDelete"
     />
 
     <div class="dlg-header">
@@ -39,13 +35,13 @@
             <button
               ref="sessionNameButtonRef"
               type="button"
-              class="session-name-edit"
+              class="session-name-edit ui-name-edit"
               :title="canRenameCurrentSession ? '编辑对话名称' : '发送消息后可编辑对话名称'"
               aria-label="编辑对话名称"
               :disabled="!canRenameCurrentSession || savingSessionName"
               @click="currentSession && startEdit(currentSession, true)"
             >
-              <Pencil :size="13" aria-hidden="true" />
+              <Pencil :size="13" class="icon-inherit" aria-hidden="true" />
             </button>
           </div>
           <div
@@ -62,36 +58,20 @@
       </div>
       <div class="dlg-actions">
         <button
-          class="hdr-btn"
+          class="hdr-btn ui-icon-button"
           title="对话历史"
           :disabled="assessmentActive"
           @click="showHistory = !showHistory"
         >
-          <svg
-            width="13"
-            height="13"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-          >
-            <path d="M12 8v4l3 3M3.05 11a9 9 0 1 0 .5-3" />
-            <path d="M3 4v4h4" />
-          </svg>
+          <History :size="13" aria-hidden="true" />
         </button>
-        <button class="hdr-btn" title="新建对话" :disabled="assessmentActive" @click="newSession">
-          <svg
-            width="13"
-            height="13"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-          >
-            <path d="M12 5v14M5 12h14" />
-          </svg>
+        <button
+          class="hdr-btn ui-icon-button"
+          title="新建对话"
+          :disabled="assessmentActive"
+          @click="newSession"
+        >
+          <Plus :size="13" aria-hidden="true" />
         </button>
       </div>
     </div>
@@ -116,6 +96,7 @@
       @change-ai-avatar="openAiAvatarPicker"
       @select-choice="sendChoiceText"
     >
+      <template #edge-control><SidebarExpandButton /></template>
       <template #agent>
         <OnboardingForm
           v-if="chatMode === 'socratic' && draftTopic && !activeAgentRun"
@@ -307,7 +288,7 @@
       }}
     </ConfirmDialog>
     <ConfirmDialog
-      :model-value="editingSessionInHeader && editingSessionId !== null"
+      :model-value="editingSessionId !== null"
       title="编辑对话名称"
       confirm-text="保存名称"
       loading-text="保存中…"
@@ -316,7 +297,7 @@
       @update:model-value="(value) => !value && cancelSessionNameEdit()"
       @confirm="editingSessionId && saveSessionName(editingSessionId)"
     >
-      <label class="session-name-field">
+      <label class="session-name-field ui-name-field">
         <span>对话名称</span>
         <input
           ref="sessionNameInputRef"
@@ -330,8 +311,30 @@
           @keydown.enter="saveSessionNameOnEnter"
         />
       </label>
-      <p v-if="sessionNameError" id="session-name-error" class="session-name-error" role="alert">
+      <p
+        v-if="sessionNameError"
+        id="session-name-error"
+        class="session-name-error ui-name-error"
+        role="alert"
+      >
         {{ sessionNameError }}
+      </p>
+    </ConfirmDialog>
+    <ConfirmDialog
+      :model-value="pendingSessionDelete !== null"
+      title="删除对话？"
+      confirm-text="确定删除"
+      loading-text="删除中…"
+      :loading="deletingSession"
+      @close="cancelSessionDelete"
+      @update:model-value="(value) => !value && cancelSessionDelete()"
+      @confirm="confirmSessionDelete"
+    >
+      <p class="session-delete-message">
+        确定删除「{{ pendingSessionDelete?.name }}」及其中的消息吗？此操作无法撤销。
+      </p>
+      <p v-if="sessionDeleteError" class="session-name-error ui-name-error" role="alert">
+        {{ sessionDeleteError }}
       </p>
     </ConfirmDialog>
   </div>
@@ -340,13 +343,13 @@
 <script setup lang="ts">
 // SocraticDialogue 组件，封装局部界面和交互逻辑。
 import { ref, watch, nextTick, computed, onMounted, onBeforeUnmount } from 'vue'
-import { Pencil } from '@lucide/vue'
+import { History, Pencil, Plus } from '@lucide/vue'
 import { useAttachmentDrafts } from '../composables/useAttachmentDrafts'
 import { useModelsStore } from '../stores/models'
 import { useLearningStore } from '../stores/learning'
 import { useAgentStore } from '../stores/agent'
 import { usePlansStore } from '../stores/plans'
-import type { DialogueSession as Session, Message } from '../types'
+import type { ChatMode, DialogueSession as Session, Message } from '../types'
 import type {
   AgentRun,
   AgentRunUpdate,
@@ -393,6 +396,7 @@ import { useOnboardingFlow } from '../composables/useOnboardingFlow'
 import { useAssessment } from '../composables/useAssessment'
 
 import DialogueHistoryPanel from './dialogue/DialogueHistoryPanel.vue'
+import SidebarExpandButton from './navigation/SidebarExpandButton.vue'
 import MessageList from './dialogue/MessageList.vue'
 import AiAvatarPickerModal from './dialogue/AiAvatarPickerModal.vue'
 import DialogueInputBar from './dialogue/DialogueInputBar.vue'
@@ -445,6 +449,7 @@ const streamingChoices = ref<{ label: string; text: string }[] | null>(null)
 const quotedText = ref('')
 const quotedSource = ref<{ dbId?: number; localId?: string } | null>(null)
 const showHistory = ref(false)
+const historyPanelRef = ref<InstanceType<typeof DialogueHistoryPanel> | null>(null)
 const avatarPickerSessionId = ref<string | null>(null)
 const avatarPickerBusy = ref(false)
 const avatarPickerError = ref('')
@@ -455,6 +460,9 @@ const savingSessionName = ref(false)
 const sessionNameError = ref('')
 const sessionNameInputRef = ref<HTMLInputElement | null>(null)
 const sessionNameButtonRef = ref<HTMLButtonElement | null>(null)
+const pendingSessionDelete = ref<{ id: string; name: string; mode: ChatMode } | null>(null)
+const deletingSession = ref(false)
+const sessionDeleteError = ref('')
 const masteryConfirm = ref<'self_report' | 'revert' | null>(null)
 const dismissedAssessmentNodeId = ref<number | null>(null)
 const startingAssessment = ref(false)
@@ -465,8 +473,6 @@ const currentTopicId = computed(() => Number(store.activeTopicId) || 0)
 const chatMode = ref<'socratic' | 'normal'>('socratic')
 const aiStyleOptions = ['温和', '标准', '严格'] as const
 const aiStyle = ref<string>(store.userInfo?.ai_style ?? '标准')
-
-const deletingSessionIds = new Set<string>()
 
 const currentSessionId = computed(() =>
   chatMode.value === 'socratic' ? socraticCurrentId.value : normalCurrentId.value,
@@ -1205,29 +1211,56 @@ watch(
   },
 )
 
-async function deleteSession(id: string) {
+function requestSessionDelete(id: string) {
+  if (deletingSession.value || savingSessionName.value || editingSessionId.value) return
   if (id === currentSessionId.value && blockDuringAssessment()) return
-  if (deletingSessionIds.has(id)) return
-  const sessions = chatMode.value === 'socratic' ? socraticSessions.value : normalSessions.value
-  const session = sessions.find((s) => s.id === id)
+  const session = currentSessions.value.find((session) => session.id === id)
   if (!session) return
+  pendingSessionDelete.value = { id, name: session.name, mode: chatMode.value }
+  sessionDeleteError.value = ''
+}
 
-  deletingSessionIds.add(id)
-  try {
-    await deleteChatSession(session.id)
-  } catch (err) {
-    // 后端未确认删除时保留页面数据，避免出现“看起来删了，刷新又回来”。
-    chatError.value = `删除对话失败：${chatErrorMessage(err)}`
+function cancelSessionDelete() {
+  if (deletingSession.value) return
+  const id = pendingSessionDelete.value?.id
+  pendingSessionDelete.value = null
+  sessionDeleteError.value = ''
+  if (id) nextTick(() => historyPanelRef.value?.focusAction(id, 'delete'))
+}
+
+async function confirmSessionDelete() {
+  const target = pendingSessionDelete.value
+  if (!target || deletingSession.value) return
+  const { id, mode } = target
+  if (mode === chatMode.value && id === currentSessionId.value && blockDuringAssessment()) return
+  const sessions = mode === 'socratic' ? socraticSessions.value : normalSessions.value
+  if (!sessions.some((session) => session.id === id)) {
+    cancelSessionDelete()
     return
-  } finally {
-    deletingSessionIds.delete(id)
   }
 
-  attachmentDrafts.discardScope(chatMode.value, id)
-  rememberRequest(id, null)
-  if (id === currentSessionId.value) resetSessionInteraction()
+  deletingSession.value = true
+  sessionDeleteError.value = ''
+  try {
+    await deleteChatSession(id)
+  } catch (err) {
+    // 后端未确认删除时保留页面数据，避免出现“看起来删了，刷新又回来”。
+    sessionDeleteError.value = `删除对话失败：${chatErrorMessage(err)}`
+    return
+  } finally {
+    deletingSession.value = false
+  }
 
-  if (chatMode.value === 'socratic') {
+  const remainingSessions = mode === 'socratic' ? socraticSessions.value : normalSessions.value
+  if (!remainingSessions.some((session) => session.id === id)) {
+    cancelSessionDelete()
+    return
+  }
+  attachmentDrafts.discardScope(mode, id)
+  rememberRequest(id, null)
+  if (mode === chatMode.value && id === currentSessionId.value) resetSessionInteraction()
+
+  if (mode === 'socratic') {
     if (socraticSessions.value.length <= 1) {
       socraticSessions.value[0] = createDefaultSession('socratic')
       socraticCurrentId.value = socraticSessions.value[0].id
@@ -1238,7 +1271,7 @@ async function deleteSession(id: string) {
         socraticCurrentId.value = socraticSessions.value[0].id
       }
     }
-    syncSessionTopic(currentSocraticSession.value)
+    if (chatMode.value === 'socratic') syncSessionTopic(currentSocraticSession.value)
   } else {
     if (normalSessions.value.length <= 1) {
       normalSessions.value[0] = createDefaultSession('normal')
@@ -1252,30 +1285,31 @@ async function deleteSession(id: string) {
     }
   }
   saveSessions()
+  cancelSessionDelete()
 }
 
 function startEdit(session: Session, inHeader = false) {
-  if (savingSessionName.value) return
+  if (savingSessionName.value || deletingSession.value || pendingSessionDelete.value) return
   editingSessionId.value = session.id
   editingName.value = session.name
   editingSessionInHeader.value = inHeader
   sessionNameError.value = ''
-  if (inHeader) {
-    showHistory.value = false
-    nextTick(() => {
-      sessionNameInputRef.value?.focus()
-      sessionNameInputRef.value?.select()
-    })
-  }
+  if (inHeader) showHistory.value = false
+  nextTick(() => {
+    sessionNameInputRef.value?.focus()
+    sessionNameInputRef.value?.select()
+  })
 }
 
 function cancelSessionNameEdit() {
   if (savingSessionName.value) return
   const restoreHeaderFocus = editingSessionInHeader.value
+  const id = editingSessionId.value
   editingSessionId.value = null
   editingSessionInHeader.value = false
   sessionNameError.value = ''
   if (restoreHeaderFocus) nextTick(() => sessionNameButtonRef.value?.focus())
+  else if (id) nextTick(() => historyPanelRef.value?.focusAction(id, 'rename'))
 }
 
 function saveSessionNameOnEnter(event: KeyboardEvent) {
@@ -1290,8 +1324,7 @@ async function saveSessionName(id: string) {
   const session = [...socraticSessions.value, ...normalSessions.value].find((s) => s.id === id)
   if (!session) return
   if (!name) {
-    if (editingSessionInHeader.value) sessionNameError.value = '请输入对话名称'
-    else chatError.value = '请输入对话名称'
+    sessionNameError.value = '请输入对话名称'
     return
   }
   savingSessionName.value = true
@@ -1302,9 +1335,7 @@ async function saveSessionName(id: string) {
     saved = true
   } catch (error) {
     if (editingSessionId.value !== id) return
-    const message = chatErrorMessage(error)
-    if (editingSessionInHeader.value) sessionNameError.value = message
-    else chatError.value = message
+    sessionNameError.value = chatErrorMessage(error)
   } finally {
     savingSessionName.value = false
   }
@@ -2247,57 +2278,9 @@ onBeforeUnmount(() => {
   text-overflow: ellipsis;
   max-width: 200px;
 }
-.session-name-edit {
-  display: flex;
-  flex-shrink: 0;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  padding: 0;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--ink-3);
-  cursor: pointer;
-}
-.session-name-edit:hover:not(:disabled) {
-  background: var(--bg-2);
-  color: var(--ink);
-}
-.session-name-edit:focus-visible {
-  outline: 2px solid var(--blue-2);
-  outline-offset: 2px;
-}
-.session-name-edit:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-.session-name-field {
-  display: grid;
-  gap: 8px;
-}
-.session-name-field input {
-  width: 100%;
-  min-width: 0;
-  padding: 9px 12px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--bg-2);
-  color: var(--ink);
-  font: inherit;
-}
-.session-name-field input:focus {
-  border-color: var(--blue-2);
-  outline: 2px solid var(--focus-ring);
-}
-.session-name-field input[aria-invalid='true'] {
-  border-color: var(--danger-ink);
-}
-.session-name-error {
-  margin: 8px 0 0;
-  color: var(--danger-ink);
-  font-size: 12px;
+.session-delete-message {
+  margin: 0;
+  overflow-wrap: anywhere;
 }
 
 .dlg-sub,
@@ -2317,17 +2300,10 @@ onBeforeUnmount(() => {
 .hdr-btn {
   width: 28px;
   height: 28px;
-  background: transparent;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  color: var(--ink-2);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-}
-.hdr-btn:hover {
-  background: var(--bg-2);
 }
 .hdr-btn:disabled {
   opacity: 0.5;

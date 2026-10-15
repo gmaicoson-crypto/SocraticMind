@@ -18,17 +18,7 @@
 
     <div class="search-outer" ref="searchRef">
       <div class="search-wrap" :class="{ focused }">
-        <svg
-          width="14"
-          height="14"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="var(--ink-3)"
-          stroke-width="2"
-        >
-          <circle cx="11" cy="11" r="7" />
-          <path d="M21 21 L17 17" />
-        </svg>
+        <Search :size="14" aria-hidden="true" />
         <input
           ref="inputRef"
           v-model="query"
@@ -46,18 +36,8 @@
           @keydown.enter.prevent="selectCurrent"
         />
         <span v-if="!query" class="kbd">⌘K</span>
-        <button v-else class="clear-btn" @mousedown.prevent @click="clearSearch">
-          <svg
-            width="12"
-            height="12"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-          >
-            <path d="M18 6L6 18M6 6l12 12" />
-          </svg>
+        <button v-else class="clear-btn ui-icon-button" @mousedown.prevent @click="clearSearch">
+          <X :size="12" aria-hidden="true" />
         </button>
       </div>
 
@@ -74,43 +54,9 @@
               @click="selectNode(item)"
             >
               <div class="item-icon" :class="item.state">
-                <svg
-                  v-if="item.state === 'mastered'"
-                  width="12"
-                  height="12"
-                  viewBox="0 0 16 16"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                >
-                  <path d="M3 8L7 12L13 4" />
-                </svg>
-                <svg
-                  v-else-if="item.state === 'locked'"
-                  width="12"
-                  height="12"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                >
-                  <rect x="3" y="11" width="18" height="11" rx="2" />
-                  <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-                </svg>
-                <svg
-                  v-else
-                  width="12"
-                  height="12"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                >
-                  <circle cx="12" cy="12" r="4" />
-                </svg>
+                <Check v-if="item.state === 'mastered'" :size="12" aria-hidden="true" />
+                <LockKeyhole v-else-if="item.state === 'locked'" :size="12" aria-hidden="true" />
+                <Circle v-else :size="12" aria-hidden="true" />
               </div>
               <div class="item-content">
                 <div class="item-title" v-html="highlight(item.label, query)" />
@@ -152,39 +98,32 @@
           class="search-dropdown"
         >
           <div class="no-result">
-            <svg
-              width="18"
-              height="18"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="var(--ink-3)"
-              stroke-width="1.5"
-            >
-              <circle cx="11" cy="11" r="7" />
-              <path d="M21 21 L17 17" />
-            </svg>
+            <Search :size="18" aria-hidden="true" />
             <span>没有找到「{{ query }}」相关内容</span>
           </div>
         </div>
       </Transition>
     </div>
 
-    <div style="flex: 1" />
+    <div class="topbar-spacer" />
 
-    <TopBarProgress :mastered="store.masteredCount" :total="store.totalCount" />
-
-    <div class="divider" />
-
-    <TopBarProfile
-      :username="store.userInfo?.username"
-      :avatar-url="store.userInfo?.avatar_url"
-      :level="userLevel"
-      @open="router.push('/profile')"
-    />
+    <div class="topbar-account-area">
+      <TopBarProgress
+        :mastered="store.overallProgress.mastered"
+        :total="store.overallProgress.total"
+      />
+      <TopBarProfile
+        :username="store.userInfo?.username"
+        :avatar-url="store.userInfo?.avatar_url"
+        :level="userLevel"
+        @open="router.push('/profile')"
+      />
+    </div>
   </header>
 </template>
 
 <script setup lang="ts">
+import { Check, Circle, LockKeyhole, Search, X } from '@lucide/vue'
 // TopBar 组件，封装局部界面和交互逻辑。
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
@@ -259,11 +198,25 @@ onMounted(async () => {
 .divider {
   width: 1px;
   height: 28px;
+  flex-shrink: 0;
   background: var(--line);
 }
 
-.search-outer {
+.topbar-spacer {
   flex: 1;
+  min-width: 0;
+}
+
+.topbar-account-area {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 24px;
+}
+
+.search-outer {
+  flex: 1 1 260px;
+  min-width: 0;
   max-width: 460px;
   position: relative;
 }
@@ -286,6 +239,7 @@ onMounted(async () => {
 }
 .search-wrap input {
   flex: 1;
+  min-width: 0;
   border: none;
   outline: none;
   background: transparent;
@@ -307,18 +261,11 @@ onMounted(async () => {
   white-space: nowrap;
 }
 .clear-btn {
-  background: transparent;
-  border: none;
   cursor: pointer;
-  color: var(--ink-3);
   padding: 0;
   display: flex;
   align-items: center;
-  border-radius: 4px;
   transition: color 0.15s;
-}
-.clear-btn:hover {
-  color: var(--ink);
 }
 
 .search-dropdown {
@@ -358,6 +305,7 @@ onMounted(async () => {
 }
 
 .item-icon {
+  --icon-color: currentColor;
   width: 28px;
   height: 28px;
   border-radius: 8px;
@@ -438,81 +386,20 @@ onMounted(async () => {
   transform: translateY(-6px);
 }
 
-.progress-wrap {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 170px;
-}
-.progress-label {
-  display: flex;
-  justify-content: space-between;
-  font-size: 10.5px;
-  color: var(--ink-3);
-  font-family: var(--font-mono);
-}
-.progress-count {
-  color: var(--ink-2);
-  font-weight: 600;
-}
-.progress-track {
-  height: 6px;
-  border-radius: 999px;
-  background: var(--bg-3);
-  border: 1px solid var(--line);
-  overflow: hidden;
-}
-.progress-fill {
-  height: 100%;
-  background: var(--progress-gradient);
-  border-radius: 999px;
-  transition: width 0.4s ease;
+@media (max-width: 900px) {
+  .topbar {
+    gap: 12px;
+  }
+
+  .kbd {
+    display: none;
+  }
+
+  .topbar-account-area {
+    gap: 16px;
+  }
 }
 
-.profile-wrap {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 4px 8px;
-  border-radius: 10px;
-  transition: background 0.15s;
-}
-.profile-wrap:hover {
-  background: var(--bg-2);
-}
-.profile-info {
-  text-align: right;
-}
-.profile-name {
-  font-size: 12.5px;
-  font-weight: 600;
-  color: var(--ink);
-}
-.profile-level {
-  font-size: 10px;
-  color: var(--blue-2);
-  font-family: var(--font-mono);
-  letter-spacing: 0.05em;
-  margin-top: 1px;
-}
-.avatar {
-  width: 36px;
-  height: 36px;
-  background: var(--avatar-bg);
-  color: var(--on-accent);
-  font-size: 13px;
-  font-weight: 700;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 10px;
-  overflow: hidden;
-}
-.avatar .avatar-img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
 @media (max-width: 760px) {
   .topbar {
     height: 52px;
@@ -524,23 +411,8 @@ onMounted(async () => {
     height: 44px;
   }
   .search-outer,
-  .topbar > .divider,
-  .topbar :deep(.progress-wrap) {
+  .topbar > .divider {
     display: none;
-  }
-  .topbar > div[style] {
-    min-width: 0;
-  }
-  .topbar :deep(.profile-info) {
-    display: none;
-  }
-  .topbar :deep(.profile-wrap) {
-    padding: 2px;
-  }
-  .topbar :deep(.avatar) {
-    width: 32px;
-    height: 32px;
-    border-radius: 8px;
   }
 }
 </style>

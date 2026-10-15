@@ -25,19 +25,7 @@
     />
 
     <div v-if="store.totalCount === 0" class="empty-graph">
-      <svg
-        width="48"
-        height="48"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="var(--ink-3)"
-        stroke-width="1"
-      >
-        <circle cx="12" cy="5" r="2" />
-        <circle cx="5" cy="19" r="2" />
-        <circle cx="19" cy="19" r="2" />
-        <path d="M12 7v4M12 11L5 17M12 11L19 17" />
-      </svg>
+      <Network :size="48" aria-hidden="true" />
       <div class="empty-title">暂无知识图谱</div>
       <div class="empty-sub">在左侧对话框告诉 AI 你想学什么</div>
     </div>
@@ -46,17 +34,23 @@
 
     <Transition name="toast">
       <div v-if="showLockedToast" class="graph-toast" role="status" aria-live="polite">
-        <LockKeyhole :size="14" aria-hidden="true" />
+        <LockKeyhole :size="14" class="icon-inherit" aria-hidden="true" />
         请先掌握前置节点
       </div>
     </Transition>
 
     <div class="controls">
-      <button class="ctrl-btn" type="button" title="居中" aria-label="居中" @click="resetView">
+      <button
+        class="ctrl-btn ui-icon-button"
+        type="button"
+        title="居中"
+        aria-label="居中"
+        @click="resetView"
+      >
         <Focus :size="14" aria-hidden="true" />
       </button>
       <button
-        class="ctrl-btn"
+        class="ctrl-btn ui-icon-button"
         type="button"
         title="复原初始布局"
         aria-label="复原初始布局"
@@ -64,10 +58,22 @@
       >
         <RotateCcw :size="14" aria-hidden="true" />
       </button>
-      <button class="ctrl-btn" type="button" title="放大" aria-label="放大" @click="zoomIn">
+      <button
+        class="ctrl-btn ui-icon-button"
+        type="button"
+        title="放大"
+        aria-label="放大"
+        @click="zoomIn"
+      >
         <Plus :size="14" aria-hidden="true" />
       </button>
-      <button class="ctrl-btn" type="button" title="缩小" aria-label="缩小" @click="zoomOut">
+      <button
+        class="ctrl-btn ui-icon-button"
+        type="button"
+        title="缩小"
+        aria-label="缩小"
+        @click="zoomOut"
+      >
         <Minus :size="14" aria-hidden="true" />
       </button>
     </div>
@@ -77,7 +83,7 @@
 <script setup lang="ts">
 // KnowledgeGraph 组件，封装局部界面和交互逻辑。
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
-import { Focus, RotateCcw, Plus, Minus, LockKeyhole } from '@lucide/vue'
+import { Focus, LockKeyhole, Minus, Network, Plus, RotateCcw } from '@lucide/vue'
 import { useLearningStore } from '../stores/learning'
 import type { KNode } from '../types'
 import ThreeGraphCanvas from './graph/ThreeGraphCanvas.vue'
@@ -388,14 +394,7 @@ function handleActivate(node: KNode) {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: transparent;
-  color: var(--ink-2);
-  border: none;
-  border-radius: 6px;
   cursor: pointer;
-}
-.ctrl-btn:hover {
-  background: var(--bg-3);
 }
 @media (max-width: 500px) {
   .graph-header {

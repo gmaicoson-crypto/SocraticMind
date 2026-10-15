@@ -28,15 +28,7 @@
                   decoding="async"
                 />
                 <div class="avatar-edit">
-                  <svg
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="var(--on-accent)"
-                    stroke-width="2.5"
-                    stroke-linecap="round"
-                  >
-                    <path d="M12 20h9M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4 12.5-12.5z" />
-                  </svg>
+                  <Pencil :size="10" class="icon-inherit" aria-hidden="true" />
                 </div>
               </button>
               <input
@@ -73,17 +65,7 @@
               <div class="field ui-field">
                 <label>用户名</label>
                 <div class="field-input" :class="{ focused: focusField === 'name' }">
-                  <svg
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    width="13"
-                    height="13"
-                  >
-                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                    <circle cx="12" cy="7" r="4" />
-                  </svg>
+                  <UserRound :size="13" aria-hidden="true" />
                   <input
                     v-model="form.name"
                     type="text"
@@ -98,16 +80,7 @@
               <div class="field ui-field">
                 <label>个性签名</label>
                 <div class="field-input" :class="{ focused: focusField === 'bio' }">
-                  <svg
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    width="13"
-                    height="13"
-                  >
-                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-                  </svg>
+                  <MessageSquare :size="13" aria-hidden="true" />
                   <input
                     v-model="form.bio"
                     type="text"
@@ -121,19 +94,7 @@
               <div class="field ui-field">
                 <label>邮箱地址</label>
                 <div class="field-input readonly">
-                  <svg
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    width="13"
-                    height="13"
-                  >
-                    <path
-                      d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"
-                    />
-                    <polyline points="22,6 12,13 2,6" />
-                  </svg>
+                  <Mail :size="13" aria-hidden="true" />
                   <input type="email" :value="form.email" disabled />
                 </div>
               </div>
@@ -231,31 +192,8 @@
             @click="handleSave"
           >
             <div v-if="saving" class="spinner" />
-            <svg
-              v-else-if="savedDone"
-              width="13"
-              height="13"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="var(--on-accent)"
-              stroke-width="2.5"
-              stroke-linecap="round"
-            >
-              <path d="M20 6L9 17l-5-5" />
-            </svg>
-            <svg
-              v-else
-              width="13"
-              height="13"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="var(--on-accent)"
-              stroke-width="2.5"
-              stroke-linecap="round"
-            >
-              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
-              <path d="M17 21v-8H7v8M7 3v5h8" />
-            </svg>
+            <Check v-else-if="savedDone" :size="13" class="icon-inherit" aria-hidden="true" />
+            <Save v-else :size="13" class="icon-inherit" aria-hidden="true" />
             {{ saving ? '保存中…' : savedDone ? '已保存' : '保存更改' }}
           </button>
         </div>
@@ -265,6 +203,7 @@
 </template>
 
 <script setup lang="ts">
+import { Check, Mail, MessageSquare, Pencil, Save, UserRound } from '@lucide/vue'
 // EditProfileModal 组件，封装局部界面和交互逻辑。
 import { ref, reactive, computed, onBeforeUnmount, defineAsyncComponent } from 'vue'
 import { useRouter } from 'vue-router'
@@ -658,6 +597,7 @@ async function handleDeleteAccount(payload: { password: string; confirm: string 
 }
 
 .avatar-edit {
+  color: var(--on-accent);
   position: absolute;
   bottom: -4px;
   right: -4px;

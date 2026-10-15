@@ -47,7 +47,7 @@
       >
         <span class="quote-bar" />
         <span class="quote-text">{{ message.quote }}</span>
-        <ArrowUpRight :size="14" aria-hidden="true" />
+        <ArrowUpRight :size="14" class="icon-inherit" aria-hidden="true" />
       </button>
       <div v-else-if="message.quote" class="msg-quote">
         <span class="quote-bar" />

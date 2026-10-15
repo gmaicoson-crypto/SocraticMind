@@ -4,20 +4,7 @@
       <div class="md-help-modal">
         <div class="md-help-header">
           <div class="md-help-title">
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
-              <circle cx="12" cy="12" r="10" />
-              <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
-              <line x1="12" y1="17" x2="12.01" y2="17" />
-            </svg>
+            <CircleHelp :size="14" aria-hidden="true" />
             Markdown 语法速查
           </div>
           <button class="md-help-close ui-modal-close" @click="$emit('close')">✕</button>
@@ -54,6 +41,7 @@
 </template>
 
 <script setup lang="ts">
+import { CircleHelp } from '@lucide/vue'
 // MarkdownHelpModal 组件，封装局部界面和交互逻辑。
 import { ref, computed } from 'vue'
 import { marked } from 'marked'
@@ -210,9 +198,6 @@ const activeGroup = ref(rawGroups[0].id)
   font-size: 14px;
   font-weight: 600;
   color: var(--ink);
-}
-.md-help-title svg {
-  color: var(--blue-2);
 }
 .md-help-body {
   flex: 1;

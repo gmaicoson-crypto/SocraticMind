@@ -30,6 +30,7 @@ export const useLearningStore = defineStore('learning', () => {
     masteredCount,
     totalCount,
     availableCount,
+    overallProgress,
   } = storeToRefs(topicsStore)
   const { messages, pendingTopicOverviewId } = storeToRefs(dialogueStore)
   const { streakData } = storeToRefs(progressStore)
@@ -53,6 +54,7 @@ export const useLearningStore = defineStore('learning', () => {
     masteredCount,
     totalCount,
     availableCount,
+    overallProgress,
     agentRun,
     agentSubmitting,
     agentError,

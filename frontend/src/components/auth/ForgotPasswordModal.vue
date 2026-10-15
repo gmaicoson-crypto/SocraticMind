@@ -4,19 +4,7 @@
       <div class="fp-modal">
         <div class="fp-header">
           <div class="fp-title">
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
-              <rect x="3" y="11" width="18" height="11" rx="2" />
-              <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-            </svg>
+            <LockKeyhole :size="14" aria-hidden="true" />
             重置密码
           </div>
           <button class="fp-close ui-modal-close" @click="onClose">✕</button>
@@ -88,6 +76,7 @@
 </template>
 
 <script setup lang="ts">
+import { LockKeyhole } from '@lucide/vue'
 // ForgotPasswordModal 组件，封装局部界面和交互逻辑。
 import { ref, computed, onBeforeUnmount, watch } from 'vue'
 import { sendVerificationCode, resetPassword } from '../../api/auth'
@@ -235,9 +224,6 @@ onBeforeUnmount(() => {
   font-size: 14px;
   font-weight: 600;
   color: var(--ink);
-}
-.fp-title svg {
-  color: var(--blue-2);
 }
 .fp-body {
   padding: 18px 22px 22px;

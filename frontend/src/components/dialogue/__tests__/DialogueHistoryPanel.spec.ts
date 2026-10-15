@@ -6,14 +6,13 @@ import DialogueHistoryPanel from '../DialogueHistoryPanel.vue'
 
 function mountHistory(sessions: DialogueSession[]) {
   return mount(DialogueHistoryPanel, {
+    attachTo: document.body,
     props: {
       show: true,
       chatMode: 'socratic',
       sessions,
       fallbackAvatarUrl: '',
       currentSessionId: sessions[0].id,
-      editingSessionId: null,
-      editingName: '',
     },
   })
 }
@@ -49,15 +48,25 @@ describe('dialogue history presentation', () => {
     const session = createDefaultSession('normal')
     session.messages.push({ role: 'user', text: '问题', time: '' })
     const wrapper = mountHistory([session])
+    expect(wrapper.get('[title="重命名"]').classes()).toContain('ui-icon-button')
+    expect(wrapper.get('[title="删除"]').classes()).toContain('ui-icon-button')
     await wrapper.get('[title="重命名"]').trigger('click')
     expect(wrapper.emitted('startEdit')?.[0]).toEqual([session])
-    await wrapper.setProps({ editingSessionId: session.id, editingName: '新的概括' })
-    await wrapper.get('.history-name-input').trigger('keydown.enter')
-    expect(wrapper.emitted('saveName')?.[0]).toEqual([session.id])
-    await wrapper.setProps({ editingSessionId: null })
     await wrapper.get('[title="删除"]').trigger('click')
     expect(wrapper.emitted('delete')?.[0]).toEqual([session.id])
+    expect(wrapper.emitted('switch')).toBeUndefined()
     expect(wrapper.get('.history-count').text()).toBe('1 条')
+    wrapper.unmount()
+  })
+
+  it('returns focus to the action after a dialog closes and falls back after deletion', () => {
+    const session = createDefaultSession('normal')
+    session.messages.push({ role: 'user', text: '问题', time: '' })
+    const wrapper = mountHistory([session])
+    wrapper.vm.focusAction(session.id, 'rename')
+    expect(document.activeElement).toBe(wrapper.get('[title="重命名"]').element)
+    wrapper.vm.focusAction('deleted-session', 'delete')
+    expect(document.activeElement).toBe(wrapper.get('[title="关闭对话历史"]').element)
     wrapper.unmount()
   })
 

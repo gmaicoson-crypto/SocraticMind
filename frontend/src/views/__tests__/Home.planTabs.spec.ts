@@ -13,7 +13,7 @@ describe('Home plan tab', () => {
     })
   })
 
-  it('shows the third right-side panel tab', async () => {
+  it('opens the learning plan tab', async () => {
     const wrapper = mount(Home, {
       global: {
         plugins: [createPinia()],
@@ -29,7 +29,7 @@ describe('Home plan tab', () => {
     })
     const tab = wrapper
       .findAll('.right-tab')
-      .find((candidate) => candidate.text().includes('今日计划'))
+      .find((candidate) => candidate.text().includes('学习计划'))
     expect(tab).toBeTruthy()
     await tab!.trigger('click')
     expect(tab!.classes()).toContain('active')

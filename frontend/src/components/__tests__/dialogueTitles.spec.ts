@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, shallowMount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
-import { getAllMessages, chatStream } from '../../api/chat'
+import { getAllMessages, chatStream, deleteChatSession } from '../../api/chat'
 import { getSessionTitles, renameSessionTitle, requestSessionTitle } from '../../api/sessionTitles'
 import { createDefaultSession } from '../../composables/useChatSessions'
 import { useLearningStore } from '../../stores/learning'
@@ -18,6 +18,7 @@ vi.mock('../../api/chat', () => ({
   getSuggestions: vi.fn().mockResolvedValue([]),
   chatStream: vi.fn(),
   cancelChatStream: vi.fn().mockResolvedValue(undefined),
+  deleteChatSession: vi.fn(),
 }))
 vi.mock('../../api/sessionTitles', () => ({
   getSessionTitles: vi.fn().mockResolvedValue([]),
@@ -40,9 +41,11 @@ async function mountDialogue(mode: ChatMode) {
       stubs: {
         MessageList: false,
         DialogueInputBar: false,
+        DialogueHistoryPanel: false,
         ConfirmDialog: false,
         BaseModal: false,
         BaseButton: false,
+        IconButton: false,
         teleport: true,
       },
     },
@@ -53,12 +56,32 @@ async function mountDialogue(mode: ChatMode) {
   return wrapper
 }
 
+function seedHistory(mode: ChatMode, count = 2) {
+  const sessions = Array.from({ length: count }, (_, index) => {
+    const session = createDefaultSession(mode)
+    session.messages.push({ role: 'user', text: `问题 ${index + 1}`, time: '10:00' })
+    return session
+  })
+  localStorage.setItem(`sm_${mode}_sessions`, JSON.stringify(sessions))
+  localStorage.setItem(`sm_${mode}_cur`, sessions[0].id)
+  vi.mocked(getSessionTitles).mockResolvedValue(
+    sessions.map((session, index) => ({
+      session_id: session.id,
+      title: `历史对话 ${index + 1}`,
+      status: 'ready',
+      retry_pending: false,
+    })),
+  )
+  return sessions
+}
+
 describe('AI titles in learning and normal conversations', () => {
   beforeEach(() => {
     localStorage.clear()
     vi.clearAllMocks()
     vi.mocked(getAllMessages).mockResolvedValue([])
     vi.mocked(getSessionTitles).mockResolvedValue([])
+    vi.mocked(deleteChatSession).mockReset().mockResolvedValue(1)
     setActivePinia(createPinia())
     useUserStore().setUserInfo({
       id: 1,
@@ -132,14 +155,134 @@ describe('AI titles in learning and normal conversations', () => {
     })
     const history = wrapper.findComponent(DialogueHistoryPanel)
     history.vm.$emit('startEdit', history.props('sessions')[0])
-    history.vm.$emit('update:editingName', '手动笔记')
-    history.vm.$emit('saveName', session.id)
+    await flushPromises()
+    await wrapper.get('.session-name-field input').setValue('手动笔记')
+    await wrapper.get('[role="alertdialog"] .primary').trigger('click')
     await flushPromises()
     expect(renameSessionTitle).toHaveBeenCalledWith(session.id, '手动笔记')
     expect(wrapper.get('.dlg-title').text()).toBe('手动笔记')
     window.dispatchEvent(new Event('pagehide'))
     expect(JSON.parse(localStorage.getItem('sm_socratic_sessions')!)[0]).not.toHaveProperty('name')
   })
+
+  it.each(['socratic', 'normal'] as const)(
+    'edits another %s history entry in a dialog and cancels without changing the session',
+    async (mode) => {
+      const sessions = seedHistory(mode)
+      const wrapper = await mountDialogue(mode)
+      await wrapper.get('[title="对话历史"]').trigger('click')
+      const history = wrapper.findComponent(DialogueHistoryPanel)
+      const rename = history.get(`[data-session-id="${sessions[1].id}"] [title="重命名"]`)
+      await rename.trigger('click')
+      const dialog = wrapper.get('[role="alertdialog"]')
+      expect(dialog.get('h2').text()).toBe('编辑对话名称')
+      const input = dialog.get('input')
+      expect((input.element as HTMLInputElement).value).toBe('历史对话 2')
+      await input.setValue('未保存的修改')
+      await dialog.findAll('button')[0].trigger('click')
+      expect(wrapper.find('[role="alertdialog"]').exists()).toBe(false)
+      expect(renameSessionTitle).not.toHaveBeenCalled()
+      expect(history.props('sessions')[1].name).toBe('历史对话 2')
+      expect(history.props('currentSessionId')).toBe(sessions[0].id)
+      expect(history.find('.history-panel').exists()).toBe(true)
+
+      await rename.trigger('click')
+      expect((wrapper.get('.session-name-field input').element as HTMLInputElement).value).toBe(
+        '历史对话 2',
+      )
+      vi.mocked(renameSessionTitle).mockResolvedValueOnce({
+        session_id: sessions[1].id,
+        title: '历史学习笔记',
+        status: 'manual',
+        retry_pending: false,
+      })
+      await wrapper.get('.session-name-field input').setValue('  历史学习笔记  ')
+      await wrapper.get('[role="alertdialog"] .primary').trigger('click')
+      await flushPromises()
+      expect(renameSessionTitle).toHaveBeenCalledWith(sessions[1].id, '历史学习笔记')
+      expect(history.props('sessions')[1].name).toBe('历史学习笔记')
+      expect(history.props('currentSessionId')).toBe(sessions[0].id)
+      expect(wrapper.find('[role="alertdialog"]').exists()).toBe(false)
+    },
+  )
+
+  it.each(['socratic', 'normal'] as const)(
+    'waits for confirmation and server success before deleting a %s history entry',
+    async (mode) => {
+      const sessions = seedHistory(mode)
+      const wrapper = await mountDialogue(mode)
+      await wrapper.get('[title="对话历史"]').trigger('click')
+      const history = wrapper.findComponent(DialogueHistoryPanel)
+      const remove = history.get(`[data-session-id="${sessions[1].id}"] [title="删除"]`)
+      await remove.trigger('click')
+      expect(wrapper.get('[role="alertdialog"]').text()).toContain('历史对话 2')
+      expect(deleteChatSession).not.toHaveBeenCalled()
+      await wrapper.get('[role="alertdialog"]').findAll('button')[0].trigger('click')
+      expect(wrapper.find('[role="alertdialog"]').exists()).toBe(false)
+      expect(history.props('sessions')).toHaveLength(2)
+      expect(deleteChatSession).not.toHaveBeenCalled()
+
+      let resolveDelete!: (value: number) => void
+      vi.mocked(deleteChatSession).mockImplementationOnce(
+        () => new Promise<number>((resolve) => (resolveDelete = resolve)),
+      )
+      await remove.trigger('click')
+      const confirm = wrapper.get('[role="alertdialog"] .primary')
+      await confirm.trigger('click')
+      await confirm.trigger('click')
+      expect(deleteChatSession).toHaveBeenCalledTimes(1)
+      expect(deleteChatSession).toHaveBeenCalledWith(sessions[1].id)
+      expect(history.props('sessions')).toHaveLength(2)
+      expect(wrapper.get('[role="alertdialog"]').text()).toContain('删除中…')
+      expect(
+        wrapper.get('[role="alertdialog"]').findAll('button')[0].attributes('disabled'),
+      ).toBeDefined()
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+      await flushPromises()
+      expect(wrapper.find('[role="alertdialog"]').exists()).toBe(true)
+      resolveDelete(1)
+      await flushPromises()
+      expect(history.props('sessions').map((session) => session.id)).toEqual([sessions[0].id])
+      expect(history.props('currentSessionId')).toBe(sessions[0].id)
+      expect(wrapper.find('[role="alertdialog"]').exists()).toBe(false)
+    },
+  )
+
+  it('retains the history and shows a retryable error when deletion fails', async () => {
+    const sessions = seedHistory('normal')
+    const wrapper = await mountDialogue('normal')
+    await wrapper.get('[title="对话历史"]').trigger('click')
+    const history = wrapper.findComponent(DialogueHistoryPanel)
+    await history.get(`[data-session-id="${sessions[1].id}"] [title="删除"]`).trigger('click')
+    vi.mocked(deleteChatSession).mockRejectedValueOnce(new Error('网络中断'))
+    await wrapper.get('[role="alertdialog"] .primary').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[role="alertdialog"] [role="alert"]').text()).toContain('网络中断')
+    expect(history.props('sessions')).toHaveLength(2)
+    await wrapper.get('[role="alertdialog"] .primary').trigger('click')
+    await flushPromises()
+    expect(history.props('sessions')).toHaveLength(1)
+    expect(wrapper.find('[role="alertdialog"]').exists()).toBe(false)
+  })
+
+  it.each(['socratic', 'normal'] as const)(
+    'creates a new %s conversation after confirming deletion of its final history entry',
+    async (mode) => {
+      const [session] = seedHistory(mode, 1)
+      const wrapper = await mountDialogue(mode)
+      await wrapper.get('[title="对话历史"]').trigger('click')
+      const history = wrapper.findComponent(DialogueHistoryPanel)
+      await history.get('[title="删除"]').trigger('click')
+      await wrapper.get('[role="alertdialog"] .primary').trigger('click')
+      await flushPromises()
+      expect(deleteChatSession).toHaveBeenCalledWith(session.id)
+      expect(history.props('sessions')).toHaveLength(1)
+      expect(history.props('sessions')[0].id).not.toBe(session.id)
+      expect(history.props('sessions')[0].name).toBe('新对话')
+      expect(wrapper.get('.dlg-title').text()).toBe('新对话')
+      expect(wrapper.find('[role="alertdialog"]').exists()).toBe(false)
+    },
+  )
 
   it.each(['socratic', 'normal'] as const)(
     'renames the %s session from the header and synchronizes history without changing its topic or node',
@@ -188,7 +331,7 @@ describe('AI titles in learning and normal conversations', () => {
       const dialog = wrapper.get('[role="alertdialog"]')
       const nameInput = dialog.get('input')
       expect((nameInput.element as HTMLInputElement).value).toBe('Redis 与 MySQL 的区别')
-      expect(wrapper.findComponent(DialogueHistoryPanel).props('editingSessionId')).toBeNull()
+      expect(wrapper.find('.history-name-input').exists()).toBe(false)
       await nameInput.setValue('  我的 Redis 学习笔记  ')
       await nameInput.trigger('keydown.enter')
       await flushPromises()

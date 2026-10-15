@@ -32,20 +32,7 @@
               :class="{ active: rightPanel === 'graph' }"
               @click="setRightPanel('graph')"
             >
-              <svg
-                width="13"
-                height="13"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-              >
-                <circle cx="12" cy="5" r="2" />
-                <circle cx="5" cy="19" r="2" />
-                <circle cx="19" cy="19" r="2" />
-                <path d="M12 7v4M12 11L5 17M12 11L19 17" />
-              </svg>
+              <Network :size="13" aria-hidden="true" />
               知识图谱
             </button>
             <button
@@ -53,17 +40,7 @@
               :class="{ active: rightPanel === 'notes' }"
               @click="setRightPanel('notes')"
             >
-              <svg
-                width="13"
-                height="13"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-              >
-                <path d="M4 6H20M4 12H20M4 18H14" />
-              </svg>
+              <NotebookPen :size="13" aria-hidden="true" />
               笔记与画布
             </button>
             <button
@@ -71,19 +48,8 @@
               :class="{ active: rightPanel === 'plan' }"
               @click="setRightPanel('plan')"
             >
-              <svg
-                width="13"
-                height="13"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-              >
-                <path d="M8 2v4M16 2v4M3 9h18M5 4h14a2 2 0 0 1 2 2v14H3V6a2 2 0 0 1 2-2Z" />
-                <path d="m8 15 2 2 5-5" />
-              </svg>
-              今日计划
+              <CalendarCheck :size="13" aria-hidden="true" />
+              学习计划
             </button>
           </div>
 
@@ -101,6 +67,7 @@
 </template>
 
 <script setup lang="ts">
+import { CalendarCheck, Network, NotebookPen } from '@lucide/vue'
 // Home 页面组件，承载对应页面的主要交互。
 import { ref, defineAsyncComponent } from 'vue'
 import TopBar from '../components/TopBar.vue'

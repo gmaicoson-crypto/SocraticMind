@@ -20,6 +20,16 @@ export const useTopicsStore = defineStore('topics', () => {
   const availableCount = computed(
     () => nodes.value.filter((node) => node.state === 'available').length,
   )
+  const overallProgress = computed(() =>
+    topics.value.reduce(
+      (progress, topic) => {
+        progress.mastered += topic.mastered
+        progress.total += topic.nodes
+        return progress
+      },
+      { mastered: 0, total: 0 },
+    ),
+  )
 
   async function fetchNodes(topicId: number) {
     try {
@@ -138,6 +148,7 @@ export const useTopicsStore = defineStore('topics', () => {
     masteredCount,
     totalCount,
     availableCount,
+    overallProgress,
     fetchNodes,
     fetchTopics,
     fetchTopicsOnly,

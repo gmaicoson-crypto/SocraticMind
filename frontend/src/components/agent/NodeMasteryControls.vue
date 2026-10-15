@@ -19,7 +19,7 @@
                 :aria-expanded="!collapsed"
                 @click="collapsePanel"
               >
-                <ChevronDown :size="14" aria-hidden="true" />
+                <ChevronDown :size="14" class="icon-inherit" aria-hidden="true" />
               </button>
             </div>
           </div>
@@ -66,7 +66,7 @@
         :aria-expanded="!collapsed"
         @click="expandPanel"
       >
-        <ChevronUp :size="14" aria-hidden="true" />
+        <ChevronUp :size="14" class="icon-inherit" aria-hidden="true" />
       </button>
     </div>
   </div>
@@ -155,7 +155,7 @@ const sourceLabel = computed(
   display: flex;
   flex: 0 0 auto;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
 }
 .mastery-collapse {
   display: inline-flex;
@@ -262,12 +262,18 @@ const sourceLabel = computed(
   overflow-wrap: anywhere;
 }
 .state-badge {
+  display: inline-flex;
   flex: 0 0 auto;
+  min-height: 24px;
+  align-items: center;
   padding: 3px 6px;
   border-radius: 5px;
   background: var(--bg-2);
   color: var(--ink-2);
-  font-size: 9.5px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 18px;
+  white-space: nowrap;
 }
 .state-badge.available {
   background: var(--blue-tint);

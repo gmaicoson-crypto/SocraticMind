@@ -371,7 +371,7 @@ progress {
   gap: 6px;
   margin-top: 4px;
 }
-.file-actions button,
+.file-actions button:not(.ui-icon-button),
 .coverage button {
   border: 0;
   background: transparent;
@@ -383,12 +383,6 @@ progress {
 .file-actions .remove-file {
   width: 22px;
   height: 22px;
-  border-radius: 4px;
-  color: var(--ink-3);
-}
-.file-actions .remove-file:hover {
-  background: var(--bg-3);
-  color: var(--ink);
 }
 .failed:not(.compact-document) {
   border-color: var(--danger, #c04b4b);

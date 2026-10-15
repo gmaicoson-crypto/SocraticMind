@@ -14,7 +14,7 @@
           <h2>评估结果</h2>
           <button
             type="button"
-            class="result-close"
+            class="result-close ui-icon-button"
             aria-label="关闭评估结果"
             :disabled="busy || closeDisabled"
             @click="close"
@@ -134,15 +134,7 @@ onBeforeUnmount(() => {
   width: 28px;
   height: 28px;
   padding: 0;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--ink-3);
   cursor: pointer;
-}
-.result-close:hover:not(:disabled) {
-  background: var(--bg-2);
-  color: var(--ink);
 }
 .result-close:disabled {
   opacity: 0.5;

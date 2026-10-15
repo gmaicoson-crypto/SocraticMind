@@ -43,7 +43,7 @@
           <p>{{ result.rationale }}</p>
           <p v-if="!result.passed">下次复习：{{ result.next_due_date }}</p>
         </template>
-        <BaseButton @click="emit('close')">返回今日计划</BaseButton>
+        <BaseButton @click="emit('close')">返回学习计划</BaseButton>
       </div>
     </template>
     <div v-if="error" role="alert">
@@ -55,7 +55,7 @@
         >刷新复习题</BaseButton
       >
     </div>
-    <BaseButton v-if="!detail && !busy" @click="emit('close')">返回今日计划</BaseButton>
+    <BaseButton v-if="!detail && !busy" @click="emit('close')">返回学习计划</BaseButton>
   </section>
 </template>
 

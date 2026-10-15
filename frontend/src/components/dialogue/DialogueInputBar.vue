@@ -23,7 +23,7 @@
         </button>
       </div>
       <button
-        class="chip-refresh"
+        class="chip-refresh ui-icon-button"
         type="button"
         title="换一批"
         aria-label="换一批推荐对话"
@@ -50,17 +50,7 @@
           title="学习模式"
           @click="$emit('update:chatMode', 'socratic')"
         >
-          <svg
-            width="13"
-            height="13"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-          >
-            <path d="M12 2L13.5 8.5L20 10L13.5 11.5L12 18L10.5 11.5L4 10L10.5 8.5Z" />
-          </svg>
+          <Sparkles :size="13" aria-hidden="true" />
           学习
           <span v-if="socraticBadge > 0" class="mode-badge">{{ socraticBadge }}</span>
         </button>
@@ -71,17 +61,7 @@
           title="普通对话"
           @click="$emit('update:chatMode', 'normal')"
         >
-          <svg
-            width="13"
-            height="13"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-          >
-            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-          </svg>
+          <MessageSquare :size="13" aria-hidden="true" />
           对话
           <span v-if="normalBadge > 0" class="mode-badge">{{ normalBadge }}</span>
         </button>
@@ -141,12 +121,10 @@
         :title="attachmentDisabledReason || '上传图片、Word、PDF、PPT'"
         @click="fileInput?.click()"
       >
-        <span aria-hidden="true">+</span>
+        <Plus :size="14" aria-hidden="true" />
       </IconButton>
       <button v-if="isThinking" class="abort-btn" title="中断回答" @click="$emit('abort')">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-          <rect x="4" y="4" width="16" height="16" rx="2" />
-        </svg>
+        <Square :size="12" class="icon-inherit" aria-hidden="true" />
         中断
       </button>
       <button
@@ -163,17 +141,7 @@
         <span v-if="isGenerating">处理中…</span>
         <template v-else>
           {{ sendLabel }}
-          <svg
-            width="13"
-            height="13"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2.5"
-            stroke-linecap="round"
-          >
-            <path d="M5 12 L19 12 M13 6 L19 12 L13 18" />
-          </svg>
+          <ArrowRight :size="13" class="icon-inherit" aria-hidden="true" />
         </template>
       </button>
     </div>
@@ -183,7 +151,7 @@
 <script setup lang="ts">
 // DialogueInputBar 组件，封装局部界面和交互逻辑。
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { RefreshCcw } from '@lucide/vue'
+import { ArrowRight, MessageSquare, Plus, RefreshCcw, Sparkles, Square } from '@lucide/vue'
 import ModelSelector from './ModelSelector.vue'
 import AttachmentList from '../attachments/AttachmentList.vue'
 import IconButton from '../ui/IconButton.vue'
@@ -487,17 +455,8 @@ defineExpose({ reset, focus })
   justify-content: center;
   width: 26px;
   height: 26px;
-  background: transparent;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  color: var(--ink-3);
   cursor: pointer;
   transition: all 0.15s;
-}
-.chip-refresh:hover {
-  background: var(--bg-3);
-  color: var(--ink);
-  border-color: var(--line-2);
 }
 .chips-measure {
   display: flex;
@@ -682,23 +641,14 @@ defineExpose({ reset, focus })
 
 .attachment-btn {
   flex-shrink: 0;
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   padding: 0;
-  border: none;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--ink-2);
-  font-size: 24px;
   line-height: 1;
   cursor: pointer;
   transition:
     background 0.15s,
     color 0.15s;
-}
-.attachment-btn:hover:not(:disabled) {
-  background: var(--blue-tint);
-  color: var(--blue-2);
 }
 .attachment-btn:disabled {
   opacity: 0.5;

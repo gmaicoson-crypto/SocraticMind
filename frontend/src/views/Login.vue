@@ -33,8 +33,8 @@
 
           <div class="features">
             <div v-for="feat in features" :key="feat.title" class="feat">
-              <div class="feat-icon">
-                <component :is="feat.icon" />
+              <div class="feat-icon ui-icon-surface">
+                <component :is="feat.icon" :size="15" aria-hidden="true" />
               </div>
               <div class="feat-text">
                 <strong>{{ feat.title }}</strong>
@@ -68,17 +68,7 @@
           <div v-if="mode === 'register'" class="field ui-field">
             <label>用户名</label>
             <div class="field-input" :class="{ focused: focusField === 'name' }">
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-              >
-                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                <circle cx="12" cy="7" r="4" />
-              </svg>
+              <UserRound :size="14" aria-hidden="true" />
               <input
                 v-model="form.name"
                 type="text"
@@ -92,19 +82,7 @@
           <div class="field ui-field">
             <label>邮箱地址</label>
             <div class="field-input" :class="{ focused: focusField === 'email' }">
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-              >
-                <path
-                  d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"
-                />
-                <polyline points="22,6 12,13 2,6" />
-              </svg>
+              <Mail :size="14" aria-hidden="true" />
               <input
                 v-model="form.email"
                 type="email"
@@ -119,16 +97,7 @@
             <label>邮箱验证码</label>
             <div class="code-row">
               <div class="field-input" :class="{ focused: focusField === 'code' }">
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                >
-                  <path d="M12 1l3 6 6 .9-4.5 4.4 1 6.7L12 16l-5.5 3 1-6.7L3 7.9 9 7z" />
-                </svg>
+                <KeyRound :size="14" aria-hidden="true" />
                 <input
                   v-model="form.code"
                   type="text"
@@ -155,17 +124,7 @@
           <div class="field ui-field">
             <label>密码</label>
             <div class="field-input" :class="{ focused: focusField === 'password' }">
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-              >
-                <rect x="3" y="11" width="18" height="11" rx="2" />
-                <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-              </svg>
+              <LockKeyhole :size="14" aria-hidden="true" />
               <input
                 v-model="form.password"
                 :type="showPwd ? 'text' : 'password'"
@@ -173,33 +132,9 @@
                 @focus="focusField = 'password'"
                 @blur="focusField = ''"
               />
-              <button class="pwd-toggle" @click="showPwd = !showPwd">
-                <svg
-                  v-if="!showPwd"
-                  width="13"
-                  height="13"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                >
-                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                  <circle cx="12" cy="12" r="3" />
-                </svg>
-                <svg
-                  v-else
-                  width="13"
-                  height="13"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                >
-                  <path
-                    d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"
-                  />
-                  <line x1="1" y1="1" x2="23" y2="23" />
-                </svg>
+              <button class="pwd-toggle ui-icon-button" @click="showPwd = !showPwd">
+                <Eye v-if="!showPwd" :size="13" aria-hidden="true" />
+                <EyeOff v-else :size="13" aria-hidden="true" />
               </button>
             </div>
             <div v-if="mode === 'register'" class="strength-wrap">
@@ -218,17 +153,7 @@
           <div v-if="mode === 'register'" class="field ui-field">
             <label>确认密码</label>
             <div class="field-input" :class="{ focused: focusField === 'confirm' }">
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-              >
-                <rect x="3" y="11" width="18" height="11" rx="2" />
-                <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-              </svg>
+              <LockKeyhole :size="14" aria-hidden="true" />
               <input
                 v-model="form.confirm"
                 type="password"
@@ -264,40 +189,18 @@
           <button class="submit-btn" :disabled="submitting" @click="handleSubmit">
             <span v-if="submitting" class="spinner" />
             <template v-else>
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="var(--on-accent)"
-                stroke-width="2.5"
-                stroke-linecap="round"
-              >
-                <path
-                  v-if="mode === 'login'"
-                  d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M15 12H3"
-                />
-                <path v-else d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-                <circle v-if="mode === 'register'" cx="9" cy="7" r="4" />
-                <line v-if="mode === 'register'" x1="19" y1="8" x2="19" y2="14" />
-                <line v-if="mode === 'register'" x1="22" y1="11" x2="16" y2="11" />
-              </svg>
+              <component
+                :is="mode === 'login' ? LogIn : UserRoundPlus"
+                :size="14"
+                class="icon-inherit"
+                aria-hidden="true"
+              />
               {{ mode === 'login' ? '登录' : '创建账号' }}
             </template>
           </button>
 
           <div class="security-hint">
-            <svg
-              width="11"
-              height="11"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-            >
-              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-            </svg>
+            <ShieldCheck :size="11" aria-hidden="true" />
             <span>{{
               mode === 'register'
                 ? '注册需邮箱验证码，10 分钟内有效'
@@ -321,8 +224,22 @@
 </template>
 
 <script setup lang="ts">
+import {
+  AlignLeft,
+  Eye,
+  EyeOff,
+  KeyRound,
+  LockKeyhole,
+  LogIn,
+  Mail,
+  Network,
+  ShieldCheck,
+  Sparkles,
+  UserRound,
+  UserRoundPlus,
+} from '@lucide/vue'
 // Login 页面组件，承载对应页面的主要交互。
-import { ref, computed, h, watch, onBeforeUnmount, defineAsyncComponent } from 'vue'
+import { ref, computed, watch, onBeforeUnmount, defineAsyncComponent } from 'vue'
 import { useRouter } from 'vue-router'
 import { login, register, sendVerificationCode } from '../api/auth'
 import { parseApiError } from '../api'
@@ -506,65 +423,17 @@ const features = [
   {
     title: '苏格拉底式 AI 对话',
     desc: '引导提问，不直接给答案，激发真正的理解',
-    icon: () =>
-      h(
-        'svg',
-        {
-          width: 15,
-          height: 15,
-          viewBox: '0 0 24 24',
-          fill: 'none',
-          stroke: 'var(--blue-2)',
-          'stroke-width': 2,
-        },
-        [
-          h('path', {
-            d: 'M12 2L13.5 8.5L20 10L13.5 11.5L12 18L10.5 11.5L4 10L10.5 8.5Z',
-            fill: 'var(--blue-soft)',
-          }),
-        ],
-      ),
+    icon: Sparkles,
   },
   {
     title: '动态知识图谱',
     desc: '可视化学习路径，节点状态实时联动',
-    icon: () =>
-      h(
-        'svg',
-        {
-          width: 15,
-          height: 15,
-          viewBox: '0 0 24 24',
-          fill: 'none',
-          stroke: 'var(--blue-2)',
-          'stroke-width': 2,
-          'stroke-linecap': 'round',
-        },
-        [
-          h('circle', { cx: 12, cy: 5, r: 2 }),
-          h('circle', { cx: 5, cy: 19, r: 2 }),
-          h('circle', { cx: 19, cy: 19, r: 2 }),
-          h('path', { d: 'M12 7v4M12 11L5 17M12 11L19 17' }),
-        ],
-      ),
+    icon: Network,
   },
   {
     title: '笔记与画布',
     desc: 'Markdown 笔记 + 手绘画板，随时记录灵感',
-    icon: () =>
-      h(
-        'svg',
-        {
-          width: 15,
-          height: 15,
-          viewBox: '0 0 24 24',
-          fill: 'none',
-          stroke: 'var(--blue-2)',
-          'stroke-width': 2,
-          'stroke-linecap': 'round',
-        },
-        [h('path', { d: 'M4 6H20M4 12H20M4 18H14' })],
-      ),
+    icon: AlignLeft,
   },
 ]
 </script>
@@ -681,9 +550,6 @@ const features = [
 .feat-icon {
   width: 32px;
   height: 32px;
-  border-radius: 8px;
-  background: var(--blue-tint);
-  border: 0.5px solid var(--blue-line);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -776,16 +642,10 @@ const features = [
 }
 
 .pwd-toggle {
-  background: transparent;
-  border: none;
   cursor: pointer;
-  color: var(--ink-3);
   padding: 0;
   display: flex;
   align-items: center;
-}
-.pwd-toggle:hover {
-  color: var(--ink-2);
 }
 
 .strength-wrap {
@@ -974,7 +834,6 @@ const features = [
   line-height: 1.5;
 }
 .security-hint svg {
-  color: var(--blue-2);
   flex-shrink: 0;
 }
 

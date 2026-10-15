@@ -2,95 +2,29 @@
   <aside class="sidebar" :class="{ 'is-collapsed': uiStore.sidebarCollapsed }">
     <TopicManager v-if="hasOpenedManager" :show="showManager" @close="showManager = false" />
 
-    <button
-      v-if="uiStore.sidebarCollapsed"
-      class="collapsed-toggle"
-      title="展开侧边栏"
-      aria-label="展开侧边栏"
-      @click="uiStore.toggleSidebar"
-    >
-      <svg
-        width="16"
-        height="16"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="2"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-      >
-        <path d="m9 18 6-6-6-6" />
-      </svg>
-    </button>
-
     <div class="section">
       <div class="section-header">
         <span class="section-title">我的主题</span>
         <div class="header-btns">
-          <button class="manage-btn" title="管理主题" @click="openManager()">
-            <svg
-              width="13"
-              height="13"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-            >
-              <path d="M12 20h9M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4 12.5-12.5z" />
-            </svg>
+          <button class="manage-btn ui-icon-button" title="管理主题" @click="openManager()">
+            <FolderCog :size="13" aria-hidden="true" />
           </button>
           <button
-            class="theme-btn"
+            class="theme-btn ui-icon-button"
             :title="store.isDark ? '切换到明亮' : '切换到黑暗'"
+            :aria-label="store.isDark ? '切换到明亮' : '切换到黑暗'"
             @click="store.toggleTheme"
           >
-            <svg
-              v-if="store.isDark"
-              width="15"
-              height="15"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-            >
-              <circle cx="12" cy="12" r="4" />
-              <path
-                d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"
-              />
-            </svg>
-            <svg
-              v-else
-              width="15"
-              height="15"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-            >
-              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
-            </svg>
+            <Sun v-if="store.isDark" :size="15" aria-hidden="true" />
+            <Moon v-else :size="15" aria-hidden="true" />
           </button>
           <button
-            class="collapse-btn"
+            class="collapse-btn ui-icon-button"
             title="收起侧边栏"
             aria-label="收起侧边栏"
             @click="uiStore.toggleSidebar"
           >
-            <svg
-              width="15"
-              height="15"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
-              <path d="m15 18-6-6 6-6" />
-            </svg>
+            <ChevronLeft :size="15" aria-hidden="true" />
           </button>
         </div>
       </div>
@@ -121,18 +55,8 @@
           </div>
         </button>
 
-        <button v-if="showMoreTopics" class="expand-btn" @click="openManager()">
-          <svg
-            width="12"
-            height="12"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-          >
-            <path d="M6 9l6 6 6-6" />
-          </svg>
+        <button v-if="showMoreTopics" class="expand-btn ui-icon-surface" @click="openManager()">
+          <ChevronDown :size="12" aria-hidden="true" />
           还有 {{ store.topics.length - MAX_VISIBLE }} 个主题
         </button>
 
@@ -144,24 +68,16 @@
       <div class="section-header">
         <span class="section-title">推荐</span>
         <button
-          class="manage-btn"
+          class="manage-btn ui-icon-button"
           title="刷新推荐"
           :disabled="isRefreshing"
           @click="refreshRecommend"
         >
-          <svg
-            width="13"
-            height="13"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
+          <RefreshCcw
+            :size="13"
             :style="{ animation: isRefreshing ? 'spin .7s linear infinite' : 'none' }"
-          >
-            <path d="M1 4v6h6M23 20v-6h-6" />
-            <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15" />
-          </svg>
+            aria-hidden="true"
+          />
         </button>
       </div>
 
@@ -211,17 +127,7 @@
 
     <Transition name="toast">
       <div v-if="showToast" class="toast">
-        <svg
-          width="14"
-          height="14"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2.5"
-          stroke-linecap="round"
-        >
-          <path d="M20 6L9 17l-5-5" />
-        </svg>
+        <Check :size="14" class="icon-inherit" aria-hidden="true" />
         {{ toastMsg }}
       </div>
     </Transition>
@@ -229,6 +135,7 @@
 </template>
 
 <script setup lang="ts">
+import { Check, ChevronDown, ChevronLeft, FolderCog, Moon, RefreshCcw, Sun } from '@lucide/vue'
 // Sidebar 组件，封装局部界面和交互逻辑。
 import { ref, computed, onBeforeUnmount, defineAsyncComponent } from 'vue'
 import { useLearningStore } from '../stores/learning'
@@ -340,36 +247,9 @@ onBeforeUnmount(() => {
   border-right-color: transparent;
 }
 
-.sidebar.is-collapsed > :not(.collapsed-toggle) {
+.sidebar.is-collapsed > * {
   visibility: hidden;
   pointer-events: none;
-}
-
-.collapsed-toggle {
-  position: absolute;
-  top: 12px;
-  right: -38px;
-  z-index: 5;
-  width: 32px;
-  height: 32px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--bg-2);
-  color: var(--ink-2);
-  cursor: pointer;
-  box-shadow: var(--control-shadow);
-  transition:
-    background 0.15s,
-    color 0.15s;
-}
-
-.collapsed-toggle:hover,
-.collapse-btn:hover {
-  background: var(--blue-tint);
-  color: var(--blue-2);
 }
 
 .section-header {
@@ -389,6 +269,10 @@ onBeforeUnmount(() => {
   flex: 1;
 }
 
+[data-theme='dark'] .section-title {
+  color: var(--ink-2);
+}
+
 .header-btns {
   display: flex;
   align-items: center;
@@ -401,17 +285,8 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: transparent;
-  border: 1px solid var(--line);
-  border-radius: 7px;
-  color: var(--ink-3);
   cursor: pointer;
   transition: all 0.15s;
-}
-.manage-btn:hover {
-  background: var(--blue-tint);
-  border-color: var(--blue-line);
-  color: var(--blue-2);
 }
 
 .theme-btn {
@@ -420,10 +295,6 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--bg-3);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  color: var(--ink-2);
   cursor: pointer;
   transition: all 0.15s;
 }
@@ -434,17 +305,8 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--bg-3);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  color: var(--ink-2);
   cursor: pointer;
   transition: all 0.15s;
-}
-.theme-btn:hover {
-  background: var(--blue-tint);
-  border-color: var(--blue-line);
-  color: var(--blue-2);
 }
 
 .topic-list {
@@ -552,21 +414,12 @@ onBeforeUnmount(() => {
   justify-content: center;
   gap: 5px;
   padding: 7px;
-  background: transparent;
-  border: 1px dashed var(--line);
-  border-radius: 8px;
-  color: var(--ink-3);
   font-size: 11.5px;
   font-weight: 500;
   font-family: var(--font-sans);
   cursor: pointer;
   transition: all 0.15s;
   margin-top: 2px;
-}
-.expand-btn:hover {
-  background: var(--blue-tint);
-  border-color: var(--blue-line);
-  color: var(--blue-2);
 }
 
 .recommend-list {

@@ -13,36 +13,17 @@
         </button>
       </div>
       <div class="md-meta">
-        <button class="help-btn" title="Markdown 语法说明" @click="showHelp = true">
-          <svg
-            width="13"
-            height="13"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <circle cx="12" cy="12" r="10" />
-            <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
-            <line x1="12" y1="17" x2="12.01" y2="17" />
-          </svg>
-        </button>
         <span>{{ content.length }} 字符</span>
-        <span>·</span>
-        <button class="download-btn" title="下载 Markdown 文件" @click="handleDownload">
-          <svg
-            width="12"
-            height="12"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-          >
-            <path d="M12 5v14M5 19h14M19 14l-7 7-7-7" />
-          </svg>
+        <span aria-hidden="true">·</span>
+        <button class="help-btn ui-icon-button" title="Markdown 语法说明" @click="showHelp = true">
+          <CircleHelp :size="13" aria-hidden="true" />
+        </button>
+        <button
+          class="download-btn ui-icon-surface"
+          title="下载 Markdown 文件"
+          @click="handleDownload"
+        >
+          <Download :size="12" aria-hidden="true" />
           下载
         </button>
       </div>
@@ -65,6 +46,7 @@
 </template>
 
 <script setup lang="ts">
+import { CircleHelp, Download } from '@lucide/vue'
 // MarkdownEditor 组件，封装局部界面和交互逻辑。
 import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { marked } from 'marked'
@@ -208,17 +190,8 @@ function handleDownload() {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: transparent;
-  border: 1px solid var(--line);
-  border-radius: 50%;
-  color: var(--ink-3);
   cursor: pointer;
   transition: all 0.15s;
-}
-.help-btn:hover {
-  color: var(--blue-2);
-  border-color: var(--blue-line);
-  background: var(--blue-tint);
 }
 
 .download-btn {
@@ -228,17 +201,8 @@ function handleDownload() {
   padding: 2px 8px;
   font-size: 11px;
   font-family: var(--font-mono);
-  color: var(--ink-3);
-  background: transparent;
-  border: 1px solid var(--line);
-  border-radius: 5px;
   cursor: pointer;
   transition: all 0.15s;
-}
-.download-btn:hover {
-  color: var(--blue-2);
-  border-color: var(--blue-line);
-  background: var(--blue-tint);
 }
 
 .md-body {

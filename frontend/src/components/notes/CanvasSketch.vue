@@ -4,38 +4,20 @@
       <div class="tool-group">
         <div class="tool-switch">
           <button
-            class="tool-btn"
+            class="tool-btn ui-icon-button"
             :class="{ active: tool === 'pen' }"
             title="画笔"
             @click="tool = 'pen'"
           >
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-            >
-              <path d="M3 21L9 19L20 8L16 4L5 15Z" />
-            </svg>
+            <Pencil :size="14" aria-hidden="true" />
           </button>
           <button
-            class="tool-btn"
+            class="tool-btn ui-icon-button"
             :class="{ active: tool === 'eraser' }"
             title="橡皮"
             @click="tool = 'eraser'"
           >
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-            >
-              <path d="M5 19L13 11L20 18L17 21L8 21ZM9 15L13 19" />
-            </svg>
+            <Eraser :size="14" aria-hidden="true" />
           </button>
         </div>
 
@@ -69,52 +51,32 @@
 
       <div class="btn-group">
         <div class="zoom-btns">
-          <button class="tool-btn" title="缩小" @click="zoomOut" :disabled="scaleVal <= MIN_SCALE">
-            <svg
-              width="13"
-              height="13"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-            >
-              <path d="M5 12h14" />
-            </svg>
+          <button
+            class="tool-btn ui-icon-button"
+            title="缩小"
+            @click="zoomOut"
+            :disabled="scaleVal <= MIN_SCALE"
+          >
+            <Minus :size="13" aria-hidden="true" />
           </button>
           <span class="zoom-label" @click="resetScale" title="点击重置">
             {{ Math.round(scaleVal * 100) }}%
           </span>
-          <button class="tool-btn" title="放大" @click="zoomIn" :disabled="scaleVal >= MAX_SCALE">
-            <svg
-              width="13"
-              height="13"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-            >
-              <path d="M12 5v14M5 12h14" />
-            </svg>
+          <button
+            class="tool-btn ui-icon-button"
+            title="放大"
+            @click="zoomIn"
+            :disabled="scaleVal >= MAX_SCALE"
+          >
+            <Plus :size="13" aria-hidden="true" />
           </button>
         </div>
 
-        <button class="canvas-action-btn" @click="downloadCanvas" title="下载画布">
-          <svg
-            width="12"
-            height="12"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-          >
-            <path d="M12 5v14M5 19h14M19 14l-7 7-7-7" />
-          </svg>
+        <button class="canvas-action-btn ui-icon-surface" @click="downloadCanvas" title="下载画布">
+          <Download :size="12" aria-hidden="true" />
           下载
         </button>
-        <button class="canvas-action-btn" @click="clearCanvas">清空</button>
+        <button class="canvas-action-btn ui-icon-surface" @click="clearCanvas">清空</button>
       </div>
     </div>
 
@@ -144,6 +106,7 @@
 </template>
 
 <script setup lang="ts">
+import { Download, Eraser, Minus, Pencil, Plus } from '@lucide/vue'
 // CanvasSketch 组件，封装局部界面和交互逻辑。
 import { ref, computed, onMounted } from 'vue'
 import { themeColor } from '../../utils/theme'
@@ -334,24 +297,12 @@ function downloadCanvas() {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: transparent;
-  color: var(--ink-2);
-  border: none;
-  border-radius: 6px;
   cursor: pointer;
   transition: all 0.15s;
-}
-.tool-btn.active {
-  background: var(--surface);
-  color: var(--ink);
-  box-shadow: 0 1px 0 var(--line);
 }
 .tool-btn:disabled {
   opacity: 0.35;
   cursor: not-allowed;
-}
-.tool-btn:not(:disabled):hover {
-  background: var(--bg-3);
 }
 
 .color-group {
@@ -414,10 +365,6 @@ function downloadCanvas() {
 .canvas-action-btn {
   font-size: 11.5px;
   padding: 5px 10px;
-  background: var(--canvas-action-bg);
-  border: 1px solid var(--canvas-action-border);
-  border-radius: 6px;
-  color: var(--canvas-action-text);
   cursor: pointer;
   font-weight: 500;
   font-family: var(--font-sans);
@@ -425,9 +372,6 @@ function downloadCanvas() {
   align-items: center;
   gap: 4px;
   transition: background 0.15s;
-}
-.canvas-action-btn:hover {
-  background: var(--canvas-action-hover-bg);
 }
 
 .canvas-container {

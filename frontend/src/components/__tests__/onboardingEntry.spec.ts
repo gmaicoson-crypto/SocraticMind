@@ -83,16 +83,22 @@ describe('onboarding entry points', () => {
     setActivePinia(pinia)
     const ui = useUiStore()
     const sidebar = mount(Sidebar, { global: { plugins: [pinia] } })
+    const dialogue = mount(SocraticDialogue, { global: { plugins: [pinia] } })
+    await flushPromises()
 
     expect(ui.sidebarCollapsed).toBe(false)
+    expect(dialogue.find('.collapsed-toggle').exists()).toBe(false)
     await sidebar.get('.collapse-btn').trigger('click')
     expect(ui.sidebarCollapsed).toBe(true)
     expect(localStorage.getItem('sm_sidebar_collapsed')).toBe('true')
     expect(sidebar.find('.sidebar').classes()).toContain('is-collapsed')
 
-    await sidebar.get('.collapsed-toggle').trigger('click')
+    expect(sidebar.find('.collapsed-toggle').exists()).toBe(false)
+    await dialogue.get('.message-list-shell .collapsed-toggle').trigger('click')
     expect(ui.sidebarCollapsed).toBe(false)
     expect(localStorage.getItem('sm_sidebar_collapsed')).toBe('false')
+    expect(dialogue.find('.collapsed-toggle').exists()).toBe(false)
+    dialogue.unmount()
     sidebar.unmount()
   })
 

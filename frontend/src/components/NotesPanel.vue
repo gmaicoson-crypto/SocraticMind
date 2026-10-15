@@ -1,20 +1,17 @@
 <template>
   <div class="notes-wrap">
     <div class="notes-header">
-      <div class="notes-header-left">
-        <span class="notes-title">笔记与画布</span>
-        <div class="tabs">
-          <button
-            v-for="tab in tabs"
-            :key="tab.key"
-            class="tab-btn"
-            :class="{ active: activeTab === tab.key }"
-            @click="activeTab = tab.key"
-          >
-            <component :is="tab.icon" />
-            {{ tab.label }}
-          </button>
-        </div>
+      <div class="tabs">
+        <button
+          v-for="tab in tabs"
+          :key="tab.key"
+          class="tab-btn"
+          :class="{ active: activeTab === tab.key }"
+          @click="activeTab = tab.key"
+        >
+          <component :is="tab.icon" :size="13" aria-hidden="true" />
+          {{ tab.label }}
+        </button>
       </div>
     </div>
 
@@ -27,44 +24,17 @@
 
 <script setup lang="ts">
 // NotesPanel 组件，封装局部界面和交互逻辑。
-import { ref, h, defineAsyncComponent } from 'vue'
+import { ref, defineAsyncComponent, type Component } from 'vue'
+import { AlignLeft, PenTool } from '@lucide/vue'
 
 const MarkdownEditor = defineAsyncComponent(() => import('./notes/MarkdownEditor.vue'))
 const CanvasSketch = defineAsyncComponent(() => import('./notes/CanvasSketch.vue'))
 
 const activeTab = ref<'md' | 'canvas'>('md')
 
-const IconMd = () =>
-  h(
-    'svg',
-    {
-      width: 13,
-      height: 13,
-      viewBox: '0 0 24 24',
-      fill: 'none',
-      stroke: 'currentColor',
-      'stroke-width': 2,
-    },
-    [h('path', { d: 'M4 6H20M4 12H20M4 18H14' })],
-  )
-
-const IconCanvas = () =>
-  h(
-    'svg',
-    {
-      width: 13,
-      height: 13,
-      viewBox: '0 0 24 24',
-      fill: 'none',
-      stroke: 'currentColor',
-      'stroke-width': 2,
-    },
-    [h('path', { d: 'M3 17L9 11L13 15L21 7' })],
-  )
-
-const tabs: Array<{ key: 'md' | 'canvas'; label: string; icon: any }> = [
-  { key: 'md', label: 'Markdown 笔记', icon: IconMd },
-  { key: 'canvas', label: '画布草图', icon: IconCanvas },
+const tabs: Array<{ key: 'md' | 'canvas'; label: string; icon: Component }> = [
+  { key: 'md', label: 'Markdown 笔记', icon: AlignLeft },
+  { key: 'canvas', label: '画布草图', icon: PenTool },
 ]
 </script>
 
@@ -88,19 +58,6 @@ const tabs: Array<{ key: 'md' | 'canvas'; label: string; icon: any }> = [
   background: var(--header-gradient);
   flex-shrink: 0;
   gap: 8px;
-}
-
-.notes-header-left {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-}
-
-.notes-title {
-  font-size: 12.5px;
-  font-weight: 600;
-  color: var(--ink);
-  white-space: nowrap;
 }
 
 .tabs {

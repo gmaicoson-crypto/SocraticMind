@@ -181,31 +181,10 @@ watch([() => props.result, () => props.disabled], () => close())
   position: relative;
   flex-shrink: 0;
 }
-.scoring-guide :deep(.ui-icon-button) {
-  display: grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  border: 1px solid transparent;
-  border-radius: 7px;
-  background: transparent;
-  color: var(--ink-3);
-  cursor: pointer;
-}
-.scoring-guide :deep(.ui-icon-button:hover:not(:disabled)),
-.scoring-guide :deep([aria-expanded='true']) {
-  background: var(--bg-3);
-  color: var(--ink);
-}
 .scoring-guide :deep(.ui-icon-button:focus-visible),
 summary:focus-visible {
   outline: 2px solid var(--assessment-accent);
   outline-offset: 2px;
-}
-.scoring-guide :deep(.ui-icon-button:disabled) {
-  opacity: 0.5;
-  cursor: not-allowed;
 }
 .scoring-guide-panel {
   position: absolute;

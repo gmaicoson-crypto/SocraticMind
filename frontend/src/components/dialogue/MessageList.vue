@@ -1,5 +1,6 @@
 <template>
   <div class="message-list-shell" :style="{ '--message-overlay-height': `${overlayHeight}px` }">
+    <slot name="edge-control" />
     <Transition name="scroll-btn">
       <button
         v-if="showScrollBtn"

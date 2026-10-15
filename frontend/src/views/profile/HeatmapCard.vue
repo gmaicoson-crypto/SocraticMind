@@ -2,18 +2,8 @@
   <ProfileSectionCard class="heatmap-card" title="学习热力图">
     <template #action>
       <div class="hm-controls">
-        <button class="hm-nav-btn" :disabled="!canGoPrev" @click="onPrev">
-          <svg
-            width="13"
-            height="13"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-          >
-            <path d="M15 18l-6-6 6-6" />
-          </svg>
+        <button class="hm-nav-btn ui-icon-button" :disabled="!canGoPrev" @click="onPrev">
+          <ChevronLeft :size="13" aria-hidden="true" />
         </button>
         <select v-model="selectedYear" class="hm-select">
           <option v-for="y in yearOptions" :key="y" :value="y">{{ y }} 年</option>
@@ -21,18 +11,8 @@
         <select v-model="selectedMonth" class="hm-select">
           <option v-for="(m, i) in monthNames" :key="i" :value="i + 1">{{ m }}</option>
         </select>
-        <button class="hm-nav-btn" :disabled="!canGoNext" @click="onNext">
-          <svg
-            width="13"
-            height="13"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-          >
-            <path d="M9 18l6-6-6-6" />
-          </svg>
+        <button class="hm-nav-btn ui-icon-button" :disabled="!canGoNext" @click="onNext">
+          <ChevronRight :size="13" aria-hidden="true" />
         </button>
       </div>
     </template>
@@ -66,6 +46,7 @@
 </template>
 
 <script setup lang="ts">
+import { ChevronLeft, ChevronRight } from '@lucide/vue'
 // HeatmapCard 页面组件，承载对应页面的主要交互。
 import { ref, computed } from 'vue'
 import {
@@ -136,17 +117,8 @@ const monthChatCount = computed(() => monthDays.value.reduce((s, d) => s + d.cou
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--bg-2);
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  color: var(--ink-2);
   cursor: pointer;
   transition: all 0.15s;
-}
-.hm-nav-btn:hover:not(:disabled) {
-  background: var(--blue-tint);
-  border-color: var(--blue-line);
-  color: var(--blue-2);
 }
 .hm-nav-btn:disabled {
   opacity: 0.35;

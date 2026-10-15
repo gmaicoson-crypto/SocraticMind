@@ -1,14 +1,20 @@
 <template>
   <Teleport to="body">
     <Transition name="slide">
-      <div v-if="show" class="manager-overlay" @click.self="emit('close')">
+      <div v-if="show" class="manager-overlay" @click.self="closeManager">
         <div class="manager-panel">
           <div class="panel-header">
             <div>
               <div class="panel-title">我的主题</div>
               <div class="panel-sub">管理你的学习主题</div>
             </div>
-            <IconButton class="close-btn" label="关闭主题管理" @click="emit('close')">✕</IconButton>
+            <IconButton
+              class="close-btn"
+              label="关闭主题管理"
+              :disabled="busy"
+              @click="closeManager"
+              >✕</IconButton
+            >
           </div>
 
           <div class="topic-list">
@@ -21,7 +27,7 @@
               <div class="topic-left" @click="selectTopic(topic.id)">
                 <div class="topic-emoji">{{ topic.emoji }}</div>
                 <div class="topic-info">
-                  <div class="topic-name">{{ topic.title }}</div>
+                  <div class="topic-name" :title="topic.title">{{ topic.title }}</div>
                   <div class="topic-stats">{{ topic.mastered }} / {{ topic.nodes }} 节点已掌握</div>
                   <ProgressBar
                     class="topic-track"
@@ -30,53 +36,86 @@
                   />
                 </div>
               </div>
-              <IconButton
-                class="delete-btn"
-                label="删除主题"
-                :loading="deleting === topic.id"
-                @click="handleDelete(topic.id, topic.title)"
-              >
-                <template #loading><span class="spinner" /></template>
-                <svg
-                  width="13"
-                  height="13"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                  stroke-linecap="round"
+              <div class="topic-actions">
+                <IconButton
+                  label="编辑主题名称"
+                  :disabled="busy"
+                  @click="startRename(topic.id, topic.title, $event)"
                 >
-                  <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" />
-                </svg>
-              </IconButton>
+                  <Pencil :size="13" aria-hidden="true" />
+                </IconButton>
+                <IconButton
+                  class="delete-btn"
+                  label="删除主题"
+                  :loading="deleting === topic.id"
+                  :disabled="busy"
+                  @click="handleDelete(topic.id, topic.title)"
+                >
+                  <template #loading><span class="spinner" /></template>
+                  <Trash2 :size="13" aria-hidden="true" />
+                </IconButton>
+              </div>
             </div>
 
             <EmptyState v-if="store.topics.length === 0" class="empty-state">
               <div class="empty-text">还没有主题，在对话框告诉 AI 你想学什么吧！</div>
             </EmptyState>
           </div>
-
-          <Transition name="fade">
-            <div v-if="confirmId" class="confirm-bar">
-              <span>确定删除「{{ confirmTitle }}」吗？</span>
-              <div class="confirm-btns">
-                <BaseButton class="confirm-cancel" @click="confirmId = null">取消</BaseButton>
-                <BaseButton class="confirm-ok" @click="doDelete">删除</BaseButton>
-              </div>
-            </div>
-          </Transition>
         </div>
       </div>
     </Transition>
   </Teleport>
+  <ConfirmDialog
+    :model-value="show && editingId !== null"
+    title="编辑主题名称"
+    confirm-text="保存名称"
+    loading-text="保存中…"
+    :loading="savingName"
+    @close="cancelRename"
+    @update:model-value="(value) => !value && cancelRename()"
+    @confirm="saveTopicName"
+  >
+    <label class="ui-name-field">
+      <span>主题名称</span>
+      <input
+        ref="nameInputRef"
+        v-model="editingName"
+        type="text"
+        maxlength="200"
+        :disabled="savingName"
+        :aria-invalid="Boolean(renameError)"
+        :aria-describedby="renameError ? 'topic-name-error' : undefined"
+        @input="renameError = ''"
+        @keydown.enter="saveTopicNameOnEnter"
+      />
+    </label>
+    <p v-if="renameError" id="topic-name-error" class="ui-name-error" role="alert">
+      {{ renameError }}
+    </p>
+  </ConfirmDialog>
+  <ConfirmDialog
+    :model-value="show && confirmId !== null"
+    title="删除主题？"
+    confirm-text="确定删除"
+    loading-text="删除中…"
+    :loading="deleting !== null"
+    @close="cancelDelete"
+    @update:model-value="(value) => !value && cancelDelete()"
+    @confirm="doDelete"
+  >
+    <p class="delete-message">确定删除「{{ confirmTitle }}」吗？此操作无法撤销。</p>
+    <p v-if="deleteError" class="delete-error" role="alert">{{ deleteError }}</p>
+  </ConfirmDialog>
 </template>
 
 <script setup lang="ts">
+import { Pencil, Trash2 } from '@lucide/vue'
 // TopicManager 组件，封装局部界面和交互逻辑。
-import { ref } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { useLearningStore } from '../../stores/learning'
-import { deleteTopic } from '../../api/topic'
-import BaseButton from '../ui/BaseButton.vue'
+import { deleteTopic, updateTopicTitle } from '../../api/topic'
+import { parseApiError } from '../../api'
+import ConfirmDialog from '../ui/ConfirmDialog.vue'
 import EmptyState from '../ui/EmptyState.vue'
 import IconButton from '../ui/IconButton.vue'
 import ProgressBar from '../ui/ProgressBar.vue'
@@ -88,22 +127,121 @@ const store = useLearningStore()
 const deleting = ref<string | null>(null)
 const confirmId = ref<string | null>(null)
 const confirmTitle = ref('')
+const deleteError = ref('')
+const editingId = ref<string | null>(null)
+const editingName = ref('')
+const savingName = ref(false)
+const renameError = ref('')
+const nameInputRef = ref<HTMLInputElement | null>(null)
+const busy = computed(() => deleting.value !== null || savingName.value)
+let renameTrigger: HTMLButtonElement | null = null
 
-function selectTopic(id: string) {
-  store.setActiveTopic(id)
+function startRename(id: string, title: string, event: MouseEvent) {
+  if (busy.value || editingId.value !== null || confirmId.value !== null) return
+  renameTrigger = event.currentTarget as HTMLButtonElement
+  editingId.value = id
+  editingName.value = title
+  renameError.value = ''
+  nextTick(() => {
+    nameInputRef.value?.focus()
+    nameInputRef.value?.select()
+  })
+}
+
+function cancelRename() {
+  if (savingName.value) return
+  const trigger = renameTrigger
+  editingId.value = null
+  editingName.value = ''
+  renameError.value = ''
+  renameTrigger = null
+  nextTick(() => {
+    if (props.show) trigger?.focus()
+  })
+}
+
+function saveTopicNameOnEnter(event: KeyboardEvent) {
+  if (event.isComposing) return
+  event.preventDefault()
+  void saveTopicName()
+}
+
+async function saveTopicName() {
+  if (editingId.value === null || busy.value) return
+  const id = editingId.value
+  const title = editingName.value.trim()
+  if (!title) {
+    renameError.value = '请输入主题名称'
+    return
+  }
+  if (title.length > 200) {
+    renameError.value = '主题名称不能超过 200 个字符'
+    return
+  }
+  if (store.topics.find((topic) => topic.id === id)?.title === title) {
+    cancelRename()
+    return
+  }
+  savingName.value = true
+  renameError.value = ''
+  let saved = false
+  try {
+    const updated = await updateTopicTitle(Number(id), title)
+    store.topics = store.topics.map((topic) =>
+      topic.id === id ? { ...topic, title: updated.title } : topic,
+    )
+    saved = true
+  } catch (err) {
+    renameError.value = `修改主题名称失败：${parseApiError(err).message}`
+  } finally {
+    savingName.value = false
+    if (saved || !props.show) cancelRename()
+  }
+}
+
+function cancelDelete() {
+  if (deleting.value !== null) return
+  confirmId.value = null
+  confirmTitle.value = ''
+  deleteError.value = ''
+}
+
+function closeManager() {
+  if (busy.value) return
+  cancelDelete()
+  cancelRename()
   emit('close')
 }
 
+watch(
+  () => props.show,
+  (show) => {
+    if (!show) {
+      cancelDelete()
+      cancelRename()
+    }
+  },
+)
+
+function selectTopic(id: string) {
+  if (busy.value || editingId.value !== null || confirmId.value !== null) return
+  store.setActiveTopic(id)
+  closeManager()
+}
+
 function handleDelete(id: string, title: string) {
+  if (busy.value || editingId.value !== null || confirmId.value !== null) return
   confirmId.value = id
   confirmTitle.value = title
+  deleteError.value = ''
 }
 
 async function doDelete() {
-  if (!confirmId.value) return
+  if (!confirmId.value || busy.value) return
   const id = confirmId.value
   deleting.value = id
-  confirmId.value = null
+  deleteError.value = ''
+  let deleted = false
   try {
     await deleteTopic(Number(id))
     await store.fetchTopics()
@@ -115,10 +253,12 @@ async function doDelete() {
         store.clearGraph()
       }
     }
+    deleted = true
   } catch (err) {
-    console.error('删除失败', err)
+    deleteError.value = `删除主题失败：${parseApiError(err).message}`
   } finally {
     deleting.value = null
+    if (deleted || !props.show) cancelDelete()
   }
 }
 </script>
@@ -170,10 +310,6 @@ async function doDelete() {
 .close-btn {
   width: 28px;
   height: 28px;
-  border-radius: 8px;
-  background: transparent;
-  border: 1px solid var(--line);
-  color: var(--ink-3);
   cursor: pointer;
   font-size: 14px;
   display: flex;
@@ -181,10 +317,6 @@ async function doDelete() {
   justify-content: center;
   transition: all 0.15s;
   font-family: var(--font-sans);
-}
-.close-btn:hover {
-  background: var(--bg-3);
-  color: var(--ink);
 }
 
 .topic-list {
@@ -240,7 +372,15 @@ async function doDelete() {
   min-width: 0;
 }
 
+.topic-actions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 6px;
+}
+
 .topic-name {
+  min-width: 0;
   font-size: 13px;
   font-weight: 600;
   color: var(--ink);
@@ -273,10 +413,6 @@ async function doDelete() {
 .delete-btn {
   width: 28px;
   height: 28px;
-  border-radius: 7px;
-  background: transparent;
-  border: 1px solid transparent;
-  color: var(--ink-3);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -285,6 +421,7 @@ async function doDelete() {
   transition: all 0.15s;
 }
 .delete-btn:hover {
+  --icon-color: currentColor;
   background: var(--danger-button-bg);
   border-color: var(--danger-button-border);
   color: var(--danger-button-text);
@@ -319,45 +456,14 @@ async function doDelete() {
   line-height: 1.6;
 }
 
-.confirm-bar {
-  padding: 12px 16px;
-  border-top: 1px solid var(--line);
-  background: var(--confirm-bg);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  font-size: 12.5px;
-  color: var(--confirm-text);
-  flex-shrink: 0;
+.delete-message {
+  margin: 0;
+  overflow-wrap: anywhere;
 }
-
-.confirm-btns {
-  display: flex;
-  gap: 6px;
-}
-
-.confirm-cancel {
-  padding: 5px 12px;
-  border-radius: 7px;
-  border: 1px solid var(--danger-button-border);
-  background: var(--surface);
-  color: var(--confirm-text);
+.delete-error {
+  margin: 8px 0 0;
+  color: var(--danger-ink);
   font-size: 12px;
-  cursor: pointer;
-  font-family: var(--font-sans);
-}
-
-.confirm-ok {
-  padding: 5px 12px;
-  border-radius: 7px;
-  border: none;
-  background: var(--danger-button-text);
-  color: var(--on-accent);
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  font-family: var(--font-sans);
 }
 
 .slide-enter-active,
@@ -374,15 +480,6 @@ async function doDelete() {
 }
 .slide-enter-from,
 .slide-leave-to {
-  opacity: 0;
-}
-
-.fade-enter-active,
-.fade-leave-active {
-  transition: opacity 0.2s;
-}
-.fade-enter-from,
-.fade-leave-to {
   opacity: 0;
 }
 </style>

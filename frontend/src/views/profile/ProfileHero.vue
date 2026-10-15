@@ -34,18 +34,8 @@
       </div>
     </div>
     <div class="hero-actions">
-      <button class="back-btn" @click="$emit('back')">
-        <svg
-          width="12"
-          height="12"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2.5"
-          stroke-linecap="round"
-        >
-          <path d="M19 12H5M12 5l-7 7 7 7" />
-        </svg>
+      <button class="back-btn ui-icon-surface" @click="$emit('back')">
+        <ArrowLeft :size="12" aria-hidden="true" />
         返回对话
       </button>
       <button class="edit-btn" @click="$emit('edit')">编辑资料</button>
@@ -55,6 +45,7 @@
 </template>
 
 <script setup lang="ts">
+import { ArrowLeft } from '@lucide/vue'
 // ProfileHero 页面组件，承载对应页面的主要交互。
 import { avatarSrc } from '../../utils/avatar'
 import { defaultUserAvatar } from '../../utils/avatarPresets'
@@ -151,9 +142,14 @@ defineEmits<{
   display: inline-flex;
   align-items: center;
   gap: 5px;
+  padding: 7px 16px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  transition: background 0.15s;
 }
-.edit-btn,
-.back-btn {
+.edit-btn {
   padding: 7px 16px;
   border-radius: 8px;
   border: 2px solid var(--line);
@@ -165,8 +161,7 @@ defineEmits<{
   font-family: var(--font-sans);
   transition: background 0.15s;
 }
-.edit-btn:hover,
-.back-btn:hover {
+.edit-btn:hover {
   background: var(--bg-2);
 }
 .streak-chip {
@@ -228,7 +223,9 @@ defineEmits<{
     align-items: center;
     justify-content: flex-start;
   }
-  .edit-btn,
+  .edit-btn {
+    padding: 7px 11px;
+  }
   .back-btn {
     padding: 7px 11px;
   }

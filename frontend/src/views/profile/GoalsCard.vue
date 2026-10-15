@@ -1,18 +1,8 @@
 <template>
   <ProfileSectionCard class="goal-card" title="今日目标">
     <template #action>
-      <button class="goal-edit-btn" title="设置目标" @click="openModal">
-        <svg
-          width="12"
-          height="12"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-        >
-          <path d="M12 5v14M5 12h14" />
-        </svg>
+      <button class="goal-edit-btn ui-icon-button" title="设置目标" @click="openModal">
+        <Plus :size="12" aria-hidden="true" />
       </button>
     </template>
     <div class="ring-area">
@@ -121,6 +111,7 @@
 </template>
 
 <script setup lang="ts">
+import { Plus } from '@lucide/vue'
 // GoalsCard 页面组件，承载对应页面的主要交互。
 import { ref, computed, reactive, watch, onMounted } from 'vue'
 import {
@@ -296,17 +287,8 @@ function resetToDefault() {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--bg-2);
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  color: var(--ink-3);
   cursor: pointer;
   transition: all 0.15s;
-}
-.goal-edit-btn:hover {
-  background: var(--blue-tint);
-  border-color: var(--blue-line);
-  color: var(--blue-2);
 }
 
 .ring-area {
