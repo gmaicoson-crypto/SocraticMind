@@ -260,28 +260,50 @@ def test_delete_invalidates_summary_and_excludes_removed_turn(client, db_session
 def test_partial_interrupted_regeneration_does_not_replace_original_context(
     client, db_session, monkeypatch
 ):
+    from routers import chat
+    from services.chat_lifecycle import cancel_chat_turn
+
     monkeypatch.setattr("routers.chat.chat_stream", lambda **kwargs: iter(["original"]))
     first = client.post("/api/chat/stream", json=payload())
     calls = []
 
     def interrupted(**kwargs):
         calls.append(kwargs)
-        yield "partial retry"
-        from services.chat_lifecycle import cancel_chat_turn
-
-        active = db_session.query(ChatTurn).filter_by(status="generating").one()
-        cancel_chat_turn(
-            db_session,
-            user_id=active.user_id,
-            session_id="conversation",
-            request_id=active.request_id,
-        )
+        return iter(["partial retry"])
 
     monkeypatch.setattr("routers.chat.chat_stream", interrupted)
-    retry = client.post(
-        "/api/chat/stream", json=payload(regenerate_message_id=message_ids(first)["ai"])
-    )
-    assert "error" in retry.text
+    original_refresh = chat.refresh_generation_lease
+
+    def refresh_with_cancel(db, **kwargs):
+        refreshed = original_refresh(db, **kwargs)
+        # The model worker must not share the owner's Session. Cancel after the
+        # first partial checkpoint is committed, on the owning generator thread.
+        if refreshed and kwargs.get("content") == "partial retry":
+            cancel_chat_turn(
+                db,
+                user_id=kwargs["user_id"],
+                session_id="conversation",
+                request_id=kwargs["request_id"],
+            )
+        return refreshed
+
+    request = payload(regenerate_message_id=message_ids(first)["ai"])
+    with monkeypatch.context() as checkpoint:
+        checkpoint.setattr(chat, "refresh_generation_lease", refresh_with_cancel)
+        retry = client.post("/api/chat/stream", json=request)
+    emitted = events(retry)
+    assert [event["text"] for event in emitted if "text" in event] == ["partial retry"]
+    assert any(event.get("error", {}).get("code") == "CHAT_REQUEST_CANCELLED" for event in emitted)
+    assert [event["request_state"]["status"] for event in emitted if "request_state" in event] == [
+        "interrupted"
+    ]
+    partial = db_session.get(ChatMessage, message_ids(retry)["ai"])
+    assert partial.content == "partial retry"
+    assert partial.metadata_json["status"] == "interrupted"
+    recovered = client.get(f"/api/chat/requests/{request['request_id']}").json()
+    assert recovered["status"] == "interrupted"
+    assert recovered["msg_ids"] == message_ids(retry)
+    assert len(calls) == 1
     monkeypatch.setattr(
         "routers.chat.chat_stream", lambda **kwargs: calls.append(kwargs) or iter(["next"])
     )
