@@ -29,10 +29,7 @@
             <div class="history-name-wrap">
               <span class="history-name" :title="session.name">{{ session.name }}</span>
             </div>
-            <div class="history-time">
-              <span class="history-date">{{ historyTimes.get(session.id)?.date }}</span>
-              <span class="history-clock">{{ historyTimes.get(session.id)?.time }}</span>
-            </div>
+            <TimeDisplay class="history-time" :value="session.updatedAt" />
           </div>
           <span class="history-count">{{ messageCount(session) }} 条</span>
           <div class="history-item-actions" @click.stop>
@@ -65,12 +62,12 @@
 <script setup lang="ts">
 import { Pencil, Plus, Trash2, X } from '@lucide/vue'
 // DialogueHistoryPanel 组件，封装局部界面和交互逻辑。
-import { computed, ref } from 'vue'
+import { ref } from 'vue'
 import IconButton from '../ui/IconButton.vue'
+import TimeDisplay from '../ui/TimeDisplay.vue'
 import type { DialogueSession } from '../../types'
 import { avatarSrc } from '../../utils/avatar'
 import { isWelcomeMessage } from '../../composables/useChatSessions'
-import { formatSessionTime } from '../../utils/chat'
 
 const props = defineProps<{
   show: boolean
@@ -89,10 +86,6 @@ defineEmits<{
 }>()
 
 const panelRef = ref<HTMLDivElement | null>(null)
-const historyTimes = computed(
-  () =>
-    new Map(props.sessions.map((session) => [session.id, formatSessionTime(session.updatedAt)])),
-)
 
 function focusAction(id: string, action: 'rename' | 'delete') {
   const row = Array.from(panelRef.value?.querySelectorAll<HTMLElement>('.history-item') ?? []).find(
@@ -201,8 +194,7 @@ function messageCount(session: DialogueSession): number {
   font-variant-numeric: tabular-nums;
 }
 .history-time {
-  display: flex;
-  flex-direction: column;
+  display: block;
   font-size: 10px;
   color: var(--ink-3);
   font-family: var(--font-mono);

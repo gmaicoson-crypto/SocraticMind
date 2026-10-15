@@ -204,6 +204,7 @@
           @assess="startAssessment"
           @self-report="requestMasteryAction('self_report')"
           @revert="requestMasteryAction('revert')"
+          @view-assessment-history="viewAssessmentHistory"
         />
       </template>
     </MessageList>
@@ -257,6 +258,17 @@
       @continue="continueLearning"
       @retry="startAssessment"
       @revert="requestMasteryAction('revert')"
+    />
+    <AssessmentHistoryModal
+      v-if="
+        chatMode === 'socratic' &&
+        assessmentHistoryOpen &&
+        store.activeNode?.dbId &&
+        !assessmentActive
+      "
+      :node-id="store.activeNode.dbId"
+      :node-label="store.activeNode.label"
+      @close="continueLearning"
     />
     <AiAvatarPickerModal
       v-if="avatarPickerSessionId"
@@ -342,7 +354,7 @@
 
 <script setup lang="ts">
 // SocraticDialogue 组件，封装局部界面和交互逻辑。
-import { ref, watch, nextTick, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, shallowRef, watch, nextTick, computed, onMounted, onBeforeUnmount } from 'vue'
 import { History, Pencil, Plus } from '@lucide/vue'
 import { useAttachmentDrafts } from '../composables/useAttachmentDrafts'
 import { useModelsStore } from '../stores/models'
@@ -404,6 +416,7 @@ import OnboardingForm from './agent/OnboardingForm.vue'
 import AgentStepMessage from './agent/AgentStepMessage.vue'
 import PlanPreview from './agent/PlanPreview.vue'
 import AssessmentResultModal from './agent/AssessmentResultModal.vue'
+import AssessmentHistoryModal from './agent/AssessmentHistoryModal.vue'
 import NodeMasteryControls from './agent/NodeMasteryControls.vue'
 import ConfirmDialog from './ui/ConfirmDialog.vue'
 import BaseToast from './ui/BaseToast.vue'
@@ -464,7 +477,8 @@ const pendingSessionDelete = ref<{ id: string; name: string; mode: ChatMode } | 
 const deletingSession = ref(false)
 const sessionDeleteError = ref('')
 const masteryConfirm = ref<'self_report' | 'revert' | null>(null)
-const dismissedAssessmentNodeId = ref<number | null>(null)
+const assessmentResult = shallowRef<AssessmentResultData | null>(null)
+const assessmentHistoryOpen = ref(false)
 const startingAssessment = ref(false)
 
 let isHydrated = false
@@ -590,20 +604,25 @@ const attachmentDisabledReason = computed(() => {
   return ''
 })
 const attachmentsEnabled = computed(() => !attachmentDisabledReason.value)
-const assessmentResult = computed<AssessmentResultData | null>(() => {
-  const run = agentStore.run
-  if (
-    run?.type === 'assessment' &&
-    run.status === 'completed' &&
-    run.result &&
-    'scores' in run.result
-  ) {
-    const result = run.result as AssessmentResultData
-    if (!store.activeNode?.dbId || result.node_id === store.activeNode.dbId) return result
-  }
-  const node = store.activeNode
-  if (!node?.assessmentResult || dismissedAssessmentNodeId.value === node.dbId) return null
-  return node.assessmentResult
+watch(
+  () => agentStore.run,
+  (run, previous) => {
+    // Only a live completion opens the result; loading historical results stays silent.
+    if (
+      run?.type === 'assessment' &&
+      run.status === 'completed' &&
+      run.result &&
+      'scores' in run.result &&
+      previous?.run_id === run.run_id &&
+      !['completed', 'cancelled'].includes(previous.status)
+    ) {
+      assessmentResult.value = run.result as AssessmentResultData
+    }
+  },
+)
+watch([currentSessionId, () => store.activeNode?.dbId], () => {
+  assessmentResult.value = null
+  assessmentHistoryOpen.value = false
 })
 const socraticBadge = computed(() =>
   Math.max(
@@ -860,7 +879,8 @@ async function startAssessment() {
   if (assessmentActive.value || agentStore.submitting || isThinking.value) return
   const nodeId = store.activeNode?.dbId
   if (!nodeId || store.activeNode?.state === 'locked') return
-  dismissedAssessmentNodeId.value = null
+  assessmentResult.value = null
+  assessmentHistoryOpen.value = false
   startingAssessment.value = true
   resetScrollToBottom()
   try {
@@ -873,9 +893,16 @@ async function startAssessment() {
 
 function continueLearning() {
   if (blockDuringAssessment()) return
-  dismissedAssessmentNodeId.value = store.activeNode?.dbId ?? null
+  assessmentResult.value = null
+  assessmentHistoryOpen.value = false
   agentStore.clearRun()
   resetScrollToBottom()
+}
+
+function viewAssessmentHistory() {
+  if (blockDuringAssessment() || agentStore.submitting || !store.activeNode?.dbId) return
+  assessmentResult.value = null
+  assessmentHistoryOpen.value = true
 }
 
 function requestMasteryAction(action: 'self_report' | 'revert') {
@@ -896,7 +923,7 @@ async function confirmMasteryAction() {
   if (response) {
     masteryConfirm.value = null
     if (action === 'revert') {
-      dismissedAssessmentNodeId.value = nodeId
+      assessmentResult.value = null
       agentStore.clearRun()
     }
   }
@@ -1019,6 +1046,8 @@ function newSession() {
 }
 
 function resetSessionInteraction() {
+  assessmentResult.value = null
+  assessmentHistoryOpen.value = false
   editingSessionId.value = null
   editingSessionInHeader.value = false
   sessionNameError.value = ''

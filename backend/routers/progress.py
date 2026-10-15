@@ -297,6 +297,7 @@ def get_stats(
             "title": f"掌握「{label}」节点",
             "sub": topic_title,
             "time": mastered_at.strftime("%m/%d %H:%M"),
+            "occurred_at": mastered_at.isoformat(),
         }
         for mastered_at, label, topic_title in mastery_timeline[:5]
     ]

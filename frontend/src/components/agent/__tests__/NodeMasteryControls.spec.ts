@@ -3,6 +3,20 @@ import { mount } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import NodeMasteryControls from '../NodeMasteryControls.vue'
 import type { KNode } from '../../../types'
+import type { AssessmentResult } from '../../../types/learningAgent'
+
+const assessmentResult: AssessmentResult = {
+  node_id: 20,
+  node_label: '数组',
+  scores: [],
+  total_score: 80,
+  evidence: '理解基础概念',
+  weaknesses: [],
+  passed: true,
+  professional_review_required: false,
+  threshold: { minimum_score: 75 },
+  next_actions: ['continue_plan'],
+}
 
 const node = (state: KNode['state']): KNode => ({
   id: 'arrays',
@@ -19,6 +33,7 @@ describe('NodeMasteryControls', () => {
     const wrapper = mount(NodeMasteryControls, { props: { node: node('available') } })
     expect(wrapper.text()).toContain('开始评估')
     expect(wrapper.text()).toContain('自报掌握')
+    expect(wrapper.find('.mastery-history').exists()).toBe(false)
     expect(
       wrapper.findAll('.mastery-actions button').every((button) => !button.attributes('disabled')),
     ).toBe(true)
@@ -40,6 +55,25 @@ describe('NodeMasteryControls', () => {
     expect(wrapper.text()).toContain('用户自报')
     expect(wrapper.text()).toContain('撤销掌握')
   })
+
+  it.each(['available', 'mastered', 'locked'] as const)(
+    'allows viewing historical results for a %s node and disables the entry while busy',
+    async (state) => {
+      const wrapper = mount(NodeMasteryControls, {
+        props: { node: { ...node(state), assessmentResult } },
+      })
+      const historyButton = wrapper.get('.mastery-footer .mastery-history')
+      expect(historyButton.text()).toBe('查看历史评估结果')
+      expect(historyButton.attributes('disabled')).toBeUndefined()
+      await historyButton.trigger('click')
+      expect(wrapper.emitted('viewAssessmentHistory')).toHaveLength(1)
+      expect(wrapper.emitted('assess')).toBeUndefined()
+      await wrapper.setProps({ busy: true })
+      expect(historyButton.attributes('disabled')).toBeDefined()
+      await historyButton.trigger('click')
+      expect(wrapper.emitted('viewAssessmentHistory')).toHaveLength(1)
+    },
+  )
 
   it('collapses toward the suggestion boundary and reopens for another node', async () => {
     const wrapper = mount(NodeMasteryControls, {

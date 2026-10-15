@@ -3,7 +3,7 @@
     <span class="topic-mark" aria-hidden="true">{{ item.topic_emoji }}</span>
     <span class="task-copy">
       <strong>{{ item.node_label }}</strong>
-      <small>{{ item.topic_title }} · {{ item.scheduled_date }}</small>
+      <small>{{ item.topic_title }} · <TimeDisplay :value="item.scheduled_date" /></small>
     </span>
     <span class="task-meta">
       <span>{{ item.estimated_minutes }} 分钟</span>
@@ -15,6 +15,7 @@
 </template>
 
 <script setup lang="ts">
+import TimeDisplay from '../ui/TimeDisplay.vue'
 import type { TodayPlanItem } from '../../types/learningAgent'
 
 withDefaults(defineProps<{ item: TodayPlanItem; busy?: boolean }>(), { busy: false })

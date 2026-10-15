@@ -101,12 +101,14 @@
 
     <div class="result-actions">
       <BaseButton :disabled="busy" @click="emit('continue')">继续学习</BaseButton>
-      <BaseButton v-if="result.passed" :disabled="busy" @click="emit('revert')"
-        >撤销掌握</BaseButton
-      >
-      <BaseButton v-else class="primary" :disabled="busy" @click="emit('retry')"
-        >重新评估</BaseButton
-      >
+      <template v-if="!readOnly">
+        <BaseButton v-if="result.passed" :disabled="busy" @click="emit('revert')"
+          >撤销掌握</BaseButton
+        >
+        <BaseButton v-else class="primary" :disabled="busy" @click="emit('retry')"
+          >重新评估</BaseButton
+        >
+      </template>
     </div>
   </section>
 </template>
@@ -119,9 +121,10 @@ import BaseButton from '../ui/BaseButton.vue'
 import AssessmentScoreCard from './AssessmentScoreCard.vue'
 import AssessmentScoringGuide from './AssessmentScoringGuide.vue'
 
-const props = withDefaults(defineProps<{ result: AssessmentResult; busy?: boolean }>(), {
-  busy: false,
-})
+const props = withDefaults(
+  defineProps<{ result: AssessmentResult; busy?: boolean; readOnly?: boolean }>(),
+  { busy: false, readOnly: false },
+)
 const emit = defineEmits<{ continue: []; retry: []; revert: [] }>()
 // Old saved results used a 12-point total; the explicit maximum distinguishes new low scores.
 const totalPoints = computed(() =>

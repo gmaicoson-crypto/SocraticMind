@@ -131,6 +131,23 @@ export interface AgentRunError {
   retryable: boolean
 }
 
+export interface AssessmentHistoryItem {
+  id: number
+  run_id: string
+  assessed_at: string
+  total_score: number | null
+  max_score: number
+  passed: boolean
+}
+
+export interface AssessmentHistoryPage {
+  items: AssessmentHistoryItem[]
+  page: number
+  page_size: number
+  total: number
+  total_pages: number
+}
+
 export interface AgentRun {
   run_id: string
   type: AgentRunType

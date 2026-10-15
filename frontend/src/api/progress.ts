@@ -23,7 +23,7 @@ export interface ProfileStats {
   streak: number
   total_days: number
   heatmap: { date: string; count: number }[]
-  timeline: { type: string; title: string; sub: string; time: string }[]
+  timeline: { type: string; title: string; sub: string; time: string; occurred_at?: string }[]
   badges: { icon: string; name: string; unlocked: boolean }[]
   weekly?: {
     chat_count: number

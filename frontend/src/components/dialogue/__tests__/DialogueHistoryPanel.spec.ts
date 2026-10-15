@@ -1,5 +1,5 @@
 import { mount } from '@vue/test-utils'
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { DialogueSession } from '../../../types'
 import { createDefaultSession } from '../../../composables/useChatSessions'
 import DialogueHistoryPanel from '../DialogueHistoryPanel.vue'
@@ -18,6 +18,12 @@ function mountHistory(sessions: DialogueSession[]) {
 }
 
 describe('dialogue history presentation', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(2026, 9, 15, 12))
+  })
+  afterEach(() => vi.useRealTimers())
+
   it('displays AI titles and counts actual messages with or without a welcome message', () => {
     const normal = createDefaultSession('socratic')
     normal.name = '工具调用与普通文本回答的区别'
@@ -70,12 +76,17 @@ describe('dialogue history presentation', () => {
     wrapper.unmount()
   })
 
-  it('shows the date above the minute time without ISO separators or seconds', () => {
+  it.each([
+    [new Date(2026, 9, 15, 5, 13, 47), '05:13'],
+    [new Date(2026, 9, 12, 5, 13, 47), '10/12'],
+    [new Date(2025, 9, 12, 5, 13, 47), '2025/10/12'],
+  ] as const)('uses the message time rule for history updated at %s', (date, text) => {
     const session = createDefaultSession('normal')
-    session.updatedAt = new Date(2026, 9, 12, 5, 13, 47).toISOString()
+    session.updatedAt = date.toISOString()
     const wrapper = mountHistory([session])
-    expect(wrapper.get('.history-date').text()).toBe('2026-10-12')
-    expect(wrapper.get('.history-clock').text()).toBe('05:13')
+    expect(wrapper.get('.history-time').text()).toBe(text)
+    expect(wrapper.get('.history-time').attributes('datetime')).toBe(session.updatedAt)
+    expect(wrapper.get('.history-time').attributes('title')).toContain('05:13')
     expect(wrapper.get('.history-time').text()).not.toContain('T')
     wrapper.unmount()
   })

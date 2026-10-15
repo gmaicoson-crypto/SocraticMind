@@ -54,7 +54,8 @@ describe('ReviewPractice', () => {
       7,
       expect.objectContaining({ version: 1, answer: '线性变换', timezone: 'UTC' }),
     )
-    expect(wrapper.text()).toContain('2026-10-13')
+    expect(wrapper.get('time').attributes('datetime')).toBe('2026-10-13')
+    expect(wrapper.get('time').text()).toMatch(/^(2026\/)?10\/13$/)
     expect(wrapper.text()).toContain('还缺少实例')
     expect(wrapper.emitted('completed')).toHaveLength(1)
     expect(wrapper.find('textarea').exists()).toBe(false)

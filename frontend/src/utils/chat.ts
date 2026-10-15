@@ -43,7 +43,22 @@ export function now(): string {
   return new Date().toISOString()
 }
 
+const calendarDatePattern = /^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/
+
 export function parseSessionDate(value: string, today = new Date()): Date | null {
+  const calendarDate = calendarDatePattern.exec(value.trim())
+  if (calendarDate) {
+    // A scheduled day is a calendar date, so parsing must not shift it through UTC.
+    const [, year, month, day] = calendarDate
+    const date = new Date(Number(year), Number(month) - 1, Number(day))
+    return date.getFullYear() === Number(year) &&
+      date.getMonth() === Number(month) - 1 &&
+      date.getDate() === Number(day)
+      ? date
+      : null
+  }
+  // Keep dates with only year/month precision intact rather than inventing a day.
+  if (/^\d{4}(?:[-/]\d{1,2})?$/.test(value.trim())) return null
   const legacy = /^(?:(\d{4})[/-])?(\d{1,2})[/-](\d{1,2})[,，]?\s+(\d{1,2}):(\d{2})$/.exec(
     value.trim(),
   )
@@ -86,14 +101,20 @@ export function formatSessionTime(
 }
 
 export function formatMessageTime(value: string, today = new Date()): string {
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return value
+  const date = parseSessionDate(value, today)
+  if (!date) return /^\d{1,2}:\d{2}$/.test(value) ? value.padStart(5, '0') : value || '—'
   const pad = (part: number) => String(part).padStart(2, '0')
-  if (date.toDateString() === today.toDateString()) {
+  if (!calendarDatePattern.test(value.trim()) && date.toDateString() === today.toDateString()) {
     return `${pad(date.getHours())}:${pad(date.getMinutes())}`
   }
   const day = `${pad(date.getMonth() + 1)}/${pad(date.getDate())}`
   return date.getFullYear() === today.getFullYear() ? day : `${date.getFullYear()}/${day}`
+}
+
+export function formatFullTime(value: string, today = new Date()): string {
+  const { date, time } = formatSessionTime(value, today)
+  if (date === '—') return time === '—' ? value || '—' : time
+  return calendarDatePattern.test(value.trim()) ? date : `${date} ${time}`
 }
 
 export function retryableAiIndex(

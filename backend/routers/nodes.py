@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func, or_
 from pydantic import BaseModel
 from typing import Any, List
+from datetime import timezone
 import uuid
 from core.database import get_db
 from core.deps import get_current_user
@@ -10,11 +11,13 @@ from models.user import User
 from models.topic import Topic
 from models.node import Node
 from models.assessment import AssessmentAttempt
+from models.agent_run import AgentRun
 from models.enums import MasterySource
 from core.errors import ApiError
 from services.mastery import record_mastery
 from services.mastery import revert_mastery
 from schemas.mastery import MasteryRequest
+from schemas.assessment_history import AssessmentHistoryItem, AssessmentHistoryPage
 from services.assessment_results import assessment_result_payload
 
 router = APIRouter(prefix="/api/nodes", tags=["节点"])
@@ -135,6 +138,79 @@ def undo_mastery(
             node_id=node_id,
             request_id=req.request_id,
         )
+    )
+
+
+@router.get("/{node_id}/assessments", response_model=AssessmentHistoryPage)
+def get_assessment_history(
+    node_id: int,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=50),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    owned = (
+        db.query(Node.id)
+        .join(Topic, Node.topic_id == Topic.id)
+        .filter(Node.id == node_id, Topic.user_id == current_user.id)
+        .first()
+    )
+    if owned is None:
+        raise ApiError(status_code=404, code="NODE_NOT_FOUND", message="节点不存在")
+
+    # Fetch summary columns only; full questions and answers use the existing run endpoint.
+    query = (
+        db.query(
+            AssessmentAttempt.id,
+            AssessmentAttempt.run_id,
+            AssessmentAttempt.created_at,
+            AssessmentAttempt.completed_at,
+            AgentRun.result_json["total_score"].as_integer().label("total_score"),
+            AgentRun.result_json["max_score"].as_integer().label("max_score"),
+            AgentRun.result_json["passed"].as_boolean().label("passed"),
+        )
+        .join(AgentRun, AssessmentAttempt.run_id == AgentRun.id)
+        .filter(
+            AssessmentAttempt.user_id == current_user.id,
+            AssessmentAttempt.node_id == node_id,
+            AssessmentAttempt.status == "completed",
+            AgentRun.user_id == current_user.id,
+            AgentRun.run_type == "assessment",
+        )
+    )
+    # Count only IDs so page totals do not load or project the saved scoring JSON.
+    total = query.with_entities(func.count(AssessmentAttempt.id)).scalar()
+    total_pages = (total + page_size - 1) // page_size
+    current_page = min(page, max(total_pages, 1))
+    rows = (
+        query.order_by(AssessmentAttempt.id.desc())
+        .offset((current_page - 1) * page_size)
+        .limit(page_size)
+        .all()
+        if total
+        else []
+    )
+    items = []
+    for row in rows:
+        assessed_at = row.completed_at or row.created_at
+        if assessed_at.tzinfo is None:
+            assessed_at = assessed_at.replace(tzinfo=timezone.utc)
+        items.append(
+            AssessmentHistoryItem(
+                id=row.id,
+                run_id=row.run_id,
+                assessed_at=assessed_at,
+                total_score=row.total_score,
+                max_score=row.max_score or 12,
+                passed=bool(row.passed),
+            )
+        )
+    return AssessmentHistoryPage(
+        items=items,
+        page=current_page,
+        page_size=page_size,
+        total=total,
+        total_pages=total_pages,
     )
 
 

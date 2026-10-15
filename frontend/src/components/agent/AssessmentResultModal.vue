@@ -6,12 +6,12 @@
         class="assessment-result-dialog"
         role="dialog"
         aria-modal="true"
-        aria-label="评估结果"
+        :aria-label="title"
         tabindex="-1"
         @keydown.tab="trapFocus"
       >
         <header class="assessment-result-heading">
-          <h2>评估结果</h2>
+          <h2>{{ title }}</h2>
           <button
             type="button"
             class="result-close ui-icon-button"
@@ -23,13 +23,16 @@
           </button>
         </header>
         <div class="assessment-result-content">
-          <AssessmentResult
-            :result="result"
-            :busy="busy"
-            @continue="close"
-            @retry="emit('retry')"
-            @revert="emit('revert')"
-          />
+          <slot>
+            <AssessmentResult
+              v-if="result"
+              :result="result"
+              :busy="busy"
+              @continue="close"
+              @retry="emit('retry')"
+              @revert="emit('revert')"
+            />
+          </slot>
         </div>
       </section>
     </div>
@@ -44,8 +47,13 @@ import BaseModal from '../ui/BaseModal.vue'
 import AssessmentResult from './AssessmentResult.vue'
 
 const props = withDefaults(
-  defineProps<{ result: AssessmentResultData; busy?: boolean; closeDisabled?: boolean }>(),
-  { busy: false, closeDisabled: false },
+  defineProps<{
+    result?: AssessmentResultData
+    title?: string
+    busy?: boolean
+    closeDisabled?: boolean
+  }>(),
+  { title: '评估结果', busy: false, closeDisabled: false },
 )
 const emit = defineEmits<{ continue: []; retry: []; revert: [] }>()
 const dialogRef = ref<HTMLElement | null>(null)

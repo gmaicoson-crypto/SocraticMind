@@ -116,3 +116,26 @@ def test_message_ids_only_archive_owned_socratic_user_messages(client, db_sessio
     assert db_session.query(ChatMessage).filter_by(id=other_id).count() == 1
     assert db_session.query(ArchivedChatActivity).count() == 1
     assert client.get("/api/progress/stats").json()["chat_count"] == 1
+
+
+def test_mastery_timeline_includes_full_timestamp_for_cross_year_display(
+    client, db_session, auth_user
+):
+    topic = Topic(user_id=auth_user.id, title="Time presentation")
+    db_session.add(topic)
+    db_session.flush()
+    db_session.add(
+        Node(
+            topic_id=topic.id,
+            node_key="old-mastery",
+            label="Old mastery",
+            state="mastered",
+            mastered_at=datetime(2024, 12, 31, 23, 59, 42, tzinfo=timezone.utc),
+        )
+    )
+    db_session.commit()
+    before = client.get("/api/progress/stats").json()["timeline"]
+    assert before[0]["occurred_at"].startswith("2024-12-31T23:59:42")
+    assert before[0]["time"] == "12/31 23:59"
+    assert client.delete(f"/api/topics/{topic.id}").status_code == 200
+    assert client.get("/api/progress/stats").json()["timeline"] == before

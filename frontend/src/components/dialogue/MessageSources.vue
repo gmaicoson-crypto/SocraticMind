@@ -24,7 +24,7 @@
         >
       </summary>
       <p v-if="web.searched_at" class="search-time">
-        检索于 {{ displayTime(web.searched_at) }} · 依据相关片段
+        检索于 <TimeDisplay :value="web.searched_at" /> · 依据相关片段
       </p>
       <ol>
         <li
@@ -63,8 +63,8 @@
           </div>
           <span v-if="'domain' in source" class="source-domain">{{ source.domain }}</span>
           <span v-if="'published_at' in source && source.published_at" class="source-domain">
-            · 发布于 {{ displayTime(source.published_at) }}</span
-          >
+            · 发布于 <TimeDisplay :value="source.published_at"
+          /></span>
           <p v-if="source.excerpt">{{ source.excerpt }}</p>
         </li>
       </ol>
@@ -92,6 +92,7 @@ import { attachmentLocation } from '../../types/attachments'
 import type { FileSource, AnswerSource } from '../../types/webSearch'
 import type { WebSnapshot } from '../../types/webSearch'
 import { safeWebUrl, webStatusText } from '../../utils/webSearch'
+import TimeDisplay from '../ui/TimeDisplay.vue'
 
 const activeSource = ref<FileSource | null>(null)
 const props = defineProps<{ web?: WebSnapshot; pending?: boolean }>()
@@ -113,10 +114,6 @@ const orderedSources = computed(() =>
 )
 function sourceUrl(source: AnswerSource) {
   return 'url' in source ? safeWebUrl(source.url) : null
-}
-function displayTime(value: string) {
-  const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleString('zh-CN')
 }
 </script>
 

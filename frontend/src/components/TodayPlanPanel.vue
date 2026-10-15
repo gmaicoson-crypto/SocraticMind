@@ -5,7 +5,7 @@
         <p>Today</p>
         <h2>今日学习计划</h2>
       </div>
-      <span v-if="plan">{{ plan.date }}</span>
+      <TimeDisplay v-if="plan" :value="plan.date" />
     </header>
 
     <div v-if="plans.loading && !plan" class="panel-state">正在加载计划</div>
@@ -44,7 +44,7 @@
           <strong>{{ item.node_label }}</strong>
           <span>{{ item.prompt }}</span>
           <small
-            >{{ item.topic_title }} · {{ item.due_date }} · 已复习
+            >{{ item.topic_title }} · <TimeDisplay :value="item.due_date" /> · 已复习
             {{ item.attempt_count }} 次</small
           >
         </button>
@@ -112,6 +112,7 @@ import { useLearningStore } from '../stores/learning'
 import { usePlansStore } from '../stores/plans'
 import type { TodayPlanItem } from '../types/learningAgent'
 import BaseButton from './ui/BaseButton.vue'
+import TimeDisplay from './ui/TimeDisplay.vue'
 import EmptyState from './ui/EmptyState.vue'
 import PlanTaskRow from './planning/PlanTaskRow.vue'
 import ReviewPractice from './planning/ReviewPractice.vue'
@@ -243,7 +244,7 @@ function createTopicPlan() {
   font-size: 15px;
   letter-spacing: 0;
 }
-.plan-header > span {
+.plan-header > time {
   color: var(--ink-3);
   font-size: 11px;
   font-family: var(--font-mono);

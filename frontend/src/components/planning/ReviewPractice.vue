@@ -41,7 +41,7 @@
             {{ result.score }}/4 · 评分置信度 {{ Math.round(result.evaluation_confidence * 100) }}%
           </p>
           <p>{{ result.rationale }}</p>
-          <p v-if="!result.passed">下次复习：{{ result.next_due_date }}</p>
+          <p v-if="!result.passed">下次复习：<TimeDisplay :value="result.next_due_date" /></p>
         </template>
         <BaseButton @click="emit('close')">返回学习计划</BaseButton>
       </div>
@@ -67,6 +67,7 @@ import type { ReviewDetail, ReviewResult } from '../../types/learningAgent'
 import { createRequestId } from '../../utils/requestId'
 import AgentStepMessage from '../agent/AgentStepMessage.vue'
 import BaseButton from '../ui/BaseButton.vue'
+import TimeDisplay from '../ui/TimeDisplay.vue'
 
 const props = defineProps<{ reviewId: number; timezone: string }>()
 const emit = defineEmits<{ close: []; completed: [] }>()

@@ -47,6 +47,23 @@ const result: AssessmentResultData = {
 }
 
 describe('AssessmentResult', () => {
+  it.each([true, false])('keeps historical results read only for passed=%s', async (passed) => {
+    const wrapper = mount(AssessmentResult, {
+      props: { result: { ...result, passed }, readOnly: true },
+    })
+    expect(wrapper.findAll('.result-actions button').map((button) => button.text())).toEqual([
+      '继续学习',
+    ])
+    await wrapper.findAll('.result-pages button')[1].trigger('click')
+    expect(wrapper.text()).toContain(result.scores[0]!.question)
+    expect(wrapper.text()).toContain(result.scores[0]!.answer)
+    await wrapper.get('.result-actions button').trigger('click')
+    expect(wrapper.emitted('continue')).toEqual([[]])
+    expect(wrapper.emitted('revert')).toBeUndefined()
+    expect(wrapper.emitted('retry')).toBeUndefined()
+    wrapper.unmount()
+  })
+
   it('separates the overview from detailed scores while preserving assessment actions', async () => {
     const wrapper = mount(AssessmentResult, { props: { result: { ...result, passed: false } } })
     expect(wrapper.text()).toContain('75/100')

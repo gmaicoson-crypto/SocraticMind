@@ -78,7 +78,7 @@
       >
         <span class="msg-time"
           >{{ message.role === 'ai' ? 'Socrates AI' : '你' }} ·
-          {{ formatMessageTime(message.time) }}
+          <TimeDisplay :value="message.time" />
           <span
             v-if="
               message.metadata?.status === 'interrupted' || message.metadata?.status === 'failed'
@@ -188,7 +188,8 @@
 import { computed, onBeforeUnmount, ref } from 'vue'
 import { ArrowUpRight } from '@lucide/vue'
 import type { Message } from '../../types'
-import { formatMessageTime, hasMessageContent } from '../../utils/chat'
+import { hasMessageContent } from '../../utils/chat'
+import TimeDisplay from '../ui/TimeDisplay.vue'
 import { avatarSrc } from '../../utils/avatar'
 import { defaultUserAvatar } from '../../utils/avatarPresets'
 import InlineMarkdown from './InlineMarkdown.vue'

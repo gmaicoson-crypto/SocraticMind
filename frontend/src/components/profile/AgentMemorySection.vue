@@ -30,7 +30,7 @@
           <div class="memory-meta">
             <span>{{ sourceLabel(memory.source) }}</span>
             <span>{{ scopeLabel(memory.topic_id) }}</span>
-            <time :datetime="memory.updated_at">{{ formatDate(memory.updated_at) }}</time>
+            <TimeDisplay :value="memory.updated_at" />
           </div>
           <div class="memory-actions">
             <button
@@ -140,6 +140,7 @@ import BaseButton from '../ui/BaseButton.vue'
 import BaseInput from '../ui/BaseInput.vue'
 import BaseModal from '../ui/BaseModal.vue'
 import ConfirmDialog from '../ui/ConfirmDialog.vue'
+import TimeDisplay from '../ui/TimeDisplay.vue'
 
 const memoryKinds: { value: MemoryKind; label: string }[] = [
   { value: 'goal', label: '目标' },
@@ -211,11 +212,6 @@ function sourceLabel(source: MemorySource) {
 function scopeLabel(topicId: number | null) {
   if (topicId == null) return '全部主题'
   return learning.topics.find((topic) => Number(topic.id) === topicId)?.title ?? `主题 ${topicId}`
-}
-
-function formatDate(value: string) {
-  const parsed = new Date(value)
-  return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleDateString()
 }
 </script>
 

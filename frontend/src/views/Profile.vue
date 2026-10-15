@@ -92,7 +92,7 @@
               <div class="tl-title">{{ r.title }}</div>
               <div class="tl-sub">{{ r.sub }}</div>
             </div>
-            <div class="tl-time">{{ r.time }}</div>
+            <TimeDisplay class="tl-time" :value="r.occurred_at ?? r.time" />
           </div>
         </div>
       </div>
@@ -107,6 +107,7 @@ import { ref, shallowRef, computed, onMounted, defineAsyncComponent } from 'vue'
 import { useRouter } from 'vue-router'
 import { useLearningStore } from '../stores/learning'
 import TopBar from '../components/TopBar.vue'
+import TimeDisplay from '../components/ui/TimeDisplay.vue'
 
 const EditProfileModal = defineAsyncComponent(
   () => import('../components/profile/EditProfileModal.vue'),

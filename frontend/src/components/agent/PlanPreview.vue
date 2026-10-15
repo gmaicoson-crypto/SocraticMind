@@ -23,7 +23,7 @@
       </div>
       <div>
         <dt>完成日期</dt>
-        <dd>{{ preview.estimated_end_date }}</dd>
+        <dd><TimeDisplay :value="preview.estimated_end_date" /></dd>
       </div>
     </dl>
 
@@ -57,8 +57,8 @@
         <h4>每日安排</h4>
         <ul class="schedule-list">
           <li v-for="group in schedule" :key="group.date">
-            <span>{{ group.date }}</span
-            ><small>{{ group.minutes }} 分钟 · {{ group.count }} 项</small>
+            <TimeDisplay :value="group.date" />
+            <small>{{ group.minutes }} 分钟 · {{ group.count }} 项</small>
           </li>
         </ul>
       </section>
@@ -76,6 +76,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import TimeDisplay from '../ui/TimeDisplay.vue'
 import type { AgentRunUpdate, PlanPreview as PlanPreviewData } from '../../types/learningAgent'
 
 const props = withDefaults(defineProps<{ preview: PlanPreviewData; busy?: boolean }>(), {
@@ -255,7 +256,7 @@ h4 {
   font-size: 11.5px;
 }
 .node-list span,
-.schedule-list span {
+.schedule-list time {
   min-width: 0;
   overflow-wrap: anywhere;
 }

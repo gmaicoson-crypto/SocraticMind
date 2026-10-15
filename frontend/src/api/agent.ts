@@ -3,6 +3,7 @@ import { getSelectedModelId } from '../utils/modelSelection'
 import type {
   AgentRun,
   AgentRunUpdate,
+  AssessmentHistoryPage,
   MasteryResult,
   OnboardingInput,
   TopicPlanInput,
@@ -26,6 +27,13 @@ export async function startTopicPlan(topicId: number, input: TopicPlanInput) {
 export async function getAgentRun(runId: string) {
   const response = await api.get(`/api/agent/runs/${runId}`)
   return response.data as AgentRun
+}
+
+export async function getNodeAssessmentHistory(nodeId: number, page = 1) {
+  const response = await api.get(`/api/nodes/${nodeId}/assessments`, {
+    params: { page },
+  })
+  return response.data as AssessmentHistoryPage
 }
 
 export async function answerAgentRun(

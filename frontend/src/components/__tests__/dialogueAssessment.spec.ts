@@ -22,6 +22,7 @@ vi.mock('../../api/agent', () => ({
   cancelAgentRun: vi.fn(),
   getAgentRun: vi.fn(),
   retryAgentRun: vi.fn(),
+  getNodeAssessmentHistory: vi.fn(),
 }))
 vi.mock('../../api/chat', () => ({
   chatStream: vi.fn(),
@@ -79,7 +80,7 @@ const result: AssessmentResult = {
 }
 const wrappers: ReturnType<typeof mount>[] = []
 
-async function mountAssessment(previousResult = false) {
+async function mountDialogue(previousResult = false) {
   const learning = useLearningStore()
   learning.topics = [{ id: '7', title: 'Redis', emoji: '', nodes: 1, mastered: 0 }]
   learning.activeTopicId = '7'
@@ -107,8 +108,6 @@ async function mountAssessment(previousResult = false) {
   const wrapper = mount(SocraticDialogue)
   wrappers.push(wrapper)
   await flushPromises()
-  await wrapper.get('.mastery-actions .primary').trigger('click')
-  await flushPromises()
   return {
     wrapper,
     learning,
@@ -118,6 +117,20 @@ async function mountAssessment(previousResult = false) {
     input: wrapper.findComponent(DialogueInputBar),
     history: wrapper.findComponent(DialogueHistoryPanel),
   }
+}
+
+async function mountAssessment(previousResult = false) {
+  const mounted = await mountDialogue(previousResult)
+  await mounted.wrapper.get('.mastery-actions .primary').trigger('click')
+  await flushPromises()
+  return mounted
+}
+
+async function openHistoryResult(wrapper: ReturnType<typeof mount>) {
+  await wrapper.get('.mastery-history').trigger('click')
+  await flushPromises()
+  document.querySelector<HTMLButtonElement>('.history-record')!.click()
+  await flushPromises()
 }
 
 describe('persistent assessment overlay', () => {
@@ -130,6 +143,28 @@ describe('persistent assessment overlay', () => {
       value: vi.fn().mockReturnValue({ matches: false }),
     })
     vi.mocked(agentApi.startAssessment).mockResolvedValue(run)
+    vi.mocked(agentApi.getNodeAssessmentHistory).mockResolvedValue({
+      items: [
+        {
+          id: 1,
+          run_id: run.run_id,
+          assessed_at: '2026-10-15T10:00:00Z',
+          total_score: 8,
+          max_score: 12,
+          passed: false,
+        },
+      ],
+      page: 1,
+      page_size: 20,
+      total: 1,
+      total_pages: 1,
+    })
+    vi.mocked(agentApi.getAgentRun).mockResolvedValue({
+      ...run,
+      status: 'completed',
+      step: null,
+      result,
+    })
     vi.mocked(getAttachmentCapabilities).mockResolvedValue(attachmentCapabilities)
     vi.mocked(getTopics).mockResolvedValue([
       { id: 7, title: 'Redis', emoji: '', total_nodes: 1, mastered_nodes: 0 },
@@ -162,6 +197,46 @@ describe('persistent assessment overlay', () => {
 
   afterEach(() => {
     wrappers.splice(0).forEach((wrapper) => wrapper.unmount())
+  })
+
+  it('opens historical results only from the node card and closes them when the node changes', async () => {
+    const { wrapper, learning } = await mountDialogue(true)
+    expect(document.querySelector('.assessment-result-dialog')).toBeNull()
+    const historyButton = wrapper.get('.mastery-footer .mastery-history')
+    expect(historyButton.text()).toBe('查看历史评估结果')
+    expect(agentApi.getNodeAssessmentHistory).not.toHaveBeenCalled()
+    await openHistoryResult(wrapper)
+    expect(document.querySelector('.assessment-result-dialog')?.textContent).toContain(
+      result.evidence,
+    )
+    expect(agentApi.startAssessment).not.toHaveBeenCalled()
+
+    learning.setActiveNode({ ...learning.nodes[0], id: 'lists', dbId: 21, assessmentResult: null })
+    await flushPromises()
+    expect(document.querySelector('.assessment-result-dialog')).toBeNull()
+    expect(wrapper.find('.mastery-history').exists()).toBe(false)
+    learning.setActiveNode(learning.nodes[0])
+    await flushPromises()
+    expect(document.querySelector('.assessment-result-dialog')).toBeNull()
+    await openHistoryResult(wrapper)
+    expect(document.querySelector('.assessment-result-dialog')).not.toBeNull()
+  })
+
+  it('does not open results when a completed run is restored', async () => {
+    const { wrapper } = await mountDialogue(true)
+    vi.mocked(agentApi.getAgentRun).mockResolvedValueOnce({
+      ...run,
+      status: 'completed',
+      step: null,
+      result,
+    })
+    await useAgentStore().restoreRun(run.run_id)
+    await flushPromises()
+    expect(document.querySelector('.assessment-result-dialog')).toBeNull()
+    await openHistoryResult(wrapper)
+    expect(document.querySelector('.assessment-result-dialog')?.textContent).toContain(
+      result.evidence,
+    )
   })
 
   it('keeps the assessment outside scrolling history without a hide or collapse action', async () => {
@@ -339,6 +414,78 @@ describe('persistent assessment overlay', () => {
     await input.get('textarea').trigger('keydown.enter')
     await flushPromises()
     expect(chatStream).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps a closed result hidden after node refresh, session reentry and page reload', async () => {
+    vi.mocked(agentApi.answerAgentRun).mockResolvedValueOnce({
+      ...run,
+      status: 'completed',
+      step: null,
+      result,
+    })
+    const { wrapper, input, learning, history, session, otherSession } = await mountAssessment()
+    await input.get('textarea').setValue('最后一个答案')
+    await input.get('textarea').trigger('keydown.enter')
+    await flushPromises()
+    expect(document.querySelector('.assessment-result-dialog')).not.toBeNull()
+    document.querySelector<HTMLButtonElement>('[aria-label="关闭评估结果"]')!.click()
+    await flushPromises()
+
+    await learning.fetchNodes(7)
+    await flushPromises()
+    expect(document.querySelector('.assessment-result-dialog')).toBeNull()
+    expect(learning.activeNode?.assessmentResult).toEqual(result)
+
+    history.vm.$emit('switch', otherSession.id)
+    await flushPromises()
+    history.vm.$emit('switch', session.id)
+    await flushPromises()
+    expect(document.querySelector('.assessment-result-dialog')).toBeNull()
+    await openHistoryResult(wrapper)
+    expect(document.querySelector('.assessment-result-dialog')?.textContent).toContain(
+      result.evidence,
+    )
+    document.querySelector<HTMLButtonElement>('[aria-label="关闭评估结果"]')!.click()
+    await flushPromises()
+
+    wrappers.splice(wrappers.indexOf(wrapper), 1)
+    wrapper.unmount()
+    const reentered = mount(SocraticDialogue)
+    wrappers.push(reentered)
+    await flushPromises()
+    expect(document.querySelector('.assessment-result-dialog')).toBeNull()
+    expect(reentered.get('.mastery-history').text()).toBe('查看历史评估结果')
+    wrappers.splice(wrappers.indexOf(reentered), 1)
+    reentered.unmount()
+
+    setActivePinia(createPinia())
+    const reloaded = await mountDialogue(true)
+    expect(document.querySelector('.assessment-result-dialog')).toBeNull()
+    await openHistoryResult(reloaded.wrapper)
+    expect(document.querySelector('.assessment-result-dialog')?.textContent).toContain(
+      result.evidence,
+    )
+  })
+
+  it('automatically opens the new result after another assessment completes', async () => {
+    const nextResult = { ...result, evidence: '本次已能解释 Redis 应用场景' }
+    vi.mocked(agentApi.answerAgentRun)
+      .mockResolvedValueOnce({ ...run, status: 'completed', step: null, result })
+      .mockResolvedValueOnce({ ...run, status: 'completed', step: null, result: nextResult })
+    const { wrapper, input } = await mountAssessment()
+    await input.get('textarea').setValue('第一次答案')
+    await input.get('textarea').trigger('keydown.enter')
+    await flushPromises()
+    document.querySelector<HTMLButtonElement>('[aria-label="关闭评估结果"]')!.click()
+    await flushPromises()
+
+    await wrapper.get('.mastery-actions .primary').trigger('click')
+    await input.get('textarea').setValue('新的答案')
+    await input.get('textarea').trigger('keydown.enter')
+    await flushPromises()
+    expect(document.querySelector('.assessment-result-dialog')?.textContent).toContain(
+      nextResult.evidence,
+    )
   })
 
   it('opens a new assessment from the result window without adding it to chat history', async () => {

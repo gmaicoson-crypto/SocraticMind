@@ -3,6 +3,7 @@ import {
   extractTopic,
   countCompletedChatTurns,
   formatMessageTime,
+  formatFullTime,
   formatSessionTime,
   isNewTopicIntent,
   replyUserIndex,
@@ -91,6 +92,33 @@ describe('chat message presentation', () => {
     expect(formatMessageTime(new Date(2026, 0, 3, 9, 5).toISOString(), today)).toBe('01/03')
     expect(formatMessageTime(new Date(2025, 11, 31, 9, 5).toISOString(), today)).toBe('2025/12/31')
     expect(formatMessageTime('10:15', today)).toBe('10:15')
+  })
+
+  it('preserves calendar dates without shifting through UTC or inventing a midnight time', () => {
+    expect(formatMessageTime('2026-09-29', today)).toBe('09/29')
+    expect(formatMessageTime('2026-01-03', today)).toBe('01/03')
+    expect(formatMessageTime('2025-12-31', today)).toBe('2025/12/31')
+    expect(formatFullTime('2026-09-29', today)).toBe('2026-09-29')
+    expect(formatMessageTime('2026-02-31', today)).toBe('2026-02-31')
+  })
+
+  it('uses the same local time for equivalent instants with different timezone offsets', () => {
+    expect(formatMessageTime('2026-09-29T16:05:00Z', today)).toBe(
+      formatMessageTime('2026-09-30T00:05:00+08:00', today),
+    )
+    const timestamp = new Date(2026, 8, 29, 9, 5, 49).toISOString()
+    expect(formatFullTime(timestamp, today)).toBe('2026-09-29 09:05')
+  })
+
+  it('supports legacy dates and preserves missing or partial timestamp precision', () => {
+    expect(formatMessageTime('09/29 09:05', today)).toBe('09:05')
+    expect(formatMessageTime('12/31 23:59', new Date(2026, 0, 3))).toBe('2025/12/31')
+    expect(formatMessageTime('5:13', today)).toBe('05:13')
+    expect(formatMessageTime('2026-05', today)).toBe('2026-05')
+    expect(formatFullTime('2026-05', today)).toBe('2026-05')
+    expect(formatMessageTime('2025', today)).toBe('2025')
+    expect(formatMessageTime('invalid', today)).toBe('invalid')
+    expect(formatMessageTime('', today)).toBe('—')
   })
 
   it('only permits retry when the last message is an AI reply to a user', () => {

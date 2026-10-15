@@ -37,21 +37,30 @@
           </p>
           <p v-if="error" class="mastery-error">{{ error }}</p>
 
-          <div class="mastery-actions">
-            <template v-if="node.state === 'mastered'">
-              <BaseButton :disabled="busy" @click="emit('revert')">撤销掌握</BaseButton>
-            </template>
-            <template v-else>
-              <BaseButton :disabled="busy || node.state === 'locked'" @click="emit('selfReport')"
-                >自报掌握</BaseButton
-              >
-              <BaseButton
-                class="primary"
-                :disabled="busy || node.state === 'locked'"
-                @click="emit('assess')"
-                >开始评估</BaseButton
-              >
-            </template>
+          <div class="mastery-footer">
+            <BaseButton
+              v-if="node.assessmentResult"
+              class="mastery-history"
+              :disabled="busy"
+              @click="emit('viewAssessmentHistory')"
+              >查看历史评估结果</BaseButton
+            >
+            <div class="mastery-actions">
+              <template v-if="node.state === 'mastered'">
+                <BaseButton :disabled="busy" @click="emit('revert')">撤销掌握</BaseButton>
+              </template>
+              <template v-else>
+                <BaseButton :disabled="busy || node.state === 'locked'" @click="emit('selfReport')"
+                  >自报掌握</BaseButton
+                >
+                <BaseButton
+                  class="primary"
+                  :disabled="busy || node.state === 'locked'"
+                  @click="emit('assess')"
+                  >开始评估</BaseButton
+                >
+              </template>
+            </div>
           </div>
         </section>
       </div>
@@ -82,7 +91,12 @@ const props = withDefaults(defineProps<{ node: KNode; busy?: boolean; error?: st
   busy: false,
   error: '',
 })
-const emit = defineEmits<{ assess: []; selfReport: []; revert: [] }>()
+const emit = defineEmits<{
+  assess: []
+  selfReport: []
+  revert: []
+  viewAssessmentHistory: []
+}>()
 const collapsed = ref(false)
 const collapseButtonRef = ref<HTMLButtonElement | null>(null)
 const expandButtonRef = ref<HTMLButtonElement | null>(null)
@@ -293,12 +307,23 @@ const sourceLabel = computed(
 .mastery-evidence strong {
   color: var(--ink-2);
 }
+.mastery-footer {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 8px;
+}
+.mastery-history {
+  justify-self: start;
+  text-align: left;
+}
 .mastery-actions {
   display: flex;
+  grid-column: 2;
   justify-content: flex-end;
   gap: 8px;
 }
-.mastery-actions :deep(.ui-button) {
+.mastery-footer :deep(.ui-button) {
   min-height: 28px;
   padding: 0 10px;
   border: 1px solid var(--line);
