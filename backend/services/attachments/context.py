@@ -25,6 +25,7 @@ from services.attachments.storage import AttachmentStorage
 from services.attachments.config import IMAGE_TOKEN_ESTIMATE, LIMITS
 from services.attachments.summaries import check_deadline, iter_summaries, _executor
 from services.web_search import CapacityExceeded
+from services.source_snapshots import normalize_sources
 
 
 @dataclass
@@ -156,9 +157,9 @@ def iter_prepare_attachments(
     )
     recent_source_ids = set()
     if previous_answer:
-        from services.web_evidence import cited_source_ids, _sources
+        from services.web_evidence import cited_source_ids
 
-        previous_sources = _sources(
+        previous_sources = normalize_sources(
             (previous_answer.metadata_json or {}).get("web", {}).get("sources")
         )
         cited = set(cited_source_ids(previous_answer.content, previous_sources))

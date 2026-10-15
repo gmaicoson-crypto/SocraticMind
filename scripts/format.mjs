@@ -1,7 +1,8 @@
 import { spawnSync } from 'node:child_process'
-import { existsSync, statSync } from 'node:fs'
+import { existsSync } from 'node:fs'
 import { dirname, extname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { codeFiles } from './lib/git-files.mjs'
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
 const args = process.argv.slice(2)
@@ -18,30 +19,14 @@ if (
 }
 const base = baseOptions[0]?.slice('--base='.length)
 
-function gitFiles(args) {
-  const result = spawnSync('git', args, { cwd: root, encoding: 'utf8' })
-  if (result.error || result.status !== 0) {
-    console.error(result.error?.message ?? result.stderr)
-    process.exit(2)
-  }
-  return result.stdout.split('\0').filter(Boolean)
-}
-
 // NUL-separated paths preserve spaces. CI resolves the PR merge base or push's previous tree.
-const tracked = options.has('--all')
-  ? gitFiles(['ls-files', '-z'])
-  : gitFiles([
-      'diff',
-      ...(base ? [base, 'HEAD'] : ['HEAD']),
-      '--name-only',
-      '--diff-filter=ACMR',
-      '-z',
-    ])
-const files = [
-  ...new Set([...tracked, ...gitFiles(['ls-files', '--others', '--exclude-standard', '-z'])]),
-]
-  .filter((file) => existsSync(join(root, file)) && statSync(join(root, file)).isFile())
-  .sort()
+let files
+try {
+  files = codeFiles(root, { all: options.has('--all'), base })
+} catch (error) {
+  console.error(error.message)
+  process.exit(2)
+}
 
 const prettierExtensions = new Set([
   '.vue',

@@ -1,0 +1,72 @@
+.md-inline .inline-code,
+.md-preview .md-inline-code,
+.md-preview code {
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--blue-tint);
+  color: var(--blue-2);
+  font-family: var(--font-mono);
+  font-size: 0.88em;
+}
+
+.md-inline .hljs-keyword,
+.md-inline .hljs-selector-tag,
+.md-preview .hljs-keyword,
+.md-preview .hljs-selector-tag {
+  color: var(--code-keyword);
+}
+
+.md-inline .hljs-string,
+.md-inline .hljs-attr,
+.md-preview .hljs-string,
+.md-preview .hljs-attr {
+  color: var(--code-string);
+}
+
+.md-inline .hljs-number,
+.md-inline .hljs-literal,
+.md-preview .hljs-number,
+.md-preview .hljs-literal {
+  color: var(--code-number);
+}
+
+.md-inline .hljs-comment,
+.md-preview .hljs-comment {
+  color: var(--code-comment);
+  font-style: italic;
+}
+
+.md-inline .hljs-function,
+.md-inline .hljs-title,
+.md-preview .hljs-function,
+.md-preview .hljs-title {
+  color: var(--code-function);
+}
+
+.md-inline .hljs-variable,
+.md-inline .hljs-name,
+.md-preview .hljs-variable,
+.md-preview .hljs-name {
+  color: var(--code-text);
+}
+
+.md-inline .hljs-type,
+.md-inline .hljs-class,
+.md-preview .hljs-type,
+.md-preview .hljs-class {
+  color: var(--code-type);
+}
+
+.md-inline .hljs-built_in,
+.md-inline .hljs-operator,
+.md-inline .hljs-punctuation,
+.md-preview .hljs-built_in,
+.md-preview .hljs-operator,
+.md-preview .hljs-punctuation {
+  color: var(--code-built-in);
+}
+
+.md-inline .hljs-property,
+.md-preview .hljs-property {
+  color: var(--code-property);
+}

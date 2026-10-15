@@ -1,91 +1,38 @@
-"""Search preparation without database access or a second chat lifecycle.
-
-Only the generator thread invokes lifecycle/quota callbacks. Worker tasks have
-bounded capacity and keep occupying their slot until they actually finish, even
-if the caller stops waiting. Provider URLs are never fetched as page content.
-"""
+"""Coordinate search decisions and progress without holding database transactions."""
 
 import hashlib
-import ipaddress
 import json
 import logging
-import math
-import re
 import threading
-from concurrent.futures import Future, ThreadPoolExecutor, wait, FIRST_COMPLETED
-from dataclasses import dataclass, field
+from concurrent.futures import Future, wait, FIRST_COMPLETED
 from datetime import datetime, timezone
-from email.utils import parsedate_to_datetime
 from functools import lru_cache
 from time import monotonic
-from typing import Callable, Iterator, Protocol
-from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
-
-import httpx
-
+from typing import Callable, Iterator
+from urllib.parse import urlsplit
 from core.config import settings
 from core.context_budget import count_messages
 from schemas.web_search import SearchDecision, WebSnapshot
 from services.agent.structured_ai import RunContext, generate_structured
+from .web_search_sources import _SECRET_PATTERN, _utc_now, canonical_source_url
+from .web_search_provider import (
+    SearchProviderError,
+    SearchResult,
+    SearchProvider,
+    TavilySearchProvider,
+)
+from .web_search_executor import CapacityExceeded, BoundedExecutor
+
 
 log = logging.getLogger(__name__)
+
+
 _POLL_SECONDS = 0.2
-_SECRET_PATTERN = re.compile(
-    r"(?i)(?:\b(?:sk|tvly|ghp|github_pat)[-_][a-z0-9_-]{12,}"
-    r"|\b(?:api[_ -]?key|password|passwd|secret|access[_ -]?token|authorization|密码|密钥)"
-    r"\s*[:=：]\s*[^\s,;，；]+|\bBearer\s+\S+"
-    r"|\beyJ[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+"
-    r"|-----BEGIN [^-]*PRIVATE KEY-----[\s\S]*?-----END [^-]*PRIVATE KEY-----)"
-)
-
-
-class SearchProviderError(Exception):
-    """Never carries provider response bodies, credentials or queries."""
-
-
-class CapacityExceeded(SearchProviderError):
-    pass
-
-
-class BoundedExecutor:
-    def __init__(self, workers: int, pending: int):
-        self._slots = threading.BoundedSemaphore(workers + pending)
-        self._executor = ThreadPoolExecutor(max_workers=workers, thread_name_prefix="web-search")
-
-    def submit(self, function, *args, **kwargs) -> Future:
-        if not self._slots.acquire(blocking=False):
-            raise CapacityExceeded("联网任务繁忙")
-        completed_at = []
-
-        def run():
-            try:
-                return function(*args, **kwargs)
-            finally:
-                completed_at.append(monotonic())
-                self._slots.release()
-
-        try:
-            future = self._executor.submit(run)
-            future.web_completed_at = completed_at
-        except BaseException:
-            self._slots.release()
-            raise
-        # Future becomes done before its callbacks run. A following search must
-        # be able to use the slot as soon as the decision worker has finished.
-        future.add_done_callback(lambda done: self._slots.release() if done.cancelled() else None)
-        return future
-
-    def shutdown(self):
-        self._executor.shutdown(wait=True, cancel_futures=True)
 
 
 @lru_cache(maxsize=1)
 def _get_executor() -> BoundedExecutor:
     return BoundedExecutor(settings.web_search_max_workers, settings.web_search_max_pending)
-
-
-def _utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
 def _config_version() -> str:
@@ -128,179 +75,6 @@ def web_search_capabilities() -> dict:
             "mode": "auto",
         }
     }
-
-
-def canonical_source_url(value: object) -> str | None:
-    """Validate display links and deduplicate tracking/fragment variants, never fetch them."""
-    if not isinstance(value, str) or len(value) > 2048 or re.search(r"[\x00-\x20\\]", value):
-        return None
-    try:
-        parts = urlsplit(value)
-        if parts.scheme.lower() not in {"http", "https"} or not parts.hostname:
-            return None
-        if parts.username or parts.password:
-            return None
-        host = parts.hostname.rstrip(".").lower().encode("idna").decode()
-        if (
-            len(host) > 253
-            or host in {"localhost", "localhost.localdomain"}
-            or host.endswith((".localhost", ".local"))
-        ):
-            return None
-        try:
-            if not ipaddress.ip_address(host).is_global:
-                return None
-        except ValueError:
-            if not all(
-                re.fullmatch(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?", label)
-                for label in host.split(".")
-            ):
-                return None
-            # Reject alternate browser IPv4 spellings and non-public single-label names.
-            if "." not in host or all(
-                re.fullmatch(r"(?:0x[0-9a-f]+|[0-9]+)", label) for label in host.split(".")
-            ):
-                return None
-        port = parts.port
-        authority = f"[{host}]" if ":" in host else host
-        if port and (parts.scheme.lower(), port) not in {("http", 80), ("https", 443)}:
-            authority += f":{port}"
-        query = urlencode(
-            sorted(
-                (key, value)
-                for key, value in parse_qsl(parts.query, keep_blank_values=True)
-                if not key.lower().startswith("utm_") and key.lower() not in {"fbclid", "gclid"}
-            )
-        )
-        if _SECRET_PATTERN.search(value):
-            return None
-        normalized = urlunsplit((parts.scheme.lower(), authority, parts.path or "/", query, ""))
-        return normalized if len(normalized) <= 2048 else None
-    except (ValueError, UnicodeError):
-        return None
-
-
-def _published_at(value: object) -> str | None:
-    if not isinstance(value, str) or not value.strip():
-        return None
-    try:
-        try:
-            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-        except ValueError:
-            parsed = parsedate_to_datetime(value)
-        # Unknown timezone is retained as supplied; do not invent publication precision.
-        return (
-            parsed.isoformat()
-            if parsed.tzinfo is None
-            else parsed.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
-        )
-    except (ValueError, TypeError, OverflowError):
-        return None
-
-
-@dataclass(frozen=True)
-class SearchResult:
-    sources: list[dict] = field(default_factory=list)
-    credits: float | None = None
-
-
-class SearchProvider(Protocol):
-    def search(
-        self, query: str, freshness: str, deadline: float, cancelled: threading.Event
-    ) -> SearchResult: ...
-
-
-@lru_cache(maxsize=1)
-def _http_client() -> httpx.Client:
-    return httpx.Client(
-        limits=httpx.Limits(
-            max_connections=settings.web_search_max_workers,
-            max_keepalive_connections=settings.web_search_max_workers,
-        ),
-        follow_redirects=False,
-    )
-
-
-class TavilySearchProvider:
-    def __init__(self, *, client: httpx.Client | None = None):
-        self.client = client or _http_client()
-
-    def search(
-        self, query: str, freshness: str, deadline: float, cancelled: threading.Event
-    ) -> SearchResult:
-        remaining = deadline - monotonic()
-        if remaining <= 0 or cancelled.is_set():
-            raise SearchProviderError("搜索已过期")
-        payload = {
-            "query": query,
-            "topic": "general",
-            "search_depth": "basic",
-            "max_results": 5,
-            "include_answer": False,
-            "include_raw_content": False,
-            "include_images": False,
-            "auto_parameters": False,
-            "include_usage": True,
-            "include_published_date": True,
-        }
-        if freshness != "any":
-            payload["time_range"] = freshness
-        try:
-            with self.client.stream(
-                "POST",
-                settings.web_search_api_base.rstrip("/") + "/search",
-                headers={"Authorization": "Bearer " + settings.tavily_api_key},
-                json=payload,
-                timeout=httpx.Timeout(remaining),
-            ) as response:
-                response.raise_for_status()
-                body = bytearray()
-                for chunk in response.iter_bytes():
-                    if cancelled.is_set() or monotonic() >= deadline:
-                        raise SearchProviderError("搜索已过期")
-                    if len(body) + len(chunk) > settings.web_search_max_response_bytes:
-                        raise SearchProviderError("搜索响应超出预算")
-                    body.extend(chunk)
-                data = json.loads(body)
-        except (httpx.HTTPError, ValueError) as error:
-            raise SearchProviderError("搜索服务暂时不可用") from error
-        if not isinstance(data, dict) or not isinstance(data.get("results"), list):
-            raise SearchProviderError("搜索结果结构无效")
-        retrieved = _utc_now()
-        sources = []
-        for item in data["results"][:20]:
-            if not isinstance(item, dict):
-                continue
-            url = canonical_source_url(item.get("url"))
-            excerpt = item.get("content")
-            if not url or not isinstance(excerpt, str) or not excerpt.strip():
-                continue
-            title = item.get("title")
-            score = item.get("score")
-            score = score if isinstance(score, (int, float)) and math.isfinite(score) else 0
-            sources.append(
-                {
-                    "_score": score,
-                    "title": title.strip()[:300]
-                    if isinstance(title, str) and title.strip()
-                    else urlsplit(url).hostname,
-                    "url": url,
-                    "domain": urlsplit(url).hostname,
-                    "excerpt": excerpt.strip()[:2400],
-                    "published_at": _published_at(item.get("published_date")),
-                    "retrieved_at": retrieved,
-                }
-            )
-        usage = data.get("usage")
-        credits = usage.get("credits") if isinstance(usage, dict) else None
-        if (
-            not isinstance(credits, (int, float))
-            or isinstance(credits, bool)
-            or not math.isfinite(credits)
-            or credits < 0
-        ):
-            credits = None
-        return SearchResult(sources=sources, credits=credits)
 
 
 def _decision_messages(model_id: str, user_input: str, context_messages: list[dict]) -> list[dict]:
@@ -618,3 +392,17 @@ def iter_web_search(
             snapshot["metrics"]["search_queries"],
             snapshot["metrics"]["search_credits"],
         )
+
+
+__all__ = [
+    "BoundedExecutor",
+    "CapacityExceeded",
+    "SearchProviderError",
+    "SearchResult",
+    "SearchProvider",
+    "TavilySearchProvider",
+    "canonical_source_url",
+    "empty_web_snapshot",
+    "web_search_capabilities",
+    "iter_web_search",
+]

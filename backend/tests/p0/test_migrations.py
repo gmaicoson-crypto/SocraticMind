@@ -1,5 +1,8 @@
 import logging
+import os
 from pathlib import Path
+import subprocess
+import sys
 
 import pytest
 from alembic import command
@@ -287,6 +290,103 @@ def test_application_guard_rejects_legacy_revision_and_accepts_head(tmp_path):
     command.upgrade(config, "head")
     assert_database_at_head(engine)
     engine.dispose()
+
+
+def test_deployed_material_revisions_preserve_existing_data_and_remain_at_head(tmp_path):
+    database_url = f"sqlite:///{tmp_path / 'deployed-materials.sqlite'}"
+    config = alembic_config(database_url)
+    command.upgrade(config, "0014_assessment_reviews")
+    engine = create_engine(database_url)
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO users (id, username, email, hashed_password, avatar_url) "
+                "VALUES (1, 'existing', 'existing@example.test', 'hash', '/avatars/test.webp')"
+            )
+        )
+        connection.execute(
+            text("INSERT INTO topics (id, user_id, title) VALUES (1, 1, 'Existing')")
+        )
+        connection.execute(
+            text(
+                "INSERT INTO nodes (id, topic_id, node_key, label, state, parent_keys) "
+                "VALUES (1, 1, 'root', 'Root', 'available', '')"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO chat_messages "
+                "(id, user_id, topic_id, session_id, node_key, role, content, mode) "
+                "VALUES (1, 1, 1, 'existing', 'root', 'ai', 'saved answer', 'socratic')"
+            )
+        )
+
+    # This revision was already applied by the materials branch. Keep its real
+    # ancestry so switching branches cannot make that deployed schema unknown.
+    command.upgrade(config, "0016_review_tasks")
+    command.upgrade(config, "head")
+    assert_database_at_head(engine)
+    inspector = inspect(engine)
+    assert "topic_materials" in inspector.get_table_names()
+    assert next(
+        column for column in inspector.get_columns("nodes") if column["name"] == "material_sources"
+    )["nullable"]
+    with engine.connect() as connection:
+        assert (
+            connection.scalar(text("SELECT version_num FROM alembic_version"))
+            == "0016_review_tasks"
+        )
+        assert connection.execute(text("SELECT id, content FROM chat_messages")).all() == [
+            (1, "saved answer")
+        ]
+        assert connection.execute(text("SELECT id, material_sources FROM nodes")).all() == [
+            (1, None)
+        ]
+    engine.dispose()
+
+
+def test_real_application_starts_and_stops_in_a_fresh_process(tmp_path):
+    database_url = f"sqlite:///{tmp_path / 'startup.sqlite'}"
+    command.upgrade(alembic_config(database_url), "head")
+    # A fresh interpreter exercises main's real import order and lifespan;
+    # router-only fixtures do not execute the schema guard or start workers.
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            """
+import threading
+from fastapi.testclient import TestClient
+from main import app
+
+with TestClient(app) as client:
+    response = client.get('/health')
+    assert response.status_code == 200 and response.json() == {'status': 'ok'}
+    paths = client.get('/openapi.json').json()['paths']
+    assert '/api/chat/stream' in paths
+    assert '/api/chat/cancel' in paths
+    assert '/api/chat/requests/{request_id}' in paths
+
+assert not any(
+    thread.name in {'chat-summaries', 'chat-titles'}
+    or thread.name.startswith('attachment-worker-')
+    for thread in threading.enumerate()
+)
+print('application startup and shutdown passed')
+""",
+        ],
+        cwd=BACKEND_DIR,
+        env={
+            **os.environ,
+            "DATABASE_URL": database_url,
+            "ATTACHMENT_STORAGE_DIR": str(tmp_path / "attachments"),
+        },
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "application startup and shutdown passed" in result.stdout
 
 
 def test_chat_context_backfill_preserves_text_and_only_adopts_complete_isolated_pairs(tmp_path):

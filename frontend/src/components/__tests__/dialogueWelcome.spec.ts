@@ -19,7 +19,9 @@ vi.mock('../../api/models', () => ({
 }))
 
 async function mountDialogue(mode: ChatMode) {
-  const wrapper = shallowMount(SocraticDialogue, { global: { stubs: { MessageList: false } } })
+  const wrapper = shallowMount(SocraticDialogue, {
+    global: { stubs: { MessageList: false, DialogueHeader: false } },
+  })
   if (mode === 'normal') wrapper.findComponent(DialogueInputBar).vm.$emit('update:chatMode', mode)
   await flushPromises()
   return wrapper

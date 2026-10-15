@@ -25,6 +25,7 @@ describe('DialogueInputBar suggestions', () => {
 
     const chips = ['建议一', '建议二', '建议三', '建议四', '建议五', '建议六']
     const wrapper = shallowMount(DialogueInputBar, {
+      global: { stubs: { DialogueSuggestions: false } },
       props: {
         input: '',
         chatMode: 'socratic',
@@ -94,6 +95,7 @@ describe('DialogueInputBar suggestions', () => {
     ['normal', '随便问我点什么…'],
   ] as const)('shows the %s message prompt without shortcuts', (chatMode, placeholder) => {
     const wrapper = shallowMount(DialogueInputBar, {
+      global: { stubs: { DialogueSuggestions: false } },
       props: {
         input: '',
         chatMode,

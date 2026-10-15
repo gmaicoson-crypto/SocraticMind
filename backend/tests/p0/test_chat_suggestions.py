@@ -5,6 +5,27 @@ from models import ChatMessage, Node, Topic, User
 from routers import chat
 
 
+def test_scope_validation_precedes_model_resolution(client, monkeypatch):
+    def unexpected_model_lookup(*_args):
+        raise AssertionError("Missing scope must be rejected before resolving a model")
+
+    monkeypatch.setattr(chat, "selected_model", unexpected_model_lookup)
+    suggestions = client.get("/api/chat/suggestions", params={"topic_id": 999999})
+    assert suggestions.status_code == 404
+    stream = client.post(
+        "/api/chat/stream",
+        json={
+            "topic_id": 999999,
+            "node_key": "missing",
+            "user_input": "question",
+            "session_id": "missing-scope",
+            "request_id": "missing-scope-request",
+            "mode": "socratic",
+        },
+    )
+    assert stream.status_code == 404
+
+
 def test_refresh_sends_visible_suggestions_to_ai_and_filters_repeats(client, monkeypatch):
     captured = {}
 

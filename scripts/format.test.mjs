@@ -29,11 +29,12 @@ test('format command checks and fixes changed files without rewriting unrelated 
   const format = (...args) => run(process.execPath, ['scripts/format.mjs', ...args])
 
   try {
-    for (const directory of ['scripts', 'frontend', 'backend', 'ignored', 'hooks']) {
-      mkdirSync(join(fixture, directory))
+    for (const directory of ['scripts/lib', 'frontend', 'backend', 'ignored', 'hooks']) {
+      mkdirSync(join(fixture, directory), { recursive: true })
     }
     for (const file of [
       'scripts/format.mjs',
+      'scripts/lib/git-files.mjs',
       '.prettierrc.json',
       '.prettierignore',
       '.editorconfig',

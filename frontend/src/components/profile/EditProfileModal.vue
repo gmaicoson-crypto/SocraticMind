@@ -13,52 +13,12 @@
         <div class="modal-body">
           <div>
             <div class="section-label">基本信息</div>
-            <div class="avatar-row">
-              <button
-                type="button"
-                class="big-avatar"
-                aria-label="上传用户头像"
-                :disabled="uploading"
-                @click="triggerUpload"
-              >
-                <img
-                  :src="avatarPreview"
-                  alt=""
-                  class="avatar-img ui-avatar-image"
-                  decoding="async"
-                />
-                <div class="avatar-edit">
-                  <Pencil :size="10" class="icon-inherit" aria-hidden="true" />
-                </div>
-              </button>
-              <input
-                ref="fileInput"
-                type="file"
-                accept="image/png,image/jpeg,image/gif,image/webp"
-                style="display: none"
-                @change="onFileChange"
-              />
-              <div class="avatar-actions">
-                <button class="avatar-action-btn" :disabled="uploading" @click="triggerUpload">
-                  {{ uploading ? '上传中…' : '上传图片' }}
-                </button>
-                <button
-                  class="avatar-action-btn ghost"
-                  :disabled="uploading"
-                  @click="selectRandomAvatar"
-                >
-                  随机头像
-                </button>
-              </div>
-            </div>
-
-            <div class="avatar-hint">用户头像</div>
-            <AvatarPresetPicker
-              label="用户头像"
-              :options="userAvatarPresets"
-              :model-value="avatarUrl"
-              :disabled="uploading"
-              @select="avatarUrl = $event"
+            <ProfileAvatarEditor
+              v-model="avatarUrl"
+              :avatar-preview="avatarPreview"
+              :uploading="uploading"
+              @upload="onFileChange"
+              @random="selectRandomAvatar"
             />
 
             <div class="fields">
@@ -106,55 +66,8 @@
           <div>
             <div class="section-label">账号安全</div>
             <div class="danger-list">
-              <div class="danger-row">
-                <div>
-                  <div class="danger-info">修改密码</div>
-                  <div class="danger-sub">建议使用至少 6 位的强密码</div>
-                </div>
-                <button class="danger-btn outline" @click="showPwdPanel = !showPwdPanel">
-                  {{ showPwdPanel ? '收起' : '修改密码' }}
-                </button>
-              </div>
+              <ProfilePasswordSection />
 
-              <div v-if="showPwdPanel" class="pwd-panel">
-                <div class="field ui-field">
-                  <label>原密码</label>
-                  <div class="field-input">
-                    <input v-model="pwdForm.old" type="password" autocomplete="current-password" />
-                  </div>
-                </div>
-                <div class="field ui-field">
-                  <label>新密码</label>
-                  <div class="field-input">
-                    <input
-                      v-model="pwdForm.next"
-                      type="password"
-                      autocomplete="new-password"
-                      minlength="6"
-                    />
-                  </div>
-                </div>
-                <div class="field ui-field">
-                  <label>确认新密码</label>
-                  <div class="field-input">
-                    <input
-                      v-model="pwdForm.confirm"
-                      type="password"
-                      autocomplete="new-password"
-                      minlength="6"
-                    />
-                  </div>
-                </div>
-                <div v-if="pwdMsg" class="pwd-msg" :class="{ ok: pwdMsgType === 'ok' }">
-                  {{ pwdMsg }}
-                </div>
-                <div class="pwd-actions">
-                  <button class="cancel-btn" @click="cancelPwd">取消</button>
-                  <button class="save-btn" :disabled="pwdSaving" @click="submitPassword">
-                    {{ pwdSaving ? '提交中…' : '保存新密码' }}
-                  </button>
-                </div>
-              </div>
               <div class="danger-row">
                 <div>
                   <div class="danger-info">退出登录</div>
@@ -203,17 +116,18 @@
 </template>
 
 <script setup lang="ts">
-import { Check, Mail, MessageSquare, Pencil, Save, UserRound } from '@lucide/vue'
+import { Check, Mail, MessageSquare, Save, UserRound } from '@lucide/vue'
 // EditProfileModal 组件，封装局部界面和交互逻辑。
 import { ref, reactive, computed, onBeforeUnmount, defineAsyncComponent } from 'vue'
 import { useRouter } from 'vue-router'
 import { useLearningStore } from '../../stores/learning'
-import { updateMe, uploadAvatar, changePassword, deleteAccount } from '../../api/auth'
+import { updateMe, uploadAvatar, deleteAccount } from '../../api/auth'
 import { avatarSrc } from '../../utils/avatar'
 import { defaultUserAvatar, userAvatarPresets } from '../../utils/avatarPresets'
 import { clearAuth, updateUser } from '../../utils/token'
 import BaseModal from '../ui/BaseModal.vue'
-import AvatarPresetPicker from './AvatarPresetPicker.vue'
+import ProfileAvatarEditor from './ProfileAvatarEditor.vue'
+import ProfilePasswordSection from './ProfilePasswordSection.vue'
 
 const DeleteAccountModal = defineAsyncComponent(() => import('./DeleteAccountModal.vue'))
 
@@ -225,17 +139,12 @@ const saving = ref(false)
 const savedDone = ref(false)
 const saveError = ref('')
 
-const fileInput = ref<HTMLInputElement | null>(null)
 const uploading = ref(false)
 const localPreview = ref<string | null>(null)
 const avatarUrl = ref(defaultUserAvatar)
 const savedAvatarUrl = ref(defaultUserAvatar)
 
 const avatarPreview = computed(() => localPreview.value ?? avatarSrc(avatarUrl.value))
-
-function triggerUpload() {
-  fileInput.value?.click()
-}
 
 async function onFileChange(e: Event) {
   const input = e.target as HTMLInputElement
@@ -276,62 +185,9 @@ function selectRandomAvatar() {
   localPreview.value = null
 }
 
-const showPwdPanel = ref(false)
-const pwdSaving = ref(false)
-const pwdMsg = ref('')
-const pwdMsgType = ref<'err' | 'ok'>('err')
-const pwdForm = reactive({ old: '', next: '', confirm: '' })
-
-function cancelPwd() {
-  showPwdPanel.value = false
-  pwdForm.old = ''
-  pwdForm.next = ''
-  pwdForm.confirm = ''
-  pwdMsg.value = ''
-}
-
-async function submitPassword() {
-  pwdMsg.value = ''
-  if (!pwdForm.old || !pwdForm.next) {
-    pwdMsg.value = '请填写完整'
-    pwdMsgType.value = 'err'
-    return
-  }
-  if (pwdForm.next.length < 6) {
-    pwdMsg.value = '新密码至少 6 个字符'
-    pwdMsgType.value = 'err'
-    return
-  }
-  if (pwdForm.next !== pwdForm.confirm) {
-    pwdMsg.value = '两次输入的新密码不一致'
-    pwdMsgType.value = 'err'
-    return
-  }
-  pwdSaving.value = true
-  try {
-    await changePassword(pwdForm.old, pwdForm.next)
-    pwdMsg.value = '密码修改成功'
-    pwdMsgType.value = 'ok'
-    pwdForm.old = ''
-    pwdForm.next = ''
-    pwdForm.confirm = ''
-    pwdHideTimer = setTimeout(() => {
-      showPwdPanel.value = false
-      pwdMsg.value = ''
-    }, 1200)
-  } catch (err: any) {
-    pwdMsg.value = err?.response?.data?.detail ?? '修改失败'
-    pwdMsgType.value = 'err'
-  } finally {
-    pwdSaving.value = false
-  }
-}
-
-let pwdHideTimer: ReturnType<typeof setTimeout> | null = null
 let savedCloseTimer: ReturnType<typeof setTimeout> | null = null
 
 onBeforeUnmount(() => {
-  if (pwdHideTimer) clearTimeout(pwdHideTimer)
   if (savedCloseTimer) clearTimeout(savedCloseTimer)
 })
 
@@ -427,7 +283,7 @@ async function handleDeleteAccount(payload: { password: string; confirm: string 
   }
 }
 </script>
-
+<style scoped src="./profileControls.css" />
 <style scoped>
 .overlay {
   position: fixed;
@@ -516,128 +372,10 @@ async function handleDeleteAccount(payload: { password: string; confirm: string 
   margin-bottom: 12px;
 }
 
-.avatar-row {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 16px;
-  margin-bottom: 16px;
-}
-
-.big-avatar {
-  width: 64px;
-  height: 64px;
-  border-radius: 16px;
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  position: relative;
-  border: 0;
-  padding: 0;
-  cursor: pointer;
-  transition: filter 0.15s;
-}
-.big-avatar:hover {
-  filter: brightness(0.9);
-}
-.avatar-img {
-  border-radius: 16px;
-}
-
-.avatar-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-.avatar-action-btn {
-  font-size: 11.5px;
-  padding: 5px 10px;
-  border-radius: 7px;
-  background: var(--blue-2);
-  color: var(--on-accent);
-  border: none;
-  cursor: pointer;
-  font-family: var(--font-sans);
-  transition: opacity 0.15s;
-}
-.avatar-action-btn:hover:not(:disabled) {
-  opacity: 0.85;
-}
-.avatar-action-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-.avatar-action-btn.ghost {
-  background: transparent;
-  color: var(--ink-2);
-  border: 1px solid var(--line);
-}
-.pwd-panel {
-  margin-top: 10px;
-  padding: 12px;
-  background: var(--bg-2);
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-.pwd-msg {
-  font-size: 11.5px;
-  color: var(--danger-ink);
-}
-.pwd-msg.ok {
-  color: var(--green);
-}
-.pwd-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-}
-
-.avatar-edit {
-  color: var(--on-accent);
-  position: absolute;
-  bottom: -4px;
-  right: -4px;
-  width: 20px;
-  height: 20px;
-  border-radius: 6px;
-  background: var(--blue-2);
-  border: 2px solid var(--surface);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.avatar-edit svg {
-  width: 10px;
-  height: 10px;
-}
-
-.avatar-hint {
-  font-size: 11px;
-  color: var(--ink-3);
-  margin-bottom: 6px;
-}
-
 .fields {
   display: flex;
   flex-direction: column;
   gap: 12px;
-}
-
-.field-input {
-  height: 40px;
-  transition: all 0.15s;
-}
-.field-input.readonly {
-  background: var(--surface-inset);
-  cursor: not-allowed;
-}
-.field-input input:disabled {
-  color: var(--ink-3);
-  cursor: not-allowed;
 }
 
 .char-count {
@@ -647,162 +385,10 @@ async function handleDeleteAccount(payload: { password: string; confirm: string 
   font-family: var(--font-mono);
 }
 
-.slider-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-.goal-slider {
-  flex: 1;
-  accent-color: var(--blue-2);
-}
-.slider-val {
-  min-width: 28px;
-  text-align: center;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--blue-2);
-  font-family: var(--font-mono);
-}
-
-.seg {
-  display: flex;
-  background: var(--surface-inset);
-  border-radius: 9px;
-  padding: 3px;
-  border: 1px solid var(--line);
-}
-.seg-btn {
-  flex: 1;
-  padding: 7px 0;
-  font-size: 12px;
-  font-weight: 500;
-  background: transparent;
-  border: none;
-  border-radius: 7px;
-  color: var(--ink-3);
-  cursor: pointer;
-  transition: all 0.15s;
-  font-family: var(--font-sans);
-}
-.seg-btn.active {
-  background: var(--surface);
-  color: var(--ink);
-  box-shadow: var(--control-shadow);
-}
-
-.toggle-list {
-  display: flex;
-  flex-direction: column;
-}
-
-.toggle-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px 0;
-  border-bottom: 0.5px solid var(--line);
-}
-.toggle-row:last-child {
-  border-bottom: none;
-}
-
-.toggle-info {
-  font-size: 12.5px;
-  color: var(--ink);
-}
-.toggle-sub {
-  font-size: 11px;
-  color: var(--ink-3);
-  margin-top: 1px;
-}
-
-.toggle {
-  width: 36px;
-  height: 20px;
-  border-radius: 10px;
-  background: var(--bg-3);
-  border: 1px solid var(--line);
-  position: relative;
-  cursor: pointer;
-  transition: background 0.2s;
-  flex-shrink: 0;
-}
-.toggle.on {
-  background: var(--blue-2);
-  border-color: var(--blue-2);
-}
-.toggle-thumb {
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: var(--on-accent);
-  box-shadow: var(--control-shadow);
-  transition: left 0.2s;
-}
-.toggle.on .toggle-thumb {
-  left: 18px;
-}
-
 .modal-divider {
   height: 0.5px;
   background: var(--line);
   margin: 0 -24px;
-}
-
-.danger-list {
-  display: flex;
-  flex-direction: column;
-}
-
-.danger-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px 0;
-  border-bottom: 0.5px solid var(--line);
-}
-.danger-row:last-child {
-  border-bottom: none;
-}
-
-.danger-info {
-  font-size: 12.5px;
-  color: var(--ink);
-}
-.danger-sub {
-  font-size: 11px;
-  color: var(--ink-3);
-  margin-top: 1px;
-}
-
-.danger-btn {
-  padding: 6px 14px;
-  border-radius: 8px;
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-  font-family: var(--font-sans);
-  transition: all 0.15s;
-}
-.danger-btn.outline {
-  background: transparent;
-  border: 1px solid var(--line);
-  color: var(--ink-2);
-}
-.danger-btn.outline:hover {
-  background: var(--bg-2);
-}
-.danger-btn.red {
-  background: var(--danger-button-bg);
-  border: 1px solid var(--danger-button-border);
-  color: var(--danger-button-text);
-}
-.danger-btn.red:hover {
-  background: var(--danger-button-hover-bg);
 }
 
 .modal-footer {
@@ -820,48 +406,6 @@ async function handleDeleteAccount(payload: { password: string; confirm: string 
   padding: 8px 24px 0;
   color: var(--danger-ink);
   font-size: 12px;
-}
-
-.cancel-btn {
-  padding: 8px 18px;
-  border-radius: 9px;
-  font-size: 13px;
-  font-weight: 500;
-  background: transparent;
-  border: 1px solid var(--line);
-  color: var(--ink-2);
-  cursor: pointer;
-  font-family: var(--font-sans);
-  transition: background 0.15s;
-}
-.cancel-btn:hover {
-  background: var(--bg-2);
-}
-
-.save-btn {
-  padding: 8px 20px;
-  border-radius: 9px;
-  font-size: 13px;
-  font-weight: 600;
-  background: var(--accent-gradient);
-  color: var(--on-accent);
-  border: none;
-  cursor: pointer;
-  font-family: var(--font-sans);
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  transition: opacity 0.15s;
-}
-.save-btn:hover:not(:disabled) {
-  opacity: 0.88;
-}
-.save-btn:disabled {
-  opacity: 0.7;
-  cursor: not-allowed;
-}
-.save-btn.saved {
-  background: var(--success-gradient);
 }
 
 .spinner {

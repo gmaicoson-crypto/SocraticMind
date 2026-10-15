@@ -2,6 +2,7 @@
 
 from models.attachment import Attachment, AttachmentChunk, MessageAttachment
 from models import ChatMessage
+from services.source_snapshots import normalize_sources
 
 
 def hydrate_message_sources(db, *, user_id: int, messages: list) -> dict[int, list[dict]]:
@@ -10,10 +11,9 @@ def hydrate_message_sources(db, *, user_id: int, messages: list) -> dict[int, li
     Unavailable/deleted sources preserve only display identity. Their saved
     excerpt is deliberately removed so deleting a document revokes readback.
     """
-    from services.web_evidence import _sources
-
     output = {
-        m.id: _sources((m.metadata_json or {}).get("web", {}).get("sources")) for m in messages
+        m.id: normalize_sources((m.metadata_json or {}).get("web", {}).get("sources"))
+        for m in messages
     }
     by_message = {m.id: m for m in messages if m.user_id == user_id}
     requested = {

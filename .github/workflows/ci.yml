@@ -56,7 +56,7 @@ jobs:
             fi
           done
           if git diff --quiet "$base_sha" HEAD -- \
-            scripts/format.mjs scripts/format.test.mjs \
+            scripts/format.mjs scripts/format.test.mjs scripts/lib/git-files.mjs \
             .prettierrc.json .prettierignore .editorconfig pyproject.toml \
             .github/workflows/ci.yml; then
             echo 'formatter=false' >> "$GITHUB_OUTPUT"
@@ -116,6 +116,32 @@ jobs:
       - name: Test formatter
         if: needs.changes.outputs.formatter == 'true'
         run: node --test scripts/format.test.mjs
+
+  code-size:
+    name: Code size checks
+    needs: changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      DIFF_BASE_SHA: ${{ needs.changes.outputs.base_sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Restore comparison base
+        shell: bash
+        run: |
+          git hash-object -w -t tree /dev/null >/dev/null
+          if ! git cat-file -e "$DIFF_BASE_SHA" 2>/dev/null; then
+            git fetch --no-tags origin "$DIFF_BASE_SHA"
+          fi
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Test line checker
+        run: node --test scripts/check-lines.test.mjs
+      - name: Check changed-file line limits
+        run: node scripts/check-lines.mjs "--base=$DIFF_BASE_SHA"
 
   frontend:
     name: Frontend checks
@@ -200,7 +226,7 @@ jobs:
         run: .venv/bin/python -m pytest
 
   validate:
-    needs: [changes, formatting, frontend, backend]
+    needs: [changes, formatting, code-size, frontend, backend]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -208,12 +234,13 @@ jobs:
         env:
           CHANGES_RESULT: ${{ needs.changes.result }}
           FORMATTING_RESULT: ${{ needs.formatting.result }}
+          CODE_SIZE_RESULT: ${{ needs.code-size.result }}
           FRONTEND_RESULT: ${{ needs.frontend.result }}
           BACKEND_RESULT: ${{ needs.backend.result }}
         shell: bash
         run: |
-          echo "Changes=$CHANGES_RESULT Formatting=$FORMATTING_RESULT Frontend=$FRONTEND_RESULT Backend=$BACKEND_RESULT"
-          if [[ "$CHANGES_RESULT" != 'success' || "$FORMATTING_RESULT" != 'success' ]]; then
+          echo "Changes=$CHANGES_RESULT Formatting=$FORMATTING_RESULT CodeSize=$CODE_SIZE_RESULT Frontend=$FRONTEND_RESULT Backend=$BACKEND_RESULT"
+          if [[ "$CHANGES_RESULT" != 'success' || "$FORMATTING_RESULT" != 'success' || "$CODE_SIZE_RESULT" != 'success' ]]; then
             exit 1
           fi
           for result in "$FRONTEND_RESULT" "$BACKEND_RESULT"; do

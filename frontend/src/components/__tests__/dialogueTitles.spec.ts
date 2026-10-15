@@ -40,6 +40,7 @@ async function mountDialogue(mode: ChatMode) {
     global: {
       stubs: {
         MessageList: false,
+        DialogueHeader: false,
         DialogueInputBar: false,
         DialogueHistoryPanel: false,
         ConfirmDialog: false,
