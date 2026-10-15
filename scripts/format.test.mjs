@@ -146,6 +146,33 @@ test('format command checks and fixes changed files without rewriting unrelated 
     assert.equal(prCheck.status, 1, prCheck.stdout + prCheck.stderr)
     assert.ok((prCheck.stdout + prCheck.stderr).includes('staged.ts'))
     assert.equal(format('--check', '--all', `--base=${base}`).status, 2)
+
+    const emptyTree = run('git', ['mktree'])
+    assert.equal(emptyTree.status, 0, emptyTree.stderr)
+    const firstPushCheck = format('--check', `--base=${emptyTree.stdout.trim()}`)
+    assert.equal(firstPushCheck.status, 1, firstPushCheck.stdout + firstPushCheck.stderr)
+    assert.ok((firstPushCheck.stdout + firstPushCheck.stderr).includes('untouched.ts'))
+
+    // Rewinding a branch must check restored files, even when HEAD is an ancestor of before.
+    write('untouched.ts', 'const untouched = { value: 1 }\n')
+    git('add', 'untouched.ts')
+    git(
+      '-c',
+      'user.name=Formatter Test',
+      '-c',
+      'user.email=formatter@example.invalid',
+      '-c',
+      'commit.gpgsign=false',
+      'commit',
+      '--quiet',
+      '-m',
+      'formatted previous push',
+    )
+    const before = run('git', ['rev-parse', 'HEAD']).stdout.trim()
+    git('checkout', '--quiet', '--detach', base)
+    const forcePushCheck = format('--check', `--base=${before}`)
+    assert.equal(forcePushCheck.status, 1, forcePushCheck.stdout + forcePushCheck.stderr)
+    assert.ok((forcePushCheck.stdout + forcePushCheck.stderr).includes('untouched.ts'))
   } finally {
     rmSync(fixture, { recursive: true, force: true })
   }

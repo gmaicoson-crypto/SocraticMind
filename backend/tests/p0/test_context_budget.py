@@ -1,4 +1,5 @@
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 import pytest
 import tiktoken
@@ -35,6 +36,29 @@ def configure_profile(monkeypatch):
         return profile
 
     return configure
+
+
+@pytest.fixture
+def offline_encoding(monkeypatch):
+    # Exercise the real BPE engine with a small vocabulary instead of downloading model data.
+    ranks = {bytes([value]): value for value in range(256)}
+    for word in ("递归", "函数", "def", "return"):
+        encoded = word.encode("utf-8")
+        for end in range(2, len(encoded) + 1):
+            prefix = encoded[:end]
+            if prefix not in ranks:
+                ranks[prefix] = len(ranks)
+    encoding = tiktoken.Encoding(
+        name="budget_test",
+        pat_str=r"\S+|\s+",
+        mergeable_ranks=ranks,
+        special_tokens={"<|endoftext|>": len(ranks)},
+    )
+    load_encoding = Mock(return_value=encoding)
+    monkeypatch.setattr(tiktoken, "get_encoding", load_encoding)
+    context_budget._load_encoding.cache_clear()
+    yield encoding, load_encoding
+    context_budget._load_encoding.cache_clear()
 
 
 def test_256k_policy_reserves_generation_and_safety_space(configure_profile):
@@ -109,16 +133,28 @@ def test_unknown_model_counts_utf8_bytes_and_all_message_fields(configure_profil
     assert count_method() == "utf8_bytes+framing_estimate"
 
 
-def test_known_encoding_counts_multilingual_code_and_literal_special_tokens(configure_profile):
-    configure_profile(tokenizer_encoding="cl100k_base")
+def test_known_encoding_counts_multilingual_code_and_literal_special_tokens(
+    configure_profile, offline_encoding
+):
+    encoding, load_encoding = offline_encoding
+    configure_profile(tokenizer_encoding=encoding.name)
     text = "递归函数：\ndef f(n): return n * f(n - 1)\n<|endoftext|>"
-    assert count_text(text) == len(
-        tiktoken.get_encoding("cl100k_base").encode(text, disallowed_special=())
-    )
-    assert count_method() == "tiktoken:cl100k_base+framing_estimate"
+    tokens = encoding.encode(text, disallowed_special=())
+    assert encoding.decode(tokens) == text
+    with pytest.raises(ValueError, match="special token"):
+        encoding.encode(text)
+    assert count_text(text) == len(tokens)
+    assert count_method() == f"tiktoken:{encoding.name}+framing_estimate"
     accurate_text_count = count_text(text)
+    load_encoding.assert_called_once_with(encoding.name)
     configure_profile(tokenizer_encoding="utf8_bytes")
     assert count_text(text) > accurate_text_count
+
+
+def test_invalid_explicit_encoding_is_rejected(configure_profile):
+    configure_profile(tokenizer_encoding="not-a-tokenizer")
+    with pytest.raises(ValueError, match="Unknown encoding"):
+        count_text("hello")
 
 
 def test_hard_limit_accepts_boundary_and_rejects_one_more_token(configure_profile):

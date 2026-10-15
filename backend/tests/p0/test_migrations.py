@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 
 import pytest
@@ -17,6 +18,16 @@ def alembic_config(database_url: str) -> Config:
     config.set_main_option("script_location", str(BACKEND_DIR / "alembic"))
     config.set_main_option("sqlalchemy.url", database_url)
     return config
+
+
+def test_migrations_keep_application_loggers_enabled(tmp_path, monkeypatch):
+    logger = logging.getLogger("services.chat_summaries")
+    monkeypatch.setattr(logger, "disabled", False)
+    database_url = f"sqlite:///{tmp_path / 'logging.sqlite'}"
+
+    command.upgrade(alembic_config(database_url), "head")
+
+    assert logger.disabled is False
 
 
 def test_empty_database_upgrades_to_head(tmp_path):

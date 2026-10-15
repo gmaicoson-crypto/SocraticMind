@@ -163,7 +163,7 @@ describe('onboarding entry points', () => {
     return { dialogue: mount(SocraticDialogue), session }
   }
 
-  it('sends topic recommendations as follow-ups and refreshes them after the answer', async () => {
+  it('sends topic recommendations as follow-ups and refreshes after three completed turns', async () => {
     vi.mocked(getSuggestions)
       .mockResolvedValueOnce({ suggestions: ['讲讲检索器的工作原理'], source: 'ai' })
       .mockResolvedValueOnce({ suggestions: ['如何控制检索噪声？'], source: 'ai' })
@@ -175,24 +175,28 @@ describe('onboarding entry points', () => {
       nodeKey: 'retrieval',
     })
     expect(dialogue.get('.chips-list .chip').text()).toBe('讲讲检索器的工作原理')
-    await dialogue.get('.chips-list .chip').trigger('click')
-    await flushPromises()
-    expect(chatStream).toHaveBeenCalledTimes(1)
-    expect(vi.mocked(chatStream).mock.calls[0][0]).toMatchObject({
-      userInput: '讲讲检索器的工作原理',
-      topicId: 7,
-      nodeKey: 'retrieval',
-      sessionId: session.id,
-    })
-    expect(useAgentStore().onboardingTopic).toBeNull()
-    const callbacks = vi.mocked(chatStream).mock.calls[0][1]
-    callbacks.onChunk('检索噪声会影响生成结果。')
-    await flushPromises()
-    expect(getSuggestions).toHaveBeenCalledTimes(1)
-    callbacks.onDone()
-    await flushPromises()
-    expect(getSuggestions).toHaveBeenCalledTimes(2)
-    expect(dialogue.get('.chips-list .chip').text()).toBe('如何控制检索噪声？')
+    for (let turn = 1; turn <= 3; turn += 1) {
+      await dialogue.get('.chips-list .chip').trigger('click')
+      await flushPromises()
+      expect(chatStream).toHaveBeenCalledTimes(turn)
+      const [request, callbacks] = vi.mocked(chatStream).mock.calls[turn - 1]
+      expect(request).toMatchObject({
+        userInput: '讲讲检索器的工作原理',
+        topicId: 7,
+        nodeKey: 'retrieval',
+        sessionId: session.id,
+      })
+      expect(useAgentStore().onboardingTopic).toBeNull()
+      callbacks.onChunk('检索噪声会影响生成结果。')
+      await flushPromises()
+      expect(getSuggestions).toHaveBeenCalledTimes(1)
+      callbacks.onDone()
+      await flushPromises()
+      expect(getSuggestions).toHaveBeenCalledTimes(turn === 3 ? 2 : 1)
+      expect(dialogue.get('.chips-list .chip').text()).toBe(
+        turn === 3 ? '如何控制检索噪声？' : '讲讲检索器的工作原理',
+      )
+    }
     dialogue.unmount()
   })
 

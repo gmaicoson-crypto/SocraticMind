@@ -27,10 +27,16 @@ function gitFiles(args) {
   return result.stdout.split('\0').filter(Boolean)
 }
 
-// NUL-separated paths preserve spaces; --base includes committed PR changes.
+// NUL-separated paths preserve spaces. CI resolves the PR merge base or push's previous tree.
 const tracked = options.has('--all')
   ? gitFiles(['ls-files', '-z'])
-  : gitFiles(['diff', base ? `${base}...HEAD` : 'HEAD', '--name-only', '--diff-filter=ACMR', '-z'])
+  : gitFiles([
+      'diff',
+      ...(base ? [base, 'HEAD'] : ['HEAD']),
+      '--name-only',
+      '--diff-filter=ACMR',
+      '-z',
+    ])
 const files = [
   ...new Set([...tracked, ...gitFiles(['ls-files', '--others', '--exclude-standard', '-z'])]),
 ]

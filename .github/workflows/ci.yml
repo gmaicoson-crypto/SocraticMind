@@ -1,24 +1,92 @@
 name: CI
 
 on:
+  push:
+    branches:
+      - '**'
   pull_request:
 
 permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.event.pull_request.number }}
+  group: ci-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
-  validate:
+  changes:
+    name: Detect changes
     runs-on: ubuntu-latest
-    env:
-      PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+    outputs:
+      base_sha: ${{ steps.changes.outputs.base_sha }}
+      frontend: ${{ steps.changes.outputs.frontend }}
+      backend: ${{ steps.changes.outputs.backend }}
+      formatter: ${{ steps.changes.outputs.formatter }}
+      python: ${{ steps.changes.outputs.python }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - name: Detect changed areas
+        id: changes
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE_SHA: ${{ github.event.before }}
+        shell: bash
+        run: |
+          if [[ "$GITHUB_EVENT_NAME" == 'pull_request' ]]; then
+            base_sha="$(git merge-base "$PR_BASE_SHA" HEAD)"
+          elif [[ "$PUSH_BEFORE_SHA" =~ ^0+$ ]]; then
+            # A new branch has no previous commit to compare against.
+            base_sha="$(git hash-object -w -t tree /dev/null)"
+          else
+            base_sha="$PUSH_BEFORE_SHA"
+            # A force push may leave the previous tip outside fetched history.
+            if ! git cat-file -e "$base_sha^{commit}" 2>/dev/null; then
+              git fetch --no-tags origin "$base_sha"
+            fi
+          fi
+          git cat-file -e "$base_sha"
+          echo "base_sha=$base_sha" >> "$GITHUB_OUTPUT"
+          for area in frontend backend; do
+            if git diff --quiet "$base_sha" HEAD -- "$area" .github/workflows/ci.yml; then
+              echo "$area=false" >> "$GITHUB_OUTPUT"
+            else
+              echo "$area=true" >> "$GITHUB_OUTPUT"
+            fi
+          done
+          if git diff --quiet "$base_sha" HEAD -- \
+            scripts/format.mjs scripts/format.test.mjs \
+            .prettierrc.json .prettierignore .editorconfig pyproject.toml \
+            .github/workflows/ci.yml; then
+            echo 'formatter=false' >> "$GITHUB_OUTPUT"
+          else
+            echo 'formatter=true' >> "$GITHUB_OUTPUT"
+          fi
+          if git diff --quiet "$base_sha" HEAD -- '*.py'; then
+            echo 'python=false' >> "$GITHUB_OUTPUT"
+          else
+            echo 'python=true' >> "$GITHUB_OUTPUT"
+          fi
+
+  formatting:
+    name: Formatting checks
+    needs: changes
+    runs-on: ubuntu-latest
+    env:
+      DIFF_BASE_SHA: ${{ needs.changes.outputs.base_sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Restore comparison base
+        shell: bash
+        run: |
+          # Git objects created or fetched by another job are not shared across runners.
+          git hash-object -w -t tree /dev/null >/dev/null
+          if ! git cat-file -e "$DIFF_BASE_SHA" 2>/dev/null; then
+            git fetch --no-tags origin "$DIFF_BASE_SHA"
+          fi
       - uses: pnpm/action-setup@v4
         with:
           version: 12.6.0
@@ -28,73 +96,99 @@ jobs:
           cache: pnpm
           cache-dependency-path: frontend/pnpm-lock.yaml
       - uses: actions/setup-python@v5
+        if: needs.changes.outputs.python == 'true' || needs.changes.outputs.formatter == 'true'
         with:
           python-version: '3.11'
-
-      - name: Detect changed areas
-        id: changes
-        shell: bash
-        run: |
-          git rev-parse --verify "$PR_BASE_SHA^{commit}" >/dev/null
-          for area in frontend backend; do
-            if git diff --quiet "$PR_BASE_SHA...HEAD" -- "$area"; then
-              echo "$area=false" >> "$GITHUB_OUTPUT"
-            else
-              echo "$area=true" >> "$GITHUB_OUTPUT"
-            fi
-          done
-          if git diff --quiet "$PR_BASE_SHA...HEAD" -- scripts/format.mjs scripts/format.test.mjs; then
-            echo 'formatter=false' >> "$GITHUB_OUTPUT"
-          else
-            echo 'formatter=true' >> "$GITHUB_OUTPUT"
-          fi
-          if git diff --quiet "$PR_BASE_SHA...HEAD" -- '*.py'; then
-            echo 'python=false' >> "$GITHUB_OUTPUT"
-          else
-            echo 'python=true' >> "$GITHUB_OUTPUT"
-          fi
 
       - name: Install frontend dependencies
         run: pnpm --dir frontend install --frozen-lockfile
 
       - name: Install Python formatter
-        if: steps.changes.outputs.backend == 'true' || steps.changes.outputs.python == 'true' || steps.changes.outputs.formatter == 'true'
+        if: needs.changes.outputs.python == 'true' || needs.changes.outputs.formatter == 'true'
         run: |
           python -m venv backend/.venv
           backend/.venv/bin/python -m pip install -r backend/requirements-dev.txt
 
       - name: Check changed-file formatting
-        run: node scripts/format.mjs --check "--base=$PR_BASE_SHA"
+        run: node scripts/format.mjs --check "--base=$DIFF_BASE_SHA"
 
       - name: Test formatter
-        if: steps.changes.outputs.formatter == 'true'
+        if: needs.changes.outputs.formatter == 'true'
         run: node --test scripts/format.test.mjs
 
-      - name: Test frontend learning flow
-        if: steps.changes.outputs.frontend == 'true'
-        run: >-
-          pnpm --dir frontend exec vitest run
-          src/stores/__tests__/agent.spec.ts
-          src/stores/__tests__/plans.spec.ts
-          src/stores/__tests__/memories.spec.ts
-          src/components/agent
-          src/components/planning
-          src/components/profile/__tests__/AgentMemorySection.spec.ts
-          src/components/__tests__/onboardingEntry.spec.ts
-          src/composables/__tests__/useOnboardingFlow.spec.ts
-          src/composables/__tests__/useAssessment.spec.ts
-          src/views/__tests__/Home.planTabs.spec.ts
-          src/api/__tests__/learningAgent.contract.spec.ts
+  frontend:
+    name: Frontend checks
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12.6.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
 
-      - name: Build frontend
-        if: steps.changes.outputs.frontend == 'true'
+      - name: Install frontend dependencies
+        id: dependencies
+        run: pnpm --dir frontend install --frozen-lockfile
+
+      - name: Test frontend
+        run: pnpm --dir frontend test
+
+      - name: Type-check and build frontend
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
         run: pnpm --dir frontend build
 
-      - name: Install backend dependencies
-        if: steps.changes.outputs.backend == 'true'
-        run: backend/.venv/bin/python -m pip install -r backend/requirements.txt
-
-      - name: Test backend learning flow
-        if: steps.changes.outputs.backend == 'true'
+  backend:
+    name: Backend checks
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
         working-directory: backend
-        run: .venv/bin/python -m pytest tests/p0
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install backend dependencies
+        run: |
+          python -m venv .venv
+          .venv/bin/python -m pip install -r requirements.txt
+
+      - name: Check backend syntax
+        run: .venv/bin/python -m compileall -q ai core models routers schemas services alembic main.py
+
+      - name: Test backend
+        run: .venv/bin/python -m pytest
+
+  validate:
+    needs: [changes, formatting, frontend, backend]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check validation results
+        env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          FORMATTING_RESULT: ${{ needs.formatting.result }}
+          FRONTEND_RESULT: ${{ needs.frontend.result }}
+          BACKEND_RESULT: ${{ needs.backend.result }}
+        shell: bash
+        run: |
+          echo "Changes=$CHANGES_RESULT Formatting=$FORMATTING_RESULT Frontend=$FRONTEND_RESULT Backend=$BACKEND_RESULT"
+          if [[ "$CHANGES_RESULT" != 'success' || "$FORMATTING_RESULT" != 'success' ]]; then
+            exit 1
+          fi
+          for result in "$FRONTEND_RESULT" "$BACKEND_RESULT"; do
+            if [[ "$result" != 'success' && "$result" != 'skipped' ]]; then
+              exit 1
+            fi
+          done
