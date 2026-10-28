@@ -4,7 +4,6 @@ import base64
 import json
 import re
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
 from concurrent.futures import TimeoutError as FutureTimeout
 
 from core.context_budget import count_text, get_context_policy
@@ -25,7 +24,7 @@ from services.attachments.storage import AttachmentStorage
 from services.attachments.config import IMAGE_TOKEN_ESTIMATE, LIMITS
 from services.attachments.summaries import check_deadline, iter_summaries, _executor
 from services.web_search import CapacityExceeded
-from services.source_snapshots import normalize_sources
+from services.source_snapshots import normalize_sources, file_source as _source
 
 
 @dataclass
@@ -34,29 +33,8 @@ class PreparedAttachments:
     image_parts: list[dict] = field(default_factory=list)
     sources: list[dict] = field(default_factory=list)
     attachment_derived: bool = False
-
-
-def _source(attachment, chunk, index, *, excerpt=None, covered=None):
-    source = {
-        "kind": attachment.kind,
-        "id": f"s{index + 6}",
-        "title": attachment.name,
-        "attachment_id": attachment.id,
-        "revision": attachment.revision,
-        "chunk_id": chunk.chunk_id if chunk else None,
-        "locator": chunk.locator if chunk else {},
-        "block_type": chunk.block_type if chunk else "image",
-        "title_path": chunk.title_path if chunk else [],
-        "excerpt": excerpt
-        if excerpt is not None
-        else (chunk.text if chunk else "本轮已提供的图片"),
-        "retrieved_at": datetime.now(timezone.utc).isoformat(),
-    }
-    if covered:
-        source["covered_chunk_ids"] = [c.chunk_id for c in covered]
-        source["summary"] = True
-        source["coverage"] = [c.locator for c in covered]
-    return source
+    warnings: list[dict] = field(default_factory=list)
+    retrieval_metrics: dict = field(default_factory=dict)
 
 
 def _named_in_question(attachment, question):

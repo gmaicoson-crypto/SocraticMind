@@ -11,6 +11,11 @@ import { cancelChatStream, chatStream, getAllMessages, getChatRequestState } fro
 import { webSnapshot } from '../../test/fixtures/webSearch'
 import { setupDialogueContext, mountDialogue, currentCall } from './dialogueContext.setup'
 
+vi.mock('../../api/agent', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../api/agent')>()),
+  getActiveAgentRuns: vi.fn().mockResolvedValue([]),
+}))
+
 vi.mock('../../api/chat', () => ({
   chatStream: vi.fn(),
   getChatRequestState: vi.fn(),

@@ -53,6 +53,12 @@
       <input v-model="form.use_diagnostic" name="use_diagnostic" type="checkbox" />
       <span>进行3题测试</span>
     </label>
+    <MaterialSelector
+      :key="`${sessionId}:${topic}`"
+      v-model="selectedMaterials"
+      :topic-id="topicId"
+      :busy="busy"
+    />
     <p v-if="error" class="form-error">{{ error }}</p>
 
     <div class="tool-actions">
@@ -66,15 +72,18 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, watch } from 'vue'
+import { reactive, ref, watch } from 'vue'
 import type { OnboardingInput, OutcomeType } from '../../types/learningAgent'
 import BaseButton from '../ui/BaseButton.vue'
 import BaseInput from '../ui/BaseInput.vue'
+import MaterialSelector from './MaterialSelector.vue'
+import type { MaterialRef } from '../../types/knowledge'
 
 const props = withDefaults(
   defineProps<{
     topic: string
     sessionId: string
+    topicId?: number
     busy?: boolean
     defaultTimezone?: string
     error?: string
@@ -103,6 +112,7 @@ const outcomes: { value: OutcomeType; label: string }[] = [
 ]
 
 const browserTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
+const selectedMaterials = ref<MaterialRef[]>()
 const form = reactive({
   topic: props.topic,
   goal: `系统掌握${props.topic}`,
@@ -116,10 +126,11 @@ const form = reactive({
 })
 
 watch(
-  () => props.topic,
-  (topic) => {
-    form.topic = topic
-    form.goal = `系统掌握${topic}`
+  () => [props.topic, props.sessionId, props.topicId],
+  () => {
+    form.topic = props.topic
+    form.goal = `系统掌握${props.topic}`
+    selectedMaterials.value = undefined
   },
 )
 
@@ -132,6 +143,7 @@ function submit() {
     daily_minutes: Number(form.daily_minutes),
     target_date: form.target_date || null,
     session_id: props.sessionId,
+    ...(selectedMaterials.value !== undefined ? { materials: selectedMaterials.value } : {}),
   })
 }
 </script>

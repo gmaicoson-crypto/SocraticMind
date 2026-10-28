@@ -9,6 +9,7 @@ from models.progress import ChatMessage
 from core.errors import ApiError
 from core.context_budget import ContextWindowExceeded, count_messages, get_context_policy
 from services.web_evidence import apply_web_context, cited_source_ids, invalid_source_ids
+from services.knowledge.chat_context import add_topic_materials, validate_topic_sources
 from services.chat_stream_runner import cancellable_chat_stream
 from services.chat_lifecycle import (
     finish_chat_turn,
@@ -53,6 +54,8 @@ def generate(context: ChatStreamContext, runtime: ChatStreamDependencies):
     web = deepcopy(initial_web)
 
     def check_active():
+        if attachment_evidence:
+            validate_topic_sources(db, user_id=user_id, sources=attachment_evidence.sources)
         if has_attachment_context and monotonic() >= deadline:
             raise ApiError(
                 status_code=504,
@@ -173,6 +176,15 @@ def generate(context: ChatStreamContext, runtime: ChatStreamDependencies):
                     message="资料未能整理完成，请重试",
                     retryable=True,
                 )
+            attachment_evidence = add_topic_materials(
+                db,
+                session=started.session,
+                prepared=attachment_evidence,
+                model_id=model_id,
+                node_label=node_label,
+                user_input=model_user_input,
+                kind=req.kind,
+            )
             context_args["attachments"] = attachment_evidence
             context_session = db.get(ChatSession, session_pk)
             if context_session is None:
@@ -278,6 +290,17 @@ def generate(context: ChatStreamContext, runtime: ChatStreamDependencies):
             persist_web()
             for warning in web.get("warnings", [])[previous_warnings:]:
                 yield web_event({"type": "web_warning", "warning": warning, "web": web})
+        elif attachment_evidence:
+            web["sources"] = attachment_evidence.sources
+            persist_web()
+        if attachment_evidence and attachment_evidence.retrieval_metrics:
+            web.setdefault("metrics", {})["knowledge_retrieval"] = (
+                attachment_evidence.retrieval_metrics
+            )
+            web.setdefault("warnings", []).extend(attachment_evidence.warnings)
+            persist_web()
+            for warning in attachment_evidence.warnings:
+                yield web_event({"type": "web_warning", "warning": warning, "web": web})
         check_active()
         if getattr(active_context, "attachment_derived", False):
             if not refresh_generation_lease(
@@ -342,6 +365,8 @@ def generate(context: ChatStreamContext, runtime: ChatStreamDependencies):
             ),
         )
         for chunk in stream:
+            if first_chunk:
+                check_active()
             full_text.append(chunk)
             now = perf_counter()
             if first_chunk or now - checkpoint >= 0.5:
@@ -369,6 +394,7 @@ def generate(context: ChatStreamContext, runtime: ChatStreamDependencies):
                 first_chunk = False
             yield event({"text": chunk})
         content = "".join(full_text)
+        check_active()
         if not content.strip():
             raise ApiError(
                 status_code=502,
@@ -489,6 +515,12 @@ def generate(context: ChatStreamContext, runtime: ChatStreamDependencies):
         saved_web = (
             deepcopy((saved_message.metadata_json or {}).get("web")) if saved_message else None
         )
+        if saved_web is not None:
+            from services.attachments.evidence import hydrate_message_sources
+
+            saved_web["sources"] = hydrate_message_sources(
+                db, user_id=user_id, messages=[saved_message]
+            ).get(saved_message.id, [])
         db.commit()
         if saved_web is not None:
             yield web_event({"type": "web_sources", "web": saved_web, "final": True})

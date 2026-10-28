@@ -24,9 +24,14 @@ export async function startTopicPlan(topicId: number, input: TopicPlanInput) {
   return response.data as AgentRun
 }
 
-export async function getAgentRun(runId: string) {
-  const response = await api.get(`/api/agent/runs/${runId}`)
+export async function getAgentRun(runId: string, signal?: AbortSignal) {
+  const response = await api.get(`/api/agent/runs/${runId}`, { signal })
   return response.data as AgentRun
+}
+
+export async function getActiveAgentRuns(sessionId: string) {
+  const response = await api.get('/api/agent/runs/active', { params: { session_id: sessionId } })
+  return response.data as AgentRun[]
 }
 
 export async function getNodeAssessmentHistory(nodeId: number, page = 1) {
@@ -49,9 +54,10 @@ export async function updateAgentRun(runId: string, input: AgentRunUpdate) {
   return response.data as AgentRun
 }
 
-export async function confirmAgentRun(runId: string, requestId: string) {
+export async function confirmAgentRun(runId: string, requestId: string, version: number) {
   const response = await api.post(`/api/agent/runs/${runId}/confirm`, {
     request_id: requestId,
+    version,
   })
   return response.data as AgentRun
 }

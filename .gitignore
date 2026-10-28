@@ -51,5 +51,8 @@ Thumbs.db
 
 # Doc
 docs/*
+!docs/reports/
+docs/reports/*
+!docs/reports/2026-10-28-rag-lexical-evaluation.json
 
 plan/

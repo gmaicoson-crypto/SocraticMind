@@ -20,6 +20,11 @@
       <section class="reference-context">
         <h5>参考答案</h5>
         <p>{{ score.reference_answer || '该历史评估未保存参考答案，可重新评估查看。' }}</p>
+        <MaterialEvidence
+          v-if="evidence.length"
+          :sources="evidence"
+          :cited-ids="score.source_ids"
+        />
       </section>
       <section>
         <h5>回答解析</h5>
@@ -45,14 +50,20 @@
 import { computed } from 'vue'
 import { ChevronDown } from '@lucide/vue'
 import type { AssessmentScoreItem } from '../../types/learningAgent'
+import type { FileSource } from '../../types/webSearch'
+import MaterialEvidence from './MaterialEvidence.vue'
 
 const props = defineProps<{
   score: AssessmentScoreItem
   index: number
   maxScore: number
   initiallyOpen?: boolean
+  sources?: FileSource[]
 }>()
 const points = computed(() => Math.round((props.score.score / props.maxScore) * 100))
+const evidence = computed(() =>
+  (props.sources ?? []).filter((source) => props.score.source_ids?.includes(source.id)),
+)
 </script>
 
 <style scoped>

@@ -51,6 +51,7 @@ describe('PlanPreview', () => {
     expect(actions.map((button) => button.text())).toEqual(['重新生成', '取消', '确认创建'])
     await actions[0].trigger('click')
     expect(wrapper.emitted('update')?.[0]?.[0]).toEqual({
+      regenerate: true,
       goal: preview.goal,
       daily_minutes: preview.daily_minutes,
       target_date: preview.target_date,

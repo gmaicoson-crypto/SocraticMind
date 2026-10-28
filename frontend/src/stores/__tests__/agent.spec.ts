@@ -117,6 +117,25 @@ describe('agent store', () => {
     })
   })
 
+  it('ignores a conflict refresh that finishes after navigating to another session', async () => {
+    const store = useAgentStore()
+    store.run = run()
+    vi.mocked(agentApi.answerAgentRun).mockRejectedValue({ response: { status: 409 } })
+    let resolveRefresh!: (value: AgentRun) => void
+    vi.mocked(agentApi.getAgentRun).mockReturnValue(
+      new Promise((resolve) => {
+        resolveRefresh = resolve
+      }),
+    )
+    const pending = store.answer('answer')
+    await vi.waitFor(() => expect(agentApi.getAgentRun).toHaveBeenCalled())
+    store.clearRun()
+    store.run = run({ run_id: 'new-session-run' })
+    resolveRefresh(run({ version: 2 }))
+    await pending
+    expect(store.run.run_id).toBe('new-session-run')
+  })
+
   it('surfaces a persisted failed run returned with HTTP success', async () => {
     vi.mocked(agentApi.startOnboarding).mockResolvedValue(
       run({
@@ -193,5 +212,36 @@ describe('agent store', () => {
     await pending
     expect(store.run).toBeNull()
     expect(store.loading).toBe(false)
+  })
+
+  it('explains the run budget and does not offer an ineffective retry', async () => {
+    vi.mocked(agentApi.getAgentRun).mockResolvedValue(
+      run({
+        status: 'failed',
+        step: null,
+        error: { code: 'AGENT_MODEL_BUDGET_EXHAUSTED', retryable: false },
+      }),
+    )
+    const store = useAgentStore()
+    await store.restoreRun('run-1')
+    expect(store.error?.message).toContain('模型尝试次数已达上限')
+    expect(store.canRetry).toBe(false)
+  })
+
+  it('keeps a regeneration request identity after a lost response', async () => {
+    const store = useAgentStore()
+    store.run = run({ status: 'awaiting_confirmation', step: null, version: 5 })
+    vi.mocked(agentApi.updateAgentRun).mockRejectedValueOnce(new Error('offline'))
+    await store.update({ regenerate: true })
+    vi.mocked(agentApi.updateAgentRun).mockResolvedValueOnce(
+      run({ status: 'awaiting_confirmation', version: 8 }),
+    )
+    await store.update({ regenerate: true })
+    const first = vi.mocked(agentApi.updateAgentRun).mock.calls[0]![1]
+    const second = vi.mocked(agentApi.updateAgentRun).mock.calls[1]![1]
+    expect(first).toEqual(second)
+    expect(first).toEqual(
+      expect.objectContaining({ regenerate: true, version: 5, request_id: expect.any(String) }),
+    )
   })
 })

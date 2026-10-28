@@ -33,6 +33,7 @@ async def api_error_handler(_request: Request, error: ApiError) -> JSONResponse:
 def _uses_p0_error_contract(path: str) -> bool:
     return (
         path.startswith("/api/agent")
+        or path.startswith("/api/knowledge")
         or path.startswith("/api/attachments")
         or path.startswith("/api/plans")
         or (path.startswith("/api/topics/") and path.endswith("/plan"))

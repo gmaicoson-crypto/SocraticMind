@@ -289,4 +289,42 @@ describe('AssessmentResult', () => {
     expect(wrapper.get('.rubric-description').text()).toContain('作答前确定')
     wrapper.unmount()
   })
+
+  it('links each question to its own frozen textbook source and marks revoked evidence', async () => {
+    const source = {
+      id: 's6',
+      kind: 'document' as const,
+      title: '数组讲义',
+      attachment_id: 'doc-1',
+      revision: 1,
+      chunk_id: 'c1',
+      locator: { page: 4 },
+      excerpt: '数组下标的有效范围',
+      retrieved_at: '2026-10-28T00:00:00Z',
+    }
+    const grounded = {
+      ...result,
+      sources: [source],
+      scores: result.scores.map((score, index) => ({
+        ...score,
+        source_ids: index === 0 ? ['s6'] : [],
+      })),
+    }
+    const wrapper = mount(AssessmentResult, { props: { result: grounded } })
+    expect(wrapper.get('.file-source').text()).toContain('数组讲义')
+    await wrapper.findAll('.result-pages button')[1]!.trigger('click')
+    expect(wrapper.findAll('.score-card .file-source')).toHaveLength(1)
+    expect(wrapper.findAll('.score-card')[0]!.text()).toContain(source.excerpt)
+    await wrapper.setProps({
+      result: {
+        ...grounded,
+        evidence_unavailable: true,
+        sources: [{ ...source, excerpt: '', deleted: true }],
+      },
+    })
+    expect(wrapper.text()).toContain('原教材已失效')
+    expect(wrapper.text()).not.toContain(source.excerpt)
+    expect(wrapper.get('.file-source').attributes('disabled')).toBeDefined()
+    wrapper.unmount()
+  })
 })

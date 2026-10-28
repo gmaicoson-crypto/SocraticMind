@@ -3,6 +3,10 @@
     <p v-if="loading" role="status">正在加载复习题…</p>
     <template v-else-if="detail">
       <h3>{{ detail.node_label }} · 错题复习</h3>
+      <p v-if="detail.evidence_unavailable" role="status">
+        原教材已失效，请重新选择资料并评估后再复习。
+      </p>
+      <MaterialEvidence v-if="detail.sources?.length" :sources="detail.sources" />
       <template v-if="!result && detail.status === 'pending'">
         <AgentStepMessage
           :step="detail.step"
@@ -21,12 +25,16 @@
           <textarea
             :id="`review-answer-${reviewId}`"
             v-model="answer"
-            :disabled="busy"
+            :disabled="busy || detail.evidence_unavailable"
             maxlength="10000"
             rows="4"
             required
           />
-          <BaseButton type="submit" :loading="busy" :disabled="busy || !answer.trim()">
+          <BaseButton
+            type="submit"
+            :loading="busy"
+            :disabled="busy || detail.evidence_unavailable || !answer.trim()"
+          >
             <template #loading>正在评分</template>
             提交复习
           </BaseButton>
@@ -68,6 +76,7 @@ import { createRequestId } from '../../utils/requestId'
 import AgentStepMessage from '../agent/AgentStepMessage.vue'
 import BaseButton from '../ui/BaseButton.vue'
 import TimeDisplay from '../ui/TimeDisplay.vue'
+import MaterialEvidence from '../agent/MaterialEvidence.vue'
 
 const props = defineProps<{ reviewId: number; timezone: string }>()
 const emit = defineEmits<{ close: []; completed: [] }>()
@@ -95,7 +104,8 @@ async function load() {
 }
 
 async function submit() {
-  if (busy.value || !detail.value || !answer.value.trim()) return
+  if (busy.value || !detail.value || detail.value.evidence_unavailable || !answer.value.trim())
+    return
   const text = answer.value.trim()
   // Reuse the request after a lost response; edits create a new intent.
   if (!submission || submission.answer !== text || submission.version !== detail.value.version) {

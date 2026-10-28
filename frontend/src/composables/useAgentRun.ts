@@ -39,10 +39,28 @@ export function useAgentRun(userId: number) {
 
   async function restoreRun(sessionId: string) {
     const runId = getRunId(sessionId)
-    if (!runId) return null
-    const restored = await useAgentStore().restoreRun(runId)
-    if (!restored || restored.status === 'completed' || restored.status === 'cancelled') {
+    const store = useAgentStore()
+    const epoch = store.getEpoch()
+    if (!runId) {
+      const recovered = await store.restoreActiveRun(sessionId)
+      if (recovered) rememberRun(sessionId, recovered.run_id)
+      return recovered
+    }
+    const restored = await store.restoreRun(runId)
+    if (store.getEpoch() !== epoch) return null
+    // A network failure or a navigation reset is not proof that the run is gone.
+    const missing = store.error?.status === 404 && store.error.code === 'RUN_NOT_FOUND'
+    const ownsEntry = getRunId(sessionId) === runId
+    if (
+      ownsEntry &&
+      (missing || restored?.status === 'completed' || restored?.status === 'cancelled')
+    ) {
       forgetRun(sessionId)
+    }
+    if (missing && ownsEntry) {
+      const recovered = await store.restoreActiveRun(sessionId)
+      if (recovered) rememberRun(sessionId, recovered.run_id)
+      return recovered
     }
     return restored
   }

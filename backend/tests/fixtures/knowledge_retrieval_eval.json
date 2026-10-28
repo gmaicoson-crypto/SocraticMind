@@ -1,0 +1,90 @@
+{
+  "version": "public-learning-v1",
+  "documents": [
+    {
+      "title": "优化算法",
+      "chunks": [
+        {
+          "id": "gradient",
+          "text": "梯度下降根据损失函数的负梯度方向调整参数，逐步寻找较小的损失值。"
+        },
+        {
+          "id": "rate",
+          "text": "学习率控制每次参数更新的步长。学习率过大会在最优值附近震荡，过小则收敛缓慢。"
+        },
+        {
+          "id": "overfit",
+          "text": "过拟合表现为训练误差低而测试误差高。正则化和更多训练样本可以缓解过拟合。"
+        }
+      ]
+    },
+    {
+      "title": "细胞生物学",
+      "chunks": [
+        {
+          "id": "photosynthesis",
+          "text": "光合作用发生在叶绿体中，将光能转化为储存在有机物中的化学能，消耗二氧化碳并释放氧气。"
+        },
+        {
+          "id": "respiration",
+          "text": "有氧呼吸分解葡萄糖，释放能量并产生二氧化碳和水，线粒体参与其中的重要过程。"
+        }
+      ]
+    },
+    {
+      "title": "数据库事务",
+      "chunks": [
+        {
+          "id": "atomicity",
+          "text": "事务的原子性要求操作要么全部提交，要么全部回滚，不能只执行部分操作。"
+        },
+        {
+          "id": "isolation",
+          "text": "事务隔离用于控制并发事务之间的可见性，隔离级别影响脏读、不可重复读和幻读。"
+        },
+        {
+          "id": "idempotency",
+          "text": "幂等键用于识别重复业务请求，使同一请求重试后不会重复创建订单等业务记录。"
+        }
+      ]
+    }
+  ],
+  "queries": [
+    { "id": "exact-gradient", "query": "梯度下降根据什么调整参数？", "expected": ["gradient"] },
+    { "id": "synonym-step", "query": "怎样控制优化器每一步走多远？", "expected": ["rate"] },
+    {
+      "id": "synonym-generalization",
+      "query": "模型记住了练习答案却无法处理新题，怎么改善？",
+      "expected": ["overfit"]
+    },
+    {
+      "id": "english-step",
+      "query": "What determines the optimizer step size?",
+      "expected": ["rate"]
+    },
+    {
+      "id": "light-energy",
+      "query": "绿色植物如何把太阳光变为可储存的能量？",
+      "expected": ["photosynthesis"]
+    },
+    { "id": "exact-respiration", "query": "有氧呼吸分解什么物质？", "expected": ["respiration"] },
+    {
+      "id": "synonym-rollback",
+      "query": "转账时扣款成功而入账失败，怎样保证两个操作一起撤销？",
+      "expected": ["atomicity"]
+    },
+    {
+      "id": "synonym-retry",
+      "query": "接口因超时被客户端反复调用，如何避免产生多笔订单？",
+      "expected": ["idempotency"]
+    },
+    {
+      "id": "cross-section",
+      "query": "并发事务的隔离和事务原子性分别解决什么问题？",
+      "expected": ["isolation", "atomicity"]
+    },
+    { "id": "page-two", "query": "第2页的内容", "expected": ["rate", "respiration", "isolation"] },
+    { "id": "missing-page", "query": "第99页的内容", "expected": [] },
+    { "id": "unanswerable", "query": "木卫二冰壳厚度是多少？", "expected": [] }
+  ]
+}

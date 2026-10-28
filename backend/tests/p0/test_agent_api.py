@@ -58,12 +58,28 @@ def onboarding_payload(use_diagnostic=False):
     }
 
 
+def settle_run(db_session, client, response, generator=fake_generator):
+    from sqlalchemy.orm import sessionmaker
+    from services.agent.jobs import claim_job
+    from services.agent.job_execution import execute_claim
+
+    assert response.status_code in {200, 201}
+    run_id = response.json()["run_id"]
+    db_session.commit()
+    factory = sessionmaker(bind=db_session.get_bind(), expire_on_commit=False)
+    claim = claim_job(factory, run_id=run_id)
+    if claim:
+        execute_claim(factory, claim, generator=generator)
+    return client.get(f"/api/agent/runs/{run_id}")
+
+
 def test_onboarding_api_exposes_recoverable_run_protocol(app, client, db_session):
     app.dependency_overrides[get_agent_generator] = lambda: fake_generator
 
     started = client.post("/api/agent/onboarding", json=onboarding_payload(True))
     assert started.status_code == 201
-    body = started.json()
+    assert started.json()["processing"] is True and started.json()["step"] is None
+    body = settle_run(db_session, client, started).json()
     assert body["status"] == "diagnosing"
     assert body["step"]["current"] == 1
     run_id = body["run_id"]
@@ -82,14 +98,17 @@ def test_onboarding_api_exposes_recoverable_run_protocol(app, client, db_session
             },
         )
         assert answer.status_code == 200
+        answer = settle_run(db_session, client, answer)
     assert answer.json()["status"] == "awaiting_confirmation"
     assert answer.json()["preview"]["total_minutes"] == 120
     assert answer.json()["preview"]["daily_minutes"] == 30
 
-    confirmed = client.post(f"/api/agent/runs/{run_id}/confirm", json={"request_id": "api-confirm"})
+    decision = {"request_id": "api-confirm", "version": answer.json()["version"]}
+    confirmed = client.post(f"/api/agent/runs/{run_id}/confirm", json=decision)
+    confirmed = settle_run(db_session, client, confirmed)
     assert confirmed.status_code == 200
     assert confirmed.json()["result"]["topic_id"] > 0
-    repeated = client.post(f"/api/agent/runs/{run_id}/confirm", json={"request_id": "api-confirm"})
+    repeated = client.post(f"/api/agent/runs/{run_id}/confirm", json=decision)
     assert repeated.json() == confirmed.json()
     messages = (
         db_session.query(ChatMessage)
@@ -111,15 +130,18 @@ def test_onboarding_api_exposes_recoverable_run_protocol(app, client, db_session
     assert messages[-1].metadata_json["result"] == confirmed.json()["result"]
 
 
-def test_patch_regenerates_preview_and_cancel_is_terminal(app, client):
+def test_patch_regenerates_preview_and_cancel_is_terminal(app, client, db_session):
     app.dependency_overrides[get_agent_generator] = lambda: fake_generator
-    run = client.post("/api/agent/onboarding", json=onboarding_payload()).json()
+    run = settle_run(
+        db_session, client, client.post("/api/agent/onboarding", json=onboarding_payload())
+    ).json()
 
     patched = client.patch(
         f"/api/agent/runs/{run['run_id']}",
         json={"daily_minutes": 10, "goal": "A revised goal"},
     )
     assert patched.status_code == 200
+    patched = settle_run(db_session, client, patched)
     assert patched.json()["preview"]["goal"] == "A revised goal"
     assert len(patched.json()["preview"]["plan_items"]) == 12
 

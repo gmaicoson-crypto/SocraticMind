@@ -12,6 +12,7 @@ from core.context_budget import ContextWindowExceeded, count_method
 from services.chat_titles import schedule_title
 from services.chat_lifecycle import begin_chat_turn, finish_chat_turn
 from services.attachments.service import summaries_for_messages
+from services.knowledge.chat_context import has_topic_materials
 
 from schemas.chat import ChatRequest
 from core.user_llm import load_user_profiles
@@ -201,7 +202,7 @@ def prepare_chat_stream(
         )
         .first()
         is not None
-    )
+    ) or has_topic_materials(db, started.session)
     try:
         # Resource preparation emits progress after SSE opens. Text-only requests
         # retain their immediate HTTP context validation contract.

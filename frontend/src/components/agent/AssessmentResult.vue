@@ -33,10 +33,14 @@
       class="result-page"
       :aria-label="page === 1 ? '结果概览' : '评分详情'"
     >
+      <p v-if="result.evidence_unavailable" role="status">
+        原教材已失效，保留历史评分；请重新选择资料后评估。
+      </p>
       <template v-if="page === 1">
         <section class="result-section">
           <h4>评估结论</h4>
           <p class="evidence">{{ result.evidence }}</p>
+          <MaterialEvidence v-if="result.sources?.length" :sources="result.sources" />
         </section>
         <section v-if="result.remediation_route?.length" class="result-section remediation">
           <div class="section-heading">
@@ -92,6 +96,7 @@
                 :index="index"
                 :max-score="score.max_score ?? (result.max_score === 100 ? 100 : 4)"
                 :initially-open="index === 0"
+                :sources="result.sources"
               />
             </li>
           </ol>
@@ -120,6 +125,7 @@ import type { AssessmentResult } from '../../types/learningAgent'
 import BaseButton from '../ui/BaseButton.vue'
 import AssessmentScoreCard from './AssessmentScoreCard.vue'
 import AssessmentScoringGuide from './AssessmentScoringGuide.vue'
+import MaterialEvidence from './MaterialEvidence.vue'
 
 const props = withDefaults(
   defineProps<{ result: AssessmentResult; busy?: boolean; readOnly?: boolean }>(),

@@ -1,12 +1,13 @@
 """Revalidate saved file sources against live ownership and immutable chunks."""
 
 from models.attachment import Attachment, AttachmentChunk, MessageAttachment
-from models import ChatMessage
+from models import ChatMessage, Topic, TopicMaterial
 from services.source_snapshots import normalize_sources
+from services.knowledge.materials import available as material_available
 
 
 def hydrate_message_sources(db, *, user_id: int, messages: list) -> dict[int, list[dict]]:
-    """Two bounded bulk reads for any history page, never trust model locations.
+    """Bounded bulk reads for a history page, never trust model locations.
 
     Unavailable/deleted sources preserve only display identity. Their saved
     excerpt is deliberately removed so deleting a document revokes readback.
@@ -37,6 +38,28 @@ def hydrate_message_sources(db, *, user_id: int, messages: list) -> dict[int, li
         .all()
     )
     available = {a.id: (a, link, message) for a, link, message in records}
+    topic_ids = {
+        message.topic_id
+        for message in by_message.values()
+        if message.mode == "socratic" and message.topic_id is not None
+    }
+    topic_documents = (
+        {
+            (binding.topic_id, attachment.id): (attachment, binding)
+            for attachment, binding in db.query(Attachment, TopicMaterial)
+            .join(TopicMaterial, TopicMaterial.attachment_id == Attachment.id)
+            .join(Topic, Topic.id == TopicMaterial.topic_id)
+            .filter(
+                Attachment.id.in_(requested),
+                Attachment.user_id == user_id,
+                Topic.user_id == user_id,
+                TopicMaterial.topic_id.in_(topic_ids),
+            )
+            .all()
+        }
+        if topic_ids
+        else {}
+    )
     chunk_ids = {
         s.get("chunk_id") for sources in output.values() for s in sources if s.get("chunk_id")
     }
@@ -61,17 +84,33 @@ def hydrate_message_sources(db, *, user_id: int, messages: list) -> dict[int, li
         for index, source in enumerate(sources):
             if source.get("kind") not in {"document", "image"}:
                 continue
-            found = available.get(source["attachment_id"])
+            topic_id = source.get("topic_id")
+            found = (
+                topic_documents.get((topic_id, source["attachment_id"]))
+                if topic_id is not None
+                else available.get(source["attachment_id"])
+            )
             valid = bool(message and found)
             if valid:
-                attachment, link, origin = found
-                valid = (
-                    attachment.session_id == message.session_id
-                    and attachment.topic_id == message.topic_id
-                    and attachment.mode == message.mode
-                    and origin.session_id == message.session_id
-                    and link.revision == source["revision"] == attachment.revision
-                )
+                if topic_id is not None:
+                    attachment, binding = found
+                    valid = (
+                        message.topic_id == topic_id
+                        and message.mode == "socratic"
+                        and source["kind"] == "document"
+                        and not source.get("summary")
+                        and binding.revision == source["revision"]
+                        and material_available(attachment, source["revision"])
+                    )
+                else:
+                    attachment, link, origin = found
+                    valid = (
+                        attachment.session_id == message.session_id
+                        and attachment.topic_id == message.topic_id
+                        and attachment.mode == message.mode
+                        and origin.session_id == message.session_id
+                        and link.revision == source["revision"] == attachment.revision
+                    )
                 if source["kind"] == "document":
                     chunk = chunks.get((attachment.id, source["revision"], source["chunk_id"]))
                     valid = (
@@ -96,6 +135,8 @@ def hydrate_message_sources(db, *, user_id: int, messages: list) -> dict[int, li
                             ]
                         )
                     valid = valid and attachment.kind == "document"
+                    if valid and topic_id is not None:
+                        source["excerpt"] = chunk.text[:8000]
                 else:
                     valid = valid and attachment.kind == "image" and source.get("chunk_id") is None
             if not valid:

@@ -7,7 +7,10 @@ from core.errors import ApiError
 from models import AgentRun, LearnerMemory, Node, StudyPlan, StudyPlanItem, Topic
 from models.enums import AgentRunStatus, MemorySource
 from .state_machine import transition
-from .run_store import _load_owned
+from .run_store import _load_owned, _snapshot, guard_execution
+from .grounding import validate_evidence
+from schemas.knowledge import MaterialRef
+from services.knowledge.materials import replace_topic_materials
 
 
 def _serialize_node_snapshot(node: Node) -> dict[str, Any]:
@@ -21,6 +24,7 @@ def _serialize_node_snapshot(node: Node) -> dict[str, Any]:
         "y": node.y,
         "parent_keys": [key.strip() for key in (node.parent_keys or "").split(",") if key.strip()],
         "estimated_minutes": node.estimated_minutes,
+        **({"material_sources": deepcopy(node.material_sources)} if node.material_sources else {}),
     }
 
 
@@ -32,6 +36,7 @@ def confirm_run(
     request_id: str,
 ) -> AgentRun:
     run = _load_owned(db, user_id, run_id, for_update=True)
+    guard_execution(db, user_id, run_id)
     if run.status == AgentRunStatus.COMPLETED.value:
         return run
     if run.status != AgentRunStatus.AWAITING_CONFIRMATION.value:
@@ -84,6 +89,7 @@ def confirm_run(
             )
         nodes_by_key = {node.node_key: node for node in live_nodes}
     else:
+        validate_evidence(db, _snapshot(run), lock=True)
         topic = Topic(
             user_id=user_id,
             title=preview["topic"],
@@ -103,10 +109,20 @@ def confirm_run(
                 y=draft["y"],
                 parent_keys=",".join(draft.get("parent_keys", [])),
                 estimated_minutes=draft["estimated_minutes"],
+                material_sources=draft.get("material_sources"),
             )
             db.add(node)
             nodes_by_key[node.node_key] = node
         db.flush()
+    validate_evidence(db, _snapshot(run), lock=True)
+    if state["params"].get("materials"):
+        replace_topic_materials(
+            db,
+            user_id=user_id,
+            topic_id=topic.id,
+            materials=[MaterialRef.model_validate(ref) for ref in state["params"]["materials"]],
+            commit=False,
+        )
     plan = StudyPlan(
         user_id=user_id,
         topic_id=topic.id,

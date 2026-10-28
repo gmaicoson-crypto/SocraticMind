@@ -57,11 +57,19 @@
           v-if="chatMode === 'socratic' && draftTopic && !activeAgentRun"
           :topic="draftTopic"
           :session-id="currentSessionId"
+          :topic-id="agentStore.topicPlanDraft?.topicId"
           :busy="agentStore.submitting"
           :error="agentStore.error?.message"
           :mode="agentStore.topicPlanDraft ? 'existing-topic' : 'new-topic'"
           @submit="startLearningPlan"
           @cancel="cancelOnboardingDraft"
+        />
+        <AgentProgress
+          v-else-if="chatMode === 'socratic' && agentStore.run?.processing"
+          :stage="agentStore.run.stage"
+          :busy="agentStore.submitting"
+          :error="agentStore.error?.message"
+          @cancel="cancelAgentFlow"
         />
         <AgentStepMessage
           v-else-if="
@@ -178,7 +186,7 @@
       :chips-loading="chipsLoading"
       :quoted-text="quotedText"
       :is-thinking="isThinking"
-      :is-generating="isGenerating || agentStore.submitting"
+      :is-generating="isGenerating || agentStore.submitting || Boolean(agentStore.run?.processing)"
       :send-disabled="
         agentStore.run?.status === 'awaiting_confirmation' ||
         (assessmentActive && !assessmentCanAnswer)
@@ -316,6 +324,7 @@ import AiAvatarPickerModal from './dialogue/AiAvatarPickerModal.vue'
 import DialogueInputBar from './dialogue/DialogueInputBar.vue'
 import OnboardingForm from './agent/OnboardingForm.vue'
 import AgentStepMessage from './agent/AgentStepMessage.vue'
+import AgentProgress from './agent/AgentProgress.vue'
 import PlanPreview from './agent/PlanPreview.vue'
 import AssessmentResultModal from './agent/AssessmentResultModal.vue'
 import AssessmentHistoryModal from './agent/AssessmentHistoryModal.vue'

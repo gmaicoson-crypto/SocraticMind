@@ -10,6 +10,8 @@ from core.migrations import assert_database_at_head
 from services.chat_summaries import ChatSummaryWorker
 from services.chat_titles import ChatTitleWorker
 from services.attachments.worker import AttachmentWorker
+from services.knowledge.worker import KnowledgeIndexWorker
+from services.agent.worker import AgentWorker
 from routers import (
     agent,
     auth,
@@ -22,6 +24,7 @@ from routers import (
     progress,
     llm,
     attachments,
+    knowledge,
 )
 import models  # noqa: F401 - ensure ORM relationships can resolve registered models
 
@@ -38,12 +41,20 @@ async def lifespan(_app: FastAPI):
     titles.start()
     attachment_worker = AttachmentWorker()
     attachment_worker.start()
+    knowledge_worker = KnowledgeIndexWorker()
+    knowledge_worker.start()
+    agent_worker = AgentWorker()
+    agent_worker.start()
     try:
         yield
     finally:
-        titles.stop()
-        attachment_worker.stop()
-        summaries.stop()
+        try:
+            agent_worker.stop()
+        finally:
+            knowledge_worker.stop()
+            titles.stop()
+            attachment_worker.stop()
+            summaries.stop()
 
 
 app = FastAPI(
@@ -79,6 +90,7 @@ app.include_router(plans.router)
 app.include_router(memories.router)
 app.include_router(llm.router)
 app.include_router(attachments.router)
+app.include_router(knowledge.router)
 
 
 @app.get("/")

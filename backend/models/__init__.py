@@ -7,6 +7,8 @@ from .attachment import (
 )
 from .user import User
 from .topic import Topic
+from .topic_material import TopicMaterial
+from .knowledge_index import KnowledgeEmbedding, KnowledgeIndexJob
 from .node import Node
 from .progress import ChatMessage, LearningRecord
 from .chat_session import ChatSession
@@ -17,6 +19,9 @@ from .web_search_quota import WebSearchQuota
 from .progress_archive import ArchivedChatActivity, ArchivedMastery
 from .email_code import EmailCode
 from .agent_run import AgentRun
+from .agent_job import AgentJob
+from .agent_step_attempt import AgentStepAttempt
+from .agent_checkpoint import AgentCheckpoint, AgentCheckpointWrite
 from .learner_memory import LearnerMemory
 from .study_plan import StudyPlan, StudyPlanItem
 from .assessment import AssessmentAttempt
@@ -31,6 +36,10 @@ __all__ = [
     "AttachmentCleanup",
     "AttachmentWorkerSlot",
     "AgentRun",
+    "AgentJob",
+    "AgentStepAttempt",
+    "AgentCheckpoint",
+    "AgentCheckpointWrite",
     "AssessmentAttempt",
     "ReviewTask",
     "ReviewAttempt",
@@ -50,6 +59,9 @@ __all__ = [
     "StudyPlan",
     "StudyPlanItem",
     "Topic",
+    "TopicMaterial",
+    "KnowledgeEmbedding",
+    "KnowledgeIndexJob",
     "User",
     "UserLLMProfile",
 ]

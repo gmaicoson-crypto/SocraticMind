@@ -149,6 +149,18 @@ class Settings(BaseSettings):
     attachment_storage_dir: str | None = None
     attachment_libreoffice_path: str | None = None
 
+    # Opt-in semantic index; an explicit server profile may supply its connection.
+    knowledge_embedding_enabled: bool = False
+    knowledge_embedding_llm_profile: str = ""
+    knowledge_embedding_base_url: str = ""
+    knowledge_embedding_api_key: str = Field(default="", repr=False)
+    knowledge_embedding_model: str = ""
+    knowledge_embedding_dimensions: int | None = Field(default=None, ge=1, le=4096)
+    knowledge_embedding_timeout_seconds: float = Field(default=8, gt=0, le=15)
+    knowledge_embedding_document_prefix: str = ""
+    knowledge_embedding_query_prefix: str = ""
+    knowledge_embedding_min_similarity: float = Field(default=0.5, ge=0, le=1)
+
     # 允许的前端源，逗号分隔；生产环境需改为实际域名，禁止保留 localhost
     cors_origins: str = "http://localhost:5173"
 

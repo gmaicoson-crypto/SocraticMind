@@ -1,8 +1,8 @@
 import json
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from time import perf_counter
-from typing import Generic, TypeVar
+from typing import Callable, Generic, TypeVar
 
 from pydantic import BaseModel, ValidationError
 
@@ -10,6 +10,7 @@ from ai.util import extract_json_from_markdown
 from core.ai_client import get_ai_client, resolve_llm_profile
 from core.config import settings
 from core.context_budget import completion_options, ensure_fits
+from .call_metrics import CallMetrics
 
 
 log = logging.getLogger(__name__)
@@ -21,6 +22,7 @@ class RunContext:
     run_id: str
     call_type: str
     model: str | None = None
+    observer: Callable[[dict], None] | None = field(default=None, repr=False, compare=False)
 
 
 @dataclass(frozen=True)
@@ -37,6 +39,10 @@ class StructuredAIError(Exception):
         super().__init__(message)
         self.code = code
         self.retryable = retryable
+        self.token_usage = 0
+        self.usage_known = False
+        self.attempts = 0
+        self.latency_ms = 0
 
 
 HIGH_RISK_TERMS = {
@@ -62,16 +68,6 @@ def high_risk_notice(domain: str, topic: str) -> str | None:
     if any(term in combined for term in HIGH_RISK_TERMS):
         return "本内容仅用于学习，不替代专业判断、执业认证或现场安全指导。"
     return None
-
-
-def _token_usage(response) -> int:
-    usage = getattr(response, "usage", None)
-    return int(getattr(usage, "total_tokens", 0) or 0)
-
-
-def _usage_known(response) -> bool:
-    tokens = getattr(getattr(response, "usage", None), "total_tokens", None)
-    return isinstance(tokens, int) and not isinstance(tokens, bool) and tokens >= 0
 
 
 def _response_content(response) -> str:
@@ -118,9 +114,12 @@ def _call(
         options[parameter] = min(
             output_tokens, resolve_llm_profile(profile_id).generation_budget_tokens
         )
-    response = client.chat.completions.create(
+    return client.chat.completions.create(
         model=model, messages=messages, **options, timeout=timeout
     )
+
+
+def _check_finish(response):
     choices = getattr(response, "choices", None) or []
     finish_reason = getattr(choices[0], "finish_reason", None) if choices else None
     if finish_reason == "length":
@@ -129,7 +128,6 @@ def _call(
         )
     if finish_reason == "content_filter":
         raise StructuredAIError("AI_CONTENT_FILTERED", "模型服务中止了本次生成", retryable=False)
-    return response
 
 
 def generate_structured(
@@ -152,8 +150,7 @@ def generate_structured(
     profile = resolve_llm_profile(run_context.model)
     ai_client = client or get_ai_client(profile.id)
     started = perf_counter()
-    total_tokens = 0
-    usage_known = True
+    metrics = CallMetrics(run_context.observer)
     base_messages = [
         {
             "role": "system",
@@ -168,9 +165,11 @@ def generate_structured(
     budget = settings.structured_ai_timeout_seconds if timeout is None else timeout
     for attempt in range(max_repairs + 1):
         remaining = budget - (perf_counter() - started)
+        if remaining <= 0:
+            raise metrics.failure(StructuredAIError("AI_TIMEOUT", "模型请求超时", retryable=True))
+        response = None
+        metrics.start()
         try:
-            if remaining <= 0:
-                raise TimeoutError()
             response = _call(
                 ai_client,
                 model=profile.model,
@@ -180,8 +179,10 @@ def generate_structured(
                 timeout=remaining,
                 output_tokens=output_tokens,
             )
+            _check_finish(response)
         except Exception as error:
             mapped = _map_upstream_error(error)
+            metrics.finish(response=response, code=mapped.code)
             log.warning(
                 "structured_ai_failed run_id=%s call_type=%s model=%s code=%s",
                 run_context.run_id,
@@ -189,15 +190,15 @@ def generate_structured(
                 profile.model,
                 mapped.code,
             )
-            raise mapped from error
+            raise metrics.failure(mapped) from error
 
-        total_tokens += _token_usage(response)
-        usage_known = usage_known and _usage_known(response)
         content = _response_content(response)
         try:
             value = _parse(schema, content)
+            metrics.finish(response=response)
             break
         except (json.JSONDecodeError, ValidationError, TypeError, ValueError) as error:
+            metrics.finish(response=response, code="STRUCTURED_OUTPUT_INVALID")
             if attempt == max_repairs:
                 log.warning(
                     "structured_ai_failed run_id=%s call_type=%s model=%s code=%s",
@@ -206,8 +207,10 @@ def generate_structured(
                     profile.model,
                     "STRUCTURED_OUTPUT_INVALID",
                 )
-                raise StructuredAIError(
-                    "STRUCTURED_OUTPUT_INVALID", "模型结构化输出校验失败", retryable=True
+                raise metrics.failure(
+                    StructuredAIError(
+                        "STRUCTURED_OUTPUT_INVALID", "模型结构化输出校验失败", retryable=True
+                    )
                 ) from error
             current_messages = [
                 *base_messages,
@@ -222,19 +225,20 @@ def generate_structured(
             ]
 
     latency_ms = round((perf_counter() - started) * 1000)
+    usage = metrics.snapshot()
     log.info(
         "structured_ai_complete run_id=%s call_type=%s model=%s tokens=%s latency_ms=%d attempts=%d",
         run_context.run_id,
         run_context.call_type,
         profile.model,
-        total_tokens if usage_known else None,
+        usage["reported_tokens"] if usage["usage_known"] else None,
         latency_ms,
         attempt + 1,
     )
     return StructuredResult(
         value=value,
-        token_usage=total_tokens,
+        token_usage=usage["reported_tokens"],
         latency_ms=latency_ms,
         attempts=attempt + 1,
-        usage_known=usage_known,
+        usage_known=usage["usage_known"],
     )

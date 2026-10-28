@@ -67,7 +67,13 @@ def is_full_summary(question: str) -> bool:
 
 class AttachmentRetriever:
     def select(
-        self, chunks: list[Chunk], question: str, *, model_id: str, token_budget: int
+        self,
+        chunks: list[Chunk],
+        question: str,
+        *,
+        model_id: str,
+        token_budget: int,
+        require_relevance: bool = False,
     ) -> list[Chunk]:
         if len(chunks) > MAX_CHUNKS:
             raise ApiError(
@@ -90,26 +96,23 @@ class AttachmentRetriever:
             ]
             if exact:
                 chunks = exact
+            elif require_relevance:
+                return []
+        if (
+            require_relevance
+            and not location
+            and not any(score > 0 for score, _ in rank_chunks(chunks, question))
+        ):
+            return []
         all_cost = sum(count_text(c.text, model_id) + 180 for c in chunks)
         if all_cost <= token_budget and len(chunks) <= MAX_SELECTED_CHUNKS:
             return chunks
-        query = terms(question)
-        document_frequency = Counter(term for c in chunks for term in terms(c.text))
-        ranked = []
-        for c in chunks:
-            counts = terms(c.text)
-            score = sum(
-                (1 + math.log(counts[t])) * math.log(1 + len(chunks) / (1 + document_frequency[t]))
-                for t in query
-                if counts[t]
-            )
-            heading = str(c.title_path or "")
-            score += sum(3 for t in query if t in heading)
-            ranked.append((score, c))
-        ranked.sort(key=lambda item: (-item[0], item[1].position))
+        ranked = rank_chunks(chunks, question)
         selected, used = [], 0
         ordered = {(c.attachment_id, c.position): c for c in chunks}
-        for _, match in ranked:
+        for score, match in ranked:
+            if require_relevance and not location and score <= 0:
+                break
             for c in (
                 match,
                 ordered.get((match.attachment_id, match.position - 1)),
@@ -133,3 +136,21 @@ class AttachmentRetriever:
                 retryable=False,
             )
         return sorted(selected, key=lambda c: (c.attachment_id, c.position))
+
+
+def rank_chunks(chunks: list[Chunk], question: str) -> list[tuple[float, Chunk]]:
+    query = terms(question)
+    document_frequency = Counter(term for c in chunks for term in terms(c.text))
+    ranked = []
+    for c in chunks:
+        counts = terms(c.text)
+        score = sum(
+            (1 + math.log(counts[t])) * math.log(1 + len(chunks) / (1 + document_frequency[t]))
+            for t in query
+            if counts[t]
+        )
+        heading = str(c.title_path or "")
+        score += sum(3 for t in query if t in heading)
+        ranked.append((score, c))
+    ranked.sort(key=lambda item: (-item[0], item[1].position))
+    return ranked

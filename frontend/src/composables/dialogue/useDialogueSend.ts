@@ -132,6 +132,7 @@ export function useDialogueSend(context: Context) {
       isThinking.value ||
       isGenerating.value ||
       agentStore.submitting ||
+      agentStore.run?.processing ||
       (chatMode.value === 'socratic' && agentStore.run?.status === 'awaiting_confirmation')
     )
       return

@@ -1,7 +1,22 @@
 import json
 import uuid
+import pytest
 
 from models import ChatMessage, LearnerMemory, Node, Topic, User
+
+
+@pytest.fixture(autouse=True)
+def offline_context_tests(monkeypatch):
+    # These tests exercise stored conversation context, not the search decider.
+    # Keep the real off-mode protocol without creating background provider calls.
+    from routers import chat
+
+    original = chat.iter_web_search
+
+    def offline_search(**kwargs):
+        yield from original(**{**kwargs, "web_mode": "off"})
+
+    monkeypatch.setattr(chat, "iter_web_search", offline_search)
 
 
 def create_chat_node(db_session, user, *, title="Chat topic", key="chat-node"):

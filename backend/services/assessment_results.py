@@ -54,6 +54,12 @@ def assessment_result_payload(result, questions, answers):
                     score["question_id"], score.get("reference_answer", "")
                 ),
                 "rubric": rubrics.get(score["question_id"], score.get("rubric", [])),
+                "source_ids": [
+                    source["id"]
+                    for question in questions or []
+                    if question["question_id"] == score["question_id"]
+                    for source in question.get("material_sources", [])
+                ],
             }
             for score in result["scores"]
         ],

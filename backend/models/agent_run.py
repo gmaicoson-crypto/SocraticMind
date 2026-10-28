@@ -1,6 +1,16 @@
 import uuid
 
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Index, Integer, JSON, String
+from sqlalchemy import (
+    Boolean,
+    Column,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    JSON,
+    String,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
@@ -26,6 +36,8 @@ class AgentRun(Base):
     error_code = Column(String(80), nullable=True)
     retryable = Column(Boolean, nullable=True)
     request_id = Column(String(100), nullable=True)
+    create_request_id = Column(String(100), nullable=True)
+    create_request_hash = Column(String(64), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
@@ -39,6 +51,7 @@ class AgentRun(Base):
     )
 
     __table_args__ = (
+        UniqueConstraint("user_id", "create_request_id", name="uq_agent_create_request"),
         Index("ix_agent_runs_user_status", "user_id", "status"),
         Index("ix_agent_runs_topic_id", "topic_id"),
     )

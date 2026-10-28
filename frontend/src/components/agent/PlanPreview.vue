@@ -31,6 +31,11 @@
     <div v-if="preview.will_miss_target" class="notice delay">
       预计比目标日期晚 {{ preview.delay_days }} 天，将保持每日时间上限。
     </div>
+    <p v-for="warning in preview.evidence_warnings" :key="warning" class="notice">{{ warning }}</p>
+    <p v-if="preview.evidence_unavailable" class="notice risk">
+      教材来源已失效，请重新选择资料并生成计划。
+    </p>
+    <MaterialEvidence v-if="preview.sources?.length" :sources="preview.sources" />
 
     <section v-if="preview.diagnostic" class="diagnostic-card">
       <div class="diagnostic-heading">
@@ -50,6 +55,10 @@
           <li v-for="node in preview.nodes" :key="node.key">
             <span>{{ node.label }}</span
             ><small>{{ node.estimated_minutes }} 分钟</small>
+            <MaterialEvidence
+              :sources="nodeSources(node.source_ids)"
+              :cited-ids="node.source_ids"
+            />
           </li>
         </ol>
       </section>
@@ -67,7 +76,12 @@
     <div class="tool-actions">
       <button type="button" :disabled="busy" @click="regenerate">重新生成</button>
       <button type="button" :disabled="busy" @click="emit('cancel')">取消</button>
-      <button class="primary" type="button" :disabled="busy" @click="emit('confirm')">
+      <button
+        class="primary"
+        type="button"
+        :disabled="busy || preview.evidence_unavailable"
+        @click="emit('confirm')"
+      >
         {{ busy ? '处理中' : '确认创建' }}
       </button>
     </div>
@@ -77,6 +91,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import TimeDisplay from '../ui/TimeDisplay.vue'
+import MaterialEvidence from './MaterialEvidence.vue'
 import type { AgentRunUpdate, PlanPreview as PlanPreviewData } from '../../types/learningAgent'
 
 const props = withDefaults(defineProps<{ preview: PlanPreviewData; busy?: boolean }>(), {
@@ -97,6 +112,9 @@ const outcomeLabels: Record<PlanPreviewData['outcome_type'], string> = {
   mixed: '综合目标',
 }
 const outcomeLabel = computed(() => outcomeLabels[props.preview.outcome_type])
+function nodeSources(ids?: string[]) {
+  return (props.preview.sources ?? []).filter((source) => ids?.includes(source.id))
+}
 const schedule = computed(() => {
   const groups = new Map<string, { date: string; minutes: number; count: number }>()
   props.preview.plan_items.forEach((item) => {
@@ -113,6 +131,7 @@ const schedule = computed(() => {
 })
 function regenerate() {
   emit('update', {
+    regenerate: true,
     goal: props.preview.goal,
     daily_minutes: props.preview.daily_minutes,
     target_date: props.preview.target_date,

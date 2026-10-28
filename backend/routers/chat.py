@@ -117,7 +117,13 @@ def chat_request_state(
 
 def history_responses(db, messages):
     from services.attachments.evidence import hydrate_message_sources
+    from services.knowledge.history import (
+        plan_previews_for_messages,
+        assessment_results_for_messages,
+    )
 
+    previews = plan_previews_for_messages(db, messages)
+    assessments = assessment_results_for_messages(db, messages)
     attachments = summaries_for_messages(db, [message.id for message in messages])
     sources = (
         hydrate_message_sources(db, user_id=messages[0].user_id, messages=messages)
@@ -129,6 +135,10 @@ def history_responses(db, messages):
         result = deepcopy(message.metadata_json)
         if result and result.get("web") is not None and message.id in sources:
             result["web"]["sources"] = sources[message.id]
+        if result and message.id in previews:
+            result["preview"] = previews[message.id]
+        if result and message.id in assessments:
+            result["result"] = assessments[message.id]
         return result
 
     return [

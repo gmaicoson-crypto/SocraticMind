@@ -100,4 +100,37 @@ describe('ReviewPractice', () => {
     expect(wrapper.text()).toContain('复习通过')
     expect(wrapper.find('form').exists()).toBe(false)
   })
+
+  it('shows a frozen textbook location and blocks review after revocation', async () => {
+    const source = {
+      id: 's6',
+      kind: 'document' as const,
+      title: '矩阵教材',
+      attachment_id: 'doc-1',
+      revision: 1,
+      chunk_id: 'c1',
+      locator: { page: 7 },
+      excerpt: '矩阵是线性变换的表示',
+      retrieved_at: '2026-10-28T00:00:00Z',
+    }
+    vi.mocked(getReview).mockResolvedValueOnce({ ...detail, sources: [source] })
+    const wrapper = mount(ReviewPractice, { props: { reviewId: 7, timezone: 'UTC' } })
+    await flushPromises()
+    expect(wrapper.get('.file-source').text()).toContain('矩阵教材')
+    expect(wrapper.get('.file-source').text()).toContain('7')
+    wrapper.unmount()
+    vi.mocked(getReview).mockResolvedValueOnce({
+      ...detail,
+      evidence_unavailable: true,
+      sources: [{ ...source, excerpt: '', deleted: true }],
+    })
+    const revoked = mount(ReviewPractice, { props: { reviewId: 7, timezone: 'UTC' } })
+    await flushPromises()
+    expect(revoked.text()).toContain('原教材已失效')
+    expect(revoked.text()).not.toContain(source.excerpt)
+    expect(revoked.get('.file-source').attributes('disabled')).toBeDefined()
+    await revoked.get('form').trigger('submit')
+    expect(answerReview).not.toHaveBeenCalled()
+    revoked.unmount()
+  })
 })

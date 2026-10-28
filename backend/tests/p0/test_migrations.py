@@ -7,6 +7,7 @@ import sys
 import pytest
 from alembic import command
 from alembic.config import Config
+from alembic.script import ScriptDirectory
 from sqlalchemy import create_engine, inspect, text
 
 from core.migrations import assert_database_at_head
@@ -334,7 +335,7 @@ def test_deployed_material_revisions_preserve_existing_data_and_remain_at_head(t
     with engine.connect() as connection:
         assert (
             connection.scalar(text("SELECT version_num FROM alembic_version"))
-            == "0016_review_tasks"
+            == ScriptDirectory.from_config(config).get_current_head()
         )
         assert connection.execute(text("SELECT id, content FROM chat_messages")).all() == [
             (1, "saved answer")
@@ -368,7 +369,7 @@ with TestClient(app) as client:
     assert '/api/chat/requests/{request_id}' in paths
 
 assert not any(
-    thread.name in {'chat-summaries', 'chat-titles'}
+    thread.name in {'chat-summaries', 'chat-titles', 'knowledge-index', 'agent-jobs'}
     or thread.name.startswith('attachment-worker-')
     for thread in threading.enumerate()
 )

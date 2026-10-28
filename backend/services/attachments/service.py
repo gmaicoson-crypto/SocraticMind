@@ -278,6 +278,8 @@ def bind_to_message(db, *, message_id, session_id, attachments):
 
 
 def mark_deleted(db, rows):
+    from models.knowledge_index import KnowledgeEmbedding, KnowledgeIndexJob
+
     for row in rows:
         if row.status == "deleted":
             continue
@@ -291,6 +293,8 @@ def mark_deleted(db, rows):
         db.query(AttachmentChunk).filter(AttachmentChunk.attachment_id == row.id).delete(
             synchronize_session=False
         )
+        for model in (KnowledgeEmbedding, KnowledgeIndexJob):
+            db.query(model).filter(model.attachment_id == row.id).delete(synchronize_session=False)
 
 
 def delete_for_messages(db, message_ids):

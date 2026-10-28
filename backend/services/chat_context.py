@@ -1,4 +1,5 @@
 import json
+from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any, Iterator
 from itertools import islice
@@ -498,14 +499,18 @@ def sync_agent_run_message(
         )
 
     step = payload.get("step")
-    preview = payload.get("preview")
-    result = payload.get("result")
+    preview = deepcopy(payload.get("preview"))
+    if preview and preview.get("sources"):
+        preview["sources"] = [{**source, "excerpt": ""} for source in preview["sources"]]
+    result = deepcopy(payload.get("result"))
+    if result and result.get("sources"):
+        result["sources"] = [{**source, "excerpt": ""} for source in result["sources"]]
     error = payload.get("error")
     if step:
         message_type = "agent_step"
         content = step["prompt"]
         detail = {"step": step}
-    elif preview and payload["status"] == "awaiting_confirmation":
+    elif preview and payload["status"] == "awaiting_confirmation" and not payload.get("processing"):
         message_type = "plan_preview"
         content = "学习计划预览已生成"
         detail = {"preview": preview}

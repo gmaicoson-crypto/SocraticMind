@@ -1,7 +1,7 @@
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -37,6 +37,7 @@ from services.agent.orchestrator import (
     update_run_parameters,
 )
 from services.agent.structured_ai import generate_structured
+from services.agent.presentation import serialize_run
 
 
 router = APIRouter(prefix="/api/agent", tags=["Learning Agent"])
@@ -45,6 +46,19 @@ log = logging.getLogger(__name__)
 
 def get_agent_generator():
     return generate_structured
+
+
+@router.get("/runs/{run_id}/attempts")
+def read_run_attempts(
+    run_id: str,
+    after_id: int = Query(default=0, ge=0),
+    limit: int = Query(default=50, ge=1, le=100),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    from services.agent.observability import list_attempts
+
+    return list_attempts(db, user_id=current_user.id, run_id=run_id, after_id=after_id, limit=limit)
 
 
 def selected_model(model_id: str | None, user_id: int | None = None) -> str:
@@ -60,7 +74,7 @@ def serialize_and_sync(
     *,
     answer: dict[str, Any] | None = None,
 ) -> AgentRunResponse:
-    response = serialize_run(run)
+    response = serialize_run(run, db=db)
     try:
         sync_agent_run_message(
             db,
@@ -100,43 +114,6 @@ def create_assessment(
     )
 
 
-def serialize_run(run: AgentRun) -> AgentRunResponse:
-    from services.assessment_results import assessment_result_payload
-
-    state = run.state_json or {}
-    step = None
-    if run.status in {"diagnosing", "assessing"} and state.get("step_id"):
-        questions = state.get("questions", [])
-        index = state.get("current_index", 0)
-        if index < len(questions):
-            question = questions[index]
-            step = {
-                "step_id": state["step_id"],
-                "prompt": question["prompt"],
-                "input_type": question.get("input_type", "text"),
-                "choices": question.get("choices", []),
-                "current": index + 1,
-                "total": len(questions),
-            }
-    error = None
-    if run.error_code:
-        error = {"code": run.error_code, "retryable": bool(run.retryable)}
-    return AgentRunResponse(
-        run_id=run.id,
-        type=run.run_type,
-        status=run.status,
-        version=run.version,
-        step=step,
-        preview=state.get("preview"),
-        result=(
-            assessment_result_payload(run.result_json, state.get("questions"), state.get("answers"))
-            if run.run_type == "assessment"
-            else run.result_json
-        ),
-        error=error,
-    )
-
-
 @router.post(
     "/onboarding",
     response_model=AgentRunResponse,
@@ -156,6 +133,7 @@ def create_onboarding_run(
             user_id=current_user.id,
             request=request,
             generator=generator,
+            deferred=True,
             model_id=selected_model(request.model, current_user.id),
         ),
     )
@@ -182,9 +160,30 @@ def create_topic_plan_run(
             topic_id=topic_id,
             request=request,
             generator=generator,
+            deferred=True,
             model_id=selected_model(request.model, current_user.id),
         ),
     )
+
+
+@router.get("/runs/active", response_model=list[AgentRunResponse])
+def active_runs(
+    session_id: str = Query(min_length=1, max_length=100),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    runs = (
+        db.query(AgentRun)
+        .filter(
+            AgentRun.user_id == current_user.id,
+            AgentRun.session_id == session_id,
+            AgentRun.status.notin_(["completed", "cancelled"]),
+        )
+        .order_by(AgentRun.updated_at.desc(), AgentRun.id.desc())
+        .limit(20)
+        .all()
+    )
+    return [serialize_run(run, db=db) for run in runs]
 
 
 @router.get("/runs/{run_id}", response_model=AgentRunResponse)
@@ -193,7 +192,7 @@ def read_run(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    return serialize_run(get_run(db, user_id=current_user.id, run_id=run_id))
+    return serialize_run(get_run(db, user_id=current_user.id, run_id=run_id), db=db)
 
 
 @router.post("/runs/{run_id}/answers", response_model=AgentRunResponse)
@@ -215,6 +214,7 @@ def answer_run(
         version=request.version,
         answer=request.answer,
         generator=generator,
+        **({"deferred": True} if run.run_type != "assessment" else {}),
     )
     return serialize_and_sync(
         db,
@@ -244,6 +244,7 @@ def patch_run(
             run_id=run_id,
             updates=request.model_dump(mode="json", exclude_unset=True),
             generator=generator,
+            deferred=True,
         ),
     )
 
@@ -262,6 +263,8 @@ def confirm_agent_run(
             user_id=current_user.id,
             run_id=run_id,
             request_id=request.request_id,
+            version=request.version,
+            deferred=True,
         ),
     )
 
@@ -295,5 +298,6 @@ def retry_agent_run(
             user_id=current_user.id,
             run_id=run_id,
             generator=generator,
+            **({"deferred": True} if run.run_type != "assessment" else {}),
         ),
     )

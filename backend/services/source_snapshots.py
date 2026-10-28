@@ -1,6 +1,6 @@
 """Shared source-snapshot validation without context or attachment-service dependencies."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 import re
 from urllib.parse import urlsplit
 from services.web_search_sources import canonical_source_url
@@ -94,6 +94,10 @@ def normalize_sources(sources: object, *, require_excerpt: bool = False) -> list
                 chunk_id=chunk_id,
                 locator=locator,
             )
+            if "topic_id" in source:
+                if type(source["topic_id"]) is not int or source["topic_id"] < 1:
+                    continue
+                common["topic_id"] = source["topic_id"]
             if source.get("deleted"):
                 common.update(deleted=True, excerpt="")
             if source.get("summary") is True and isinstance(source.get("covered_chunk_ids"), list):
@@ -110,3 +114,26 @@ def normalize_sources(sources: object, *, require_excerpt: bool = False) -> list
         seen.add(source_id)
         selected.append(common)
     return selected
+
+
+def file_source(attachment, chunk, index, *, excerpt=None, covered=None):
+    source = {
+        "kind": attachment.kind,
+        "id": f"s{index + 6}",
+        "title": attachment.name,
+        "attachment_id": attachment.id,
+        "revision": attachment.revision,
+        "chunk_id": chunk.chunk_id if chunk else None,
+        "locator": chunk.locator if chunk else {},
+        "block_type": chunk.block_type if chunk else "image",
+        "title_path": chunk.title_path if chunk else [],
+        "excerpt": excerpt
+        if excerpt is not None
+        else (chunk.text if chunk else "本轮已提供的图片"),
+        "retrieved_at": datetime.now(timezone.utc).isoformat(),
+    }
+    if covered:
+        source["covered_chunk_ids"] = [c.chunk_id for c in covered]
+        source["summary"] = True
+        source["coverage"] = [c.locator for c in covered]
+    return source

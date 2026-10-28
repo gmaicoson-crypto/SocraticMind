@@ -20,6 +20,21 @@ from services.plans import (
 router = APIRouter(tags=["学习计划"])
 
 
+@router.get("/api/plans/reviews/{review_id}/attempts")
+def read_review_attempts(
+    review_id: int,
+    after_id: int = Query(default=0, ge=0),
+    limit: int = Query(default=50, ge=1, le=100),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    from services.agent.observability import list_attempts
+
+    return list_attempts(
+        db, user_id=current_user.id, review_id=review_id, after_id=after_id, limit=limit
+    )
+
+
 @router.get("/api/plans/reviews/{review_id}")
 def read_review(
     review_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)

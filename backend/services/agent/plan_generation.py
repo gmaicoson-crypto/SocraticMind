@@ -5,17 +5,23 @@ from copy import deepcopy
 from typing import Any
 from sqlalchemy.orm import Session
 from models import AgentRun
+from core.errors import ApiError
 from models.enums import AgentRunStatus
 from schemas.structured_ai import DiagnosticQuestions, DiagnosticScore, PersonalizedGraphDraft
 from services.graph_validation import GraphValidationError, prepare_graph
-from services.planning import build_schedule, today_in_timezone
-from .structured_ai import StructuredAIError, high_risk_notice
+from .structured_ai import StructuredAIError
+from .grounding import prepare_evidence, grounded_messages, validate_evidence, ground_nodes
+from .plan_preview import build_plan_preview
 from .run_store import Generator, RunSnapshot, _load_owned, _conditional_save, _mark_failed, _invoke
 
 
 def _generate_questions(
     db: Session, snapshot: RunSnapshot, generator: Generator | None
 ) -> AgentRun:
+    try:
+        snapshot = prepare_evidence(db, snapshot)
+    except ApiError as error:
+        return _mark_failed(db, snapshot, code=error.code, retryable=bool(error.retryable))
     params = snapshot.state["params"]
     messages = [
         {
@@ -28,8 +34,16 @@ def _generate_questions(
         {"role": "user", "content": json.dumps(params, ensure_ascii=False)},
     ]
     try:
-        result = _invoke(generator, DiagnosticQuestions, messages, snapshot, "diagnostic_questions")
-    except StructuredAIError as error:
+        result = _invoke(
+            generator,
+            DiagnosticQuestions,
+            grounded_messages(db, snapshot, messages),
+            snapshot,
+            "diagnostic_questions",
+            db=db,
+        )
+        validate_evidence(db, snapshot, lock=True)
+    except (StructuredAIError, ApiError) as error:
         return _mark_failed(db, snapshot, code=error.code, retryable=error.retryable)
 
     state = deepcopy(snapshot.state)
@@ -93,158 +107,76 @@ def _graph_messages(state: dict[str, Any]) -> list[dict]:
     ]
 
 
-def _existing_topic_preview(state: dict[str, Any]) -> dict[str, Any]:
-    params = state["params"]
-    graph = deepcopy(state["node_snapshot"])
-    start_date, effective_timezone = today_in_timezone(params.get("timezone"))
-    target_date = params.get("target_date")
-    if target_date:
-        from datetime import date
-
-        target_date = date.fromisoformat(target_date)
-    plan = build_schedule(
-        graph,
-        daily_minutes=params["daily_minutes"],
-        start_date=start_date,
-        target_date=target_date,
-        timezone=effective_timezone,
-        skip_node_keys={node["key"] for node in graph if node["state"] == "mastered"},
-    )
-    return {
-        "existing_topic_id": params["existing_topic_id"],
-        "topic": params["topic"],
-        "emoji": state["topic_emoji"],
-        "goal": params["goal"],
-        "domain": params["domain"],
-        "outcome_type": params["outcome_type"],
-        "diagnostic": state.get("diagnostic_result"),
-        "nodes": graph,
-        "plan_items": [
-            {
-                "node_key": item.node_key,
-                "scheduled_date": item.scheduled_date.isoformat(),
-                "day_order": item.day_order,
-                "estimated_minutes": item.estimated_minutes,
-                "status": item.status,
-            }
-            for item in plan.items
-        ],
-        "total_minutes": plan.total_minutes,
-        "daily_minutes": params["daily_minutes"],
-        "start_date": start_date.isoformat(),
-        "estimated_end_date": plan.estimated_end_date.isoformat(),
-        "target_date": params.get("target_date"),
-        "will_miss_target": plan.will_miss_target,
-        "delay_days": plan.delay_days,
-        "effective_timezone": plan.effective_timezone,
-        "risk_notice": high_risk_notice(params["domain"], params["topic"]),
-    }
-
-
-def _generate_preview(db: Session, snapshot: RunSnapshot, generator: Generator | None) -> AgentRun:
+def _generate_score(db: Session, snapshot: RunSnapshot, generator: Generator | None) -> AgentRun:
     current = snapshot
-    state = deepcopy(current.state)
-    if state.get("answers") and not state.get("diagnostic_result"):
-        try:
-            score = _invoke(
-                generator,
-                DiagnosticScore,
-                _diagnostic_messages(state),
-                current,
-                "diagnostic_score",
-            )
-        except StructuredAIError as error:
-            return _mark_failed(db, current, code=error.code, retryable=error.retryable)
-        state["diagnostic_result"] = score.value.model_dump(mode="json")
-        state["processing_stage"] = "graph_draft"
-        current = _conditional_save(
-            db,
-            current,
-            status=AgentRunStatus.DRAFTING,
-            state=state,
-            ai_result=score,
-        )
-
-    if state["params"].get("existing_topic_id"):
-        try:
-            preview = _existing_topic_preview(state)
-        except (GraphValidationError, ValueError):
-            return _mark_failed(db, current, code="EXISTING_GRAPH_INVALID", retryable=False)
-        state["preview"] = preview
-        state["processing"] = False
-        state["processing_stage"] = None
-        saved = _conditional_save(
-            db,
-            current,
-            status=AgentRunStatus.AWAITING_CONFIRMATION,
-            state=state,
-        )
-        return _load_owned(db, saved.user_id, saved.id)
-
     try:
-        graph_result = _invoke(
+        current = prepare_evidence(db, current)
+        state = deepcopy(current.state)
+        score = _invoke(
+            generator,
+            DiagnosticScore,
+            grounded_messages(db, current, _diagnostic_messages(state)),
+            current,
+            "diagnostic_score",
+            db=db,
+        )
+        validate_evidence(db, current, lock=True)
+    except (StructuredAIError, ApiError) as error:
+        return _mark_failed(db, current, code=error.code, retryable=bool(error.retryable))
+    state["diagnostic_result"] = score.value.model_dump(mode="json")
+    state["processing_stage"] = "graph_draft"
+    saved = _conditional_save(
+        db, current, status=AgentRunStatus.DRAFTING, state=state, ai_result=score
+    )
+    return _load_owned(db, saved.user_id, saved.id)
+
+
+def _generate_graph(db: Session, snapshot: RunSnapshot, generator: Generator | None) -> AgentRun:
+    current = snapshot
+    try:
+        current = prepare_evidence(db, current)
+        state = deepcopy(current.state)
+        result = _invoke(
             generator,
             PersonalizedGraphDraft,
-            _graph_messages(state),
+            grounded_messages(db, current, _graph_messages(state)),
             current,
             "personalized_graph",
+            db=db,
         )
-        graph = prepare_graph(graph_result.value.model_dump(mode="json")["nodes"])
-    except StructuredAIError as error:
-        return _mark_failed(db, current, code=error.code, retryable=error.retryable)
+        validate_evidence(db, current, lock=True)
+        graph = ground_nodes(prepare_graph(result.value.model_dump(mode="json")["nodes"]), current)
+    except (StructuredAIError, ApiError) as error:
+        return _mark_failed(db, current, code=error.code, retryable=bool(error.retryable))
     except GraphValidationError:
         return _mark_failed(db, current, code="GRAPH_INVALID", retryable=True)
-
-    params = state["params"]
-    start_date, effective_timezone = today_in_timezone(params.get("timezone"))
-    target_date = params.get("target_date")
-    if target_date:
-        from datetime import date
-
-        target_date = date.fromisoformat(target_date)
-    plan = build_schedule(
-        graph,
-        daily_minutes=params["daily_minutes"],
-        start_date=start_date,
-        target_date=target_date,
-        timezone=effective_timezone,
-    )
-    preview = {
-        "topic": params["topic"],
-        "emoji": graph_result.value.emoji,
-        "goal": params["goal"],
-        "domain": params["domain"],
-        "outcome_type": params["outcome_type"],
-        "diagnostic": state.get("diagnostic_result"),
-        "nodes": graph,
-        "plan_items": [
-            {
-                "node_key": item.node_key,
-                "scheduled_date": item.scheduled_date.isoformat(),
-                "day_order": item.day_order,
-                "estimated_minutes": item.estimated_minutes,
-                "status": item.status,
-            }
-            for item in plan.items
-        ],
-        "total_minutes": plan.total_minutes,
-        "daily_minutes": params["daily_minutes"],
-        "start_date": start_date.isoformat(),
-        "estimated_end_date": plan.estimated_end_date.isoformat(),
-        "target_date": params.get("target_date"),
-        "will_miss_target": plan.will_miss_target,
-        "delay_days": plan.delay_days,
-        "effective_timezone": plan.effective_timezone,
-        "risk_notice": high_risk_notice(params["domain"], params["topic"]),
-    }
-    state["preview"] = preview
-    state["processing"] = False
-    state["processing_stage"] = None
+    state["graph_draft"] = {"nodes": graph, "emoji": result.value.emoji}
+    state["processing_stage"] = "schedule"
+    # Persist the successful model result before deterministic scheduling. A crash
+    # before the graph checkpoint can replay this node without paying for it again.
     saved = _conditional_save(
-        db,
-        current,
-        status=AgentRunStatus.AWAITING_CONFIRMATION,
-        state=state,
-        ai_result=graph_result,
+        db, current, status=AgentRunStatus.DRAFTING, state=state, ai_result=result
     )
+    return _load_owned(db, saved.user_id, saved.id)
+
+
+def _generate_schedule(db: Session, snapshot: RunSnapshot) -> AgentRun:
+    current = snapshot
+    try:
+        current = prepare_evidence(db, current)
+        state = deepcopy(current.state)
+        existing = bool(state["params"].get("existing_topic_id"))
+        draft = (
+            {"nodes": state["node_snapshot"], "emoji": state["topic_emoji"]}
+            if existing
+            else state["graph_draft"]
+        )
+        preview = build_plan_preview(state, draft["nodes"], draft["emoji"], existing=existing)
+        validate_evidence(db, current, lock=True)
+    except ApiError as error:
+        return _mark_failed(db, current, code=error.code, retryable=bool(error.retryable))
+    except (GraphValidationError, ValueError):
+        return _mark_failed(db, current, code="EXISTING_GRAPH_INVALID", retryable=False)
+    state.update(preview=preview, processing=False, processing_stage=None)
+    saved = _conditional_save(db, current, status=AgentRunStatus.AWAITING_CONFIRMATION, state=state)
     return _load_owned(db, saved.user_id, saved.id)

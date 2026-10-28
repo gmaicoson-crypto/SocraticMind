@@ -59,6 +59,7 @@ class GraphDraftNode(StrictModel):
     sub: str = Field(default="", max_length=500)
     parent_keys: list[str] = Field(default_factory=list, max_length=1)
     estimated_minutes: int = Field(ge=10, le=120)
+    source_ids: list[str] = Field(default_factory=list, max_length=8)
 
 
 class PersonalizedGraphDraft(StrictModel):
@@ -94,6 +95,7 @@ class WeightedRubricCriterion(RubricCriterion):
 
 
 class AssessmentQuestion(GeneratedQuestion):
+    source_ids: list[str] = Field(default_factory=list, max_length=8)
     reference_answer: str = Field(min_length=1, max_length=4000)
     rubric: list[WeightedRubricCriterion] = Field(min_length=1, max_length=6)
 

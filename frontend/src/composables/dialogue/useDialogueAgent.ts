@@ -1,4 +1,4 @@
-import { watch } from 'vue'
+import { onScopeDispose, watch } from 'vue'
 import type {
   AgentRun,
   AgentRunUpdate,
@@ -55,6 +55,7 @@ export function useDialogueAgent(context: Context) {
     blockDuringAssessment,
     masteryConfirm,
   } = context
+  onScopeDispose(() => agentStore.clearRun())
 
   watch(
     () => agentStore.run,
@@ -90,6 +91,10 @@ export function useDialogueAgent(context: Context) {
   })
 
   async function handleOnboardingCompleted(run: AgentRun) {
+    const sessionId = currentSessionId.value
+    const epoch = agentStore.getEpoch()
+    const stillCurrent = () =>
+      currentSessionId.value === sessionId && agentStore.getEpoch() === epoch
     const result = run.result as Record<string, unknown> | null
     const topicId = Number(result?.topic_id)
     if (!topicId) return
@@ -104,8 +109,10 @@ export function useDialogueAgent(context: Context) {
     }
     agentStore.closeOnboarding()
     await store.fetchTopicsOnly()
+    if (!stillCurrent()) return
     store.requestTopicOverview(topicId)
     await store.setActiveTopic(String(topicId))
+    if (!stillCurrent()) return
     await plansStore.fetchToday(run.preview?.effective_timezone)
   }
 

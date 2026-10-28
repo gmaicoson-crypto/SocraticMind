@@ -1,3 +1,4 @@
+import { watch } from 'vue'
 import { useAgentStore } from '../stores/agent'
 import type {
   AgentRun,
@@ -17,6 +18,7 @@ const terminalStatuses = new Set(['completed', 'cancelled'])
 
 export function useOnboardingFlow(options: OnboardingFlowOptions) {
   const agent = useAgentStore()
+  const completed = new Set<string>()
 
   function recovery() {
     const userId = options.userId()
@@ -26,11 +28,22 @@ export function useOnboardingFlow(options: OnboardingFlowOptions) {
   async function accept(response: AgentRun | null) {
     const index = recovery()
     if (!response || !index) return response
+    if (response.session_id && response.session_id !== options.sessionId()) return null
     if (terminalStatuses.has(response.status)) index.forgetRun(options.sessionId())
     else index.rememberRun(options.sessionId(), response.run_id)
-    if (response.status === 'completed') await options.onCompleted?.(response)
+    if (response.status === 'completed' && !completed.has(response.run_id)) {
+      completed.add(response.run_id)
+      await options.onCompleted?.(response)
+    }
     return response
   }
+
+  watch(
+    () => agent.run,
+    async (response) => {
+      if (response && response.type !== 'assessment') await accept(response)
+    },
+  )
 
   async function start(input: OnboardingInput) {
     return accept(await agent.beginOnboarding(input))

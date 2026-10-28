@@ -4,9 +4,11 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from models.enums import AgentRunStatus, AgentRunType, Familiarity, OutcomeType
+from schemas.knowledge import MaterialSelection
 
 
-class OnboardingRequest(BaseModel):
+class OnboardingRequest(MaterialSelection):
+    request_id: str | None = Field(default=None, min_length=1, max_length=100)
     topic: str = Field(min_length=1, max_length=200)
     goal: str = Field(min_length=1, max_length=300)
     domain: str = Field(min_length=1, max_length=100)
@@ -44,13 +46,17 @@ class AgentRunResponse(BaseModel):
     type: AgentRunType
     status: AgentRunStatus
     version: int
+    processing: bool = False
+    stage: str | None = None
+    session_id: str | None = None
     step: AgentStep | None = None
     preview: dict[str, Any] | None = None
     result: dict[str, Any] | None = None
     error: dict[str, Any] | None = None
 
 
-class TopicPlanRequest(BaseModel):
+class TopicPlanRequest(MaterialSelection):
+    request_id: str | None = Field(default=None, min_length=1, max_length=100)
     goal: str = Field(min_length=1, max_length=300)
     domain: str = Field(min_length=1, max_length=100)
     outcome_type: OutcomeType
@@ -79,9 +85,13 @@ class AgentAnswerRequest(BaseModel):
 
 class ConfirmRunRequest(BaseModel):
     request_id: str = Field(min_length=1, max_length=100)
+    version: int = Field(ge=0)
 
 
 class RunUpdateRequest(BaseModel):
+    regenerate: bool = False
+    request_id: str | None = Field(default=None, min_length=1, max_length=100)
+    version: int | None = Field(default=None, ge=0)
     goal: str | None = Field(default=None, min_length=1, max_length=300)
     daily_minutes: int | None = Field(default=None, ge=5, le=240)
     target_date: date | None = None
@@ -99,7 +109,14 @@ class RunUpdateRequest(BaseModel):
 
     @model_validator(mode="after")
     def require_a_change(self):
-        if not self.model_fields_set:
+        for field in {"goal", "daily_minutes", "timezone"} & self.model_fields_set:
+            if getattr(self, field) is None:
+                raise ValueError(f"{field} cannot be null")
+        if self.regenerate and (self.request_id is None or self.version is None):
+            raise ValueError("regeneration requires a request id and input version")
+        if not self.regenerate and not self.model_fields_set.intersection(
+            {"goal", "daily_minutes", "target_date", "timezone"}
+        ):
             raise ValueError("at least one field is required")
         return self
 

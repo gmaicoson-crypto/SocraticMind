@@ -89,6 +89,7 @@ def _conditional_save(
     state: dict[str, Any],
     ai_result: StructuredResult | None = None,
 ) -> RunSnapshot:
+    guard_execution(db, snapshot.user_id, snapshot.id)
     transition(snapshot.status, status)
     next_version = snapshot.version + 1
     token_usage = snapshot.token_usage + (ai_result.token_usage if ai_result else 0)
@@ -142,6 +143,10 @@ def _mark_failed(
     code: str,
     retryable: bool,
 ) -> AgentRun:
+    from .observability import reject_result
+
+    guard_execution(db, snapshot.user_id, snapshot.id)
+    reject_result(db, run_id=snapshot.id, version=snapshot.version, code=code)
     state = deepcopy(snapshot.state)
     state["processing"] = False
     next_version = snapshot.version + 1
@@ -174,16 +179,32 @@ def _mark_failed(
     return _load_owned(db, snapshot.user_id, snapshot.id)
 
 
+def guard_execution(db, user_id, run_id):
+    guard = db.info.get("agent_execution_guard")
+    if guard is not None:
+        _load_owned(db, user_id, run_id, for_update=True)
+        guard(db)
+
+
 def _invoke(
     generator: Generator | None,
     schema: type,
     messages: list[dict],
     snapshot: RunSnapshot,
     call_type: str,
+    *,
+    db: Session,
 ) -> StructuredResult:
+    from .observability import invoke_observed
+
     implementation = generator or generate_structured
-    return implementation(
-        schema,
-        messages,
-        RunContext(run_id=snapshot.id, call_type=call_type, model=snapshot.model),
+    return invoke_observed(
+        db,
+        implementation=implementation,
+        schema=schema,
+        messages=messages,
+        context=RunContext(run_id=snapshot.id, call_type=call_type, model=snapshot.model),
+        user_id=snapshot.user_id,
+        version=snapshot.version,
+        run_id=snapshot.id,
     )

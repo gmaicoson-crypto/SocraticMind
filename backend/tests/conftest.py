@@ -14,11 +14,9 @@ os.environ.setdefault("SECRET_KEY", "test-secret")
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
-from core.database import Base, get_db
+from core.database import Base, get_db, create_runtime_engine
 from core.deps import get_current_user
 from models import User
 from routers import (
@@ -32,15 +30,15 @@ from routers import (
     progress,
     topics,
     attachments,
+    knowledge,
 )
 
 
 @pytest.fixture()
-def db_session():
-    engine = create_engine(
-        "sqlite://",
+def db_session(tmp_path):
+    engine = create_runtime_engine(
+        f"sqlite:///{tmp_path / 'database.sqlite'}",
         connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
     )
     testing_session = sessionmaker(
         autocommit=False,
@@ -54,7 +52,8 @@ def db_session():
         yield session
     finally:
         session.close()
-        Base.metadata.drop_all(bind=engine)
+        # The isolated tmp_path database is discarded by pytest. Dropping mutually
+        # referencing tables is not equivalent to the production deletion paths.
         engine.dispose()
 
 
@@ -85,6 +84,7 @@ def app(db_session, auth_user):
     test_app.include_router(memories.router)
     test_app.include_router(llm.router)
     test_app.include_router(attachments.router)
+    test_app.include_router(knowledge.router)
     from core.errors import install_api_error_handler
 
     install_api_error_handler(test_app)

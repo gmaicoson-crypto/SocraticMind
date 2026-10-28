@@ -31,6 +31,7 @@ export interface DiagnosticResult {
 }
 
 export interface PlanPreviewNode {
+  source_ids?: string[]
   key: string
   label: string
   sub?: string
@@ -49,6 +50,9 @@ export interface PlanPreviewItem {
 }
 
 export interface PlanPreview {
+  sources?: import('./webSearch').FileSource[]
+  evidence_warnings?: string[]
+  evidence_unavailable?: boolean
   topic: string
   emoji: string
   goal: string
@@ -83,6 +87,7 @@ export interface AssessmentCriterionScore {
 }
 
 export interface AssessmentScoreItem {
+  source_ids?: string[]
   question_id: string
   score: number
   max_score?: number
@@ -103,6 +108,8 @@ export interface AssessmentRemediationStep {
 }
 
 export interface AssessmentResult {
+  sources?: import('./webSearch').FileSource[]
+  evidence_unavailable?: boolean
   review_count?: number
   node_id: number
   node_label: string
@@ -153,6 +160,9 @@ export interface AgentRun {
   type: AgentRunType
   status: AgentRunStatus
   version: number
+  processing?: boolean
+  stage?: string | null
+  session_id?: string | null
   step: AgentStep | null
   preview: PlanPreview | null
   result: Record<string, unknown> | AssessmentResult | null
@@ -160,6 +170,8 @@ export interface AgentRun {
 }
 
 export interface OnboardingInput {
+  request_id?: string
+  materials?: import('./knowledge').MaterialRef[]
   topic: string
   goal: string
   domain: string
@@ -175,6 +187,9 @@ export interface OnboardingInput {
 export type TopicPlanInput = Omit<OnboardingInput, 'topic'>
 
 export interface AgentRunUpdate {
+  regenerate?: boolean
+  request_id?: string
+  version?: number
   goal?: string
   daily_minutes?: number
   target_date?: string | null
@@ -272,6 +287,8 @@ export interface ReviewTask {
 }
 
 export interface ReviewDetail {
+  sources?: import('./webSearch').FileSource[]
+  evidence_unavailable?: boolean
   id: number
   version: number
   status: 'pending' | 'resolved'

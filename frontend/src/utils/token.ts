@@ -51,7 +51,9 @@ export function clearAuth() {
   for (const storage of [localStorage, sessionStorage]) {
     const recoveryKeys = Array.from({ length: storage.length }, (_, index) =>
       storage.key(index),
-    ).filter((key): key is string => Boolean(key?.startsWith('sm_agent_runs_')))
+    ).filter((key): key is string =>
+      Boolean(key?.startsWith('sm_agent_runs_') || key?.startsWith('sm_agent_creation_')),
+    )
     recoveryKeys.forEach((key) => storage.removeItem(key))
   }
 }

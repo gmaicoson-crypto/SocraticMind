@@ -37,6 +37,7 @@ ALLOWED_TRANSITIONS: dict[AgentRunStatus, set[AgentRunStatus]] = {
         AgentRunStatus.DIAGNOSING,
         AgentRunStatus.DRAFTING,
         AgentRunStatus.ASSESSING,
+        AgentRunStatus.AWAITING_CONFIRMATION,
         AgentRunStatus.CANCELLED,
     },
     AgentRunStatus.COMPLETED: set(),

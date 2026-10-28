@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, ForeignKey, DateTime, Index
+from sqlalchemy import Column, Integer, String, Float, ForeignKey, DateTime, Index, JSON
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from core.database import Base
@@ -22,6 +22,7 @@ class Node(Base):
     estimated_minutes = Column(Integer, default=30, nullable=False)
     mastery_source = Column(String(30), nullable=True)
     mastery_confidence = Column(Float, nullable=True)
+    material_sources = Column(JSON, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     topic = relationship("Topic", back_populates="nodes")

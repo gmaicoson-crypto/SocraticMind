@@ -12,14 +12,14 @@ from .state_machine import transition
 from .run_store import (
     Generator,
     RunSnapshot,
-    _snapshot,
     _load_owned,
     get_run,
-    _begin_processing,
-    _mark_failed,
 )
-from .plan_generation import _generate_questions, _generate_preview
-from .plan_confirmation import _serialize_node_snapshot, confirm_run
+from .job_execution import dispatch
+from .jobs import commit_command
+from .creation import existing_request, request_hash, persist_new_run
+from .plan_confirmation import _serialize_node_snapshot
+from .grounding import select_materials
 
 
 def start_onboarding(
@@ -28,40 +28,30 @@ def start_onboarding(
     user_id: int,
     request: OnboardingRequest,
     generator: Generator | None = None,
+    deferred: bool = False,
     model_id: str | None = None,
 ) -> AgentRun:
-    params = request.model_dump(mode="json")
+    model = resolve_model_id(model_id or request.model)
+    digest = request_hash(request, model_id=model)
+    previous = existing_request(db, user_id=user_id, request_id=request.request_id, digest=digest)
+    if previous is not None:
+        return previous
+    params = select_materials(db, user_id=user_id, request=request)
     run = AgentRun(
         user_id=user_id,
         session_id=request.session_id,
         run_type=AgentRunType.ONBOARDING.value,
-        status=AgentRunStatus.COLLECTING.value,
-        state_json={"params": params, "processing": False},
-        model=resolve_model_id(model_id or request.model),
+        status="diagnosing" if request.use_diagnostic else "drafting",
+        state_json={
+            "workflow_version": 1,
+            "params": params,
+            "processing": True,
+            "processing_stage": "diagnostic_questions" if request.use_diagnostic else "graph_draft",
+        },
+        model=model,
     )
-    db.add(run)
-    db.flush()
-    run_id = run.id
-    db.commit()
-
-    if request.use_diagnostic:
-        snapshot = _begin_processing(
-            db,
-            user_id=user_id,
-            run_id=run_id,
-            target_status=AgentRunStatus.DIAGNOSING,
-            stage="diagnostic_questions",
-        )
-        return _generate_questions(db, snapshot, generator)
-
-    snapshot = _begin_processing(
-        db,
-        user_id=user_id,
-        run_id=run_id,
-        target_status=AgentRunStatus.DRAFTING,
-        stage="graph_draft",
-    )
-    return _generate_preview(db, snapshot, generator)
+    run_id = persist_new_run(db, run, request_id=request.request_id, digest=digest)
+    return dispatch(db, user_id=user_id, run_id=run_id, generator=generator, deferred=deferred)
 
 
 def start_topic_plan(
@@ -71,8 +61,14 @@ def start_topic_plan(
     topic_id: int,
     request: TopicPlanRequest,
     generator: Generator | None = None,
+    deferred: bool = False,
     model_id: str | None = None,
 ) -> AgentRun:
+    model = resolve_model_id(model_id or request.model)
+    digest = request_hash(request, model_id=model, topic_id=topic_id)
+    previous = existing_request(db, user_id=user_id, request_id=request.request_id, digest=digest)
+    if previous is not None:
+        return previous
     topic = db.query(Topic).filter(Topic.id == topic_id, Topic.user_id == user_id).first()
     if topic is None:
         raise ApiError(status_code=404, code="TOPIC_NOT_FOUND", message="主题不存在")
@@ -82,43 +78,28 @@ def start_topic_plan(
     if not nodes:
         raise ApiError(status_code=409, code="TOPIC_HAS_NO_NODES", message="主题没有可排期节点")
 
-    params = request.model_dump(mode="json")
+    params = select_materials(db, user_id=user_id, request=request, topic_id=topic_id)
     params.update({"topic": topic.title, "existing_topic_id": topic.id})
     run = AgentRun(
         user_id=user_id,
         session_id=request.session_id,
         topic_id=topic.id,
         run_type=AgentRunType.TOPIC_PLAN.value,
-        status=AgentRunStatus.COLLECTING.value,
+        status="diagnosing" if request.use_diagnostic else "drafting",
         state_json={
+            "workflow_version": 1,
             "params": params,
-            "processing": False,
+            "processing": True,
+            "processing_stage": "diagnostic_questions"
+            if request.use_diagnostic
+            else "existing_plan",
             "topic_emoji": topic.emoji,
             "node_snapshot": [_serialize_node_snapshot(node) for node in nodes],
         },
-        model=resolve_model_id(model_id or request.model),
+        model=model,
     )
-    db.add(run)
-    db.flush()
-    run_id = run.id
-    db.commit()
-    if request.use_diagnostic:
-        snapshot = _begin_processing(
-            db,
-            user_id=user_id,
-            run_id=run_id,
-            target_status=AgentRunStatus.DIAGNOSING,
-            stage="diagnostic_questions",
-        )
-        return _generate_questions(db, snapshot, generator)
-    snapshot = _begin_processing(
-        db,
-        user_id=user_id,
-        run_id=run_id,
-        target_status=AgentRunStatus.DRAFTING,
-        stage="existing_plan",
-    )
-    return _generate_preview(db, snapshot, generator)
+    run_id = persist_new_run(db, run, request_id=request.request_id, digest=digest)
+    return dispatch(db, user_id=user_id, run_id=run_id, generator=generator, deferred=deferred)
 
 
 def update_run_parameters(
@@ -128,8 +109,32 @@ def update_run_parameters(
     run_id: str,
     updates: dict[str, Any],
     generator: Generator | None = None,
+    deferred: bool = False,
 ) -> AgentRun:
     run = _load_owned(db, user_id, run_id, for_update=True)
+    updates = dict(updates)
+    regenerate = updates.pop("regenerate", False)
+    request_id = updates.pop("request_id", None)
+    version = updates.pop("version", None)
+    state = deepcopy(run.state_json or {})
+    intent = {"request_id": request_id, "version": version, "updates": updates}
+    prior = state.get("regeneration")
+    if regenerate:
+        if not request_id or version is None:
+            raise ApiError(
+                status_code=422, code="VALIDATION_ERROR", message="重新生成需要请求标识和版本"
+            )
+        if prior and prior["request_id"] == request_id:
+            if prior != intent:
+                raise ApiError(
+                    status_code=409,
+                    code="IDEMPOTENCY_CONFLICT",
+                    message="同一请求不能修改重新生成参数",
+                )
+            db.commit()
+            return _load_owned(db, user_id, run_id)
+    if version is not None and run.version != version:
+        raise ApiError(status_code=409, code="AGENT_STATE_CONFLICT", message="计划预览版本已变化")
     if run.status not in {
         AgentRunStatus.COLLECTING.value,
         AgentRunStatus.AWAITING_CONFIRMATION.value,
@@ -141,21 +146,37 @@ def update_run_parameters(
             message="当前阶段不能修改计划参数",
             retryable=False,
         )
-    state = deepcopy(run.state_json or {})
     params = deepcopy(state["params"])
+    changed = {key for key, value in updates.items() if params.get(key) != value}
+    if not changed and not regenerate:
+        db.commit()
+        return _load_owned(db, user_id, run_id)
     params.update(updates)
     state["params"] = params
-    state.pop("preview", None)
+    previous = state.pop("preview", None)
+    state.pop("confirmation", None)
+    if "goal" in changed:
+        state.pop("graph_draft", None)
+        state.pop("diagnostic_result", None)
+    elif regenerate:
+        state.pop("graph_draft", None)
+    elif previous and not params.get("existing_topic_id") and not state.get("graph_draft"):
+        # Runs created before graph-result caching still reuse their reviewed nodes.
+        state["graph_draft"] = {"nodes": previous["nodes"], "emoji": previous["emoji"]}
+    if regenerate:
+        state["regeneration"] = intent
     state["processing"] = True
     state["processing_stage"] = (
         "existing_plan" if params.get("existing_topic_id") else "graph_draft"
     )
-    run.status = transition(run.status, AgentRunStatus.DRAFTING).value
-    run.state_json = state
-    run.version += 1
-    snapshot = _snapshot(run)
-    db.commit()
-    return _generate_preview(db, snapshot, generator)
+    commit_command(
+        db,
+        run,
+        state=state,
+        status=transition(run.status, AgentRunStatus.DRAFTING).value,
+        event={"kind": "updated"},
+    )
+    return dispatch(db, user_id=user_id, run_id=run_id, generator=generator, deferred=deferred)
 
 
 def submit_answer(
@@ -167,6 +188,7 @@ def submit_answer(
     version: int,
     answer: str,
     generator: Generator | None = None,
+    deferred: bool = False,
 ) -> AgentRun:
     run = _load_owned(db, user_id, run_id, for_update=True)
     state = deepcopy(run.state_json or {})
@@ -195,35 +217,69 @@ def submit_answer(
     ]
     state["answers"] = answers
     state["current_index"] = index + 1
-    run.version += 1
     if index + 1 < len(questions):
         state["step_id"] = f"diagnostic-question-{index + 2}"
-        run.state_json = state
-        db.commit()
-        return _load_owned(db, user_id, run_id)
+        commit_command(db, run, state=state, event={"kind": "answer"})
+    else:
+        state.update(step_id=None, processing=True, processing_stage="diagnostic_score")
+        commit_command(
+            db,
+            run,
+            state=state,
+            status=transition(run.status, AgentRunStatus.DRAFTING).value,
+            event={"kind": "answer"},
+        )
+    return dispatch(db, user_id=user_id, run_id=run_id, generator=generator, deferred=deferred)
 
-    run.status = transition(run.status, AgentRunStatus.DRAFTING).value
-    state.update(
-        {
-            "step_id": None,
-            "processing": True,
-            "processing_stage": "diagnostic_score",
-        }
-    )
-    run.state_json = state
-    snapshot = _snapshot(run)
-    db.commit()
-    return _generate_preview(db, snapshot, generator)
+
+def confirm_run(
+    db: Session,
+    *,
+    user_id: int,
+    run_id: str,
+    request_id: str,
+    version: int | None = None,
+    deferred: bool = False,
+) -> AgentRun:
+    run = _load_owned(db, user_id, run_id, for_update=True)
+    if run.status == AgentRunStatus.COMPLETED.value:
+        return run
+    state = deepcopy(run.state_json or {})
+    decision = state.get("confirmation")
+    if decision and decision["request_id"] == request_id:
+        if version is not None and decision["version"] != version:
+            raise ApiError(
+                status_code=409, code="IDEMPOTENCY_CONFLICT", message="确认请求版本不一致"
+            )
+        return run
+    if (
+        run.status != AgentRunStatus.AWAITING_CONFIRMATION.value
+        or version is not None
+        and run.version != version
+    ):
+        db.rollback()
+        raise ApiError(
+            status_code=409, code="AGENT_STATE_CONFLICT", message="计划预览版本已变化，请刷新后确认"
+        )
+    state["confirmation"] = {"request_id": request_id, "version": run.version}
+    state.update(processing=True, processing_stage="confirm")
+    commit_command(db, run, state=state, event={"kind": "confirm", "request_id": request_id})
+    return dispatch(db, user_id=user_id, run_id=run_id, deferred=deferred)
 
 
 def cancel_run(db: Session, *, user_id: int, run_id: str) -> AgentRun:
     run = _load_owned(db, user_id, run_id, for_update=True)
-    run.status = transition(run.status, AgentRunStatus.CANCELLED).value
+    if run.status == AgentRunStatus.CANCELLED.value:
+        return run
     state = deepcopy(run.state_json or {})
     state["processing"] = False
-    run.state_json = state
-    run.version += 1
-    db.commit()
+    commit_command(
+        db,
+        run,
+        state=state,
+        status=transition(run.status, AgentRunStatus.CANCELLED).value,
+        cancel=True,
+    )
     return _load_owned(db, user_id, run_id)
 
 
@@ -233,6 +289,7 @@ def retry_run(
     user_id: int,
     run_id: str,
     generator: Generator | None = None,
+    deferred: bool = False,
 ) -> AgentRun:
     run = _load_owned(db, user_id, run_id, for_update=True)
     if run.status != AgentRunStatus.FAILED.value or not run.retryable:
@@ -245,22 +302,21 @@ def retry_run(
         )
     state = deepcopy(run.state_json or {})
     stage = state.get("processing_stage")
-    target = (
-        AgentRunStatus.DIAGNOSING if stage == "diagnostic_questions" else AgentRunStatus.DRAFTING
+    target = state.pop("resume_status", None) or (
+        "diagnosing"
+        if stage == "diagnostic_questions"
+        else "awaiting_confirmation"
+        if stage == "confirm"
+        else "drafting"
     )
-    run.status = transition(run.status, target).value
     state["processing"] = True
-    run.state_json = state
-    run.error_code = None
-    run.retryable = None
-    run.version += 1
-    snapshot = _snapshot(run)
-    db.commit()
-    if stage == "diagnostic_questions":
-        return _generate_questions(db, snapshot, generator)
-    if stage in {"diagnostic_score", "graph_draft", "existing_plan"}:
-        return _generate_preview(db, snapshot, generator)
-    return _mark_failed(db, snapshot, code="AGENT_STAGE_UNKNOWN", retryable=False)
+    event = (
+        {"kind": "confirm", "request_id": state["confirmation"]["request_id"]}
+        if stage == "confirm" and state.get("confirmation")
+        else {"kind": "retry"}
+    )
+    commit_command(db, run, state=state, status=transition(run.status, target).value, event=event)
+    return dispatch(db, user_id=user_id, run_id=run_id, generator=generator, deferred=deferred)
 
 
 __all__ = [

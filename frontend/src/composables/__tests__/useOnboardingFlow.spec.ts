@@ -103,7 +103,10 @@ describe('useOnboardingFlow', () => {
 
     await flow.startTopicPlan(9, topicInput)
 
-    expect(agentApi.startTopicPlan).toHaveBeenCalledWith(9, topicInput)
+    expect(agentApi.startTopicPlan).toHaveBeenCalledWith(9, {
+      ...topicInput,
+      request_id: expect.any(String),
+    })
     expect(localStorage.getItem('sm_agent_runs_5')).toContain('run-1')
   })
 })

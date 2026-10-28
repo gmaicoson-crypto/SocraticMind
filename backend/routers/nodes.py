@@ -19,6 +19,7 @@ from services.mastery import revert_mastery
 from schemas.mastery import MasteryRequest
 from schemas.assessment_history import AssessmentHistoryItem, AssessmentHistoryPage
 from services.assessment_results import assessment_result_payload
+from services.knowledge.assessment_context import visible_assessment
 
 router = APIRouter(prefix="/api/nodes", tags=["节点"])
 
@@ -272,8 +273,13 @@ def get_nodes(
                 mastery_source=node.mastery_source,
                 mastery_confidence=node.mastery_confidence,
                 assessment_result=(
-                    assessment_result_payload(
-                        latest.run.result_json, latest.questions_json, latest.answers_json
+                    visible_assessment(
+                        db,
+                        user_id=current_user.id,
+                        topic_id=topic_id,
+                        result=assessment_result_payload(
+                            latest.run.result_json, latest.questions_json, latest.answers_json
+                        ),
                     )
                     if latest and latest.run and latest.run.result_json
                     else None

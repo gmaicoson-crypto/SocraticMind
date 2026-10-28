@@ -38,6 +38,13 @@
               </div>
               <div class="topic-actions">
                 <IconButton
+                  label="管理学习资料"
+                  :disabled="busy"
+                  @click="materialTopicId = Number(topic.id)"
+                >
+                  <BookOpen :size="13" aria-hidden="true" />
+                </IconButton>
+                <IconButton
                   label="编辑主题名称"
                   :disabled="busy"
                   @click="startRename(topic.id, topic.title, $event)"
@@ -106,10 +113,18 @@
     <p class="delete-message">确定删除「{{ confirmTitle }}」吗？此操作无法撤销。</p>
     <p v-if="deleteError" class="delete-error" role="alert">{{ deleteError }}</p>
   </ConfirmDialog>
+  <TopicMaterialsDialog
+    v-if="show && materialTopicId !== null"
+    :key="materialTopicId"
+    :topic-id="materialTopicId"
+    @close="closeMaterials"
+    @busy="materialsSaving = $event"
+  />
 </template>
 
 <script setup lang="ts">
-import { Pencil, Trash2 } from '@lucide/vue'
+import { BookOpen, Pencil, Trash2 } from '@lucide/vue'
+import TopicMaterialsDialog from '../agent/TopicMaterialsDialog.vue'
 // TopicManager 组件，封装局部界面和交互逻辑。
 import { computed, nextTick, ref, watch } from 'vue'
 import { useLearningStore } from '../../stores/learning'
@@ -133,8 +148,15 @@ const editingName = ref('')
 const savingName = ref(false)
 const renameError = ref('')
 const nameInputRef = ref<HTMLInputElement | null>(null)
-const busy = computed(() => deleting.value !== null || savingName.value)
+const materialTopicId = ref<number | null>(null)
+const materialsSaving = ref(false)
+const busy = computed(() => deleting.value !== null || savingName.value || materialsSaving.value)
 let renameTrigger: HTMLButtonElement | null = null
+
+function closeMaterials() {
+  materialTopicId.value = null
+  materialsSaving.value = false
+}
 
 function startRename(id: string, title: string, event: MouseEvent) {
   if (busy.value || editingId.value !== null || confirmId.value !== null) return
@@ -210,6 +232,7 @@ function closeManager() {
   if (busy.value) return
   cancelDelete()
   cancelRename()
+  materialTopicId.value = null
   emit('close')
 }
 
@@ -217,6 +240,8 @@ watch(
   () => props.show,
   (show) => {
     if (!show) {
+      materialTopicId.value = null
+      materialsSaving.value = false
       cancelDelete()
       cancelRename()
     }
