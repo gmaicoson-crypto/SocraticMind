@@ -135,20 +135,64 @@ def claim_job(factory, *, run_id=None, now=None):
             if job is None:
                 db.rollback()
                 continue
-            if run.status in {"cancelled", "completed"}:
-                job.status = run.status
-                job.lease_token = job.lease_until = None
+            if run.status in {"cancelled", "completed", "failed"}:
+                # A business terminal result may precede the job acknowledgement.
+                # Preserve that result, including its original retry policy.
+                changed = (
+                    db.query(AgentJob)
+                    .filter(AgentJob.run_id == candidate_id, _available(now))
+                    .update(
+                        {
+                            "status": run.status,
+                            "error_code": run.error_code,
+                            "lease_token": None,
+                            "lease_until": None,
+                        },
+                        synchronize_session=False,
+                    )
+                )
+                if changed != 1:
+                    db.rollback()
+                    continue
+                interrupt_attempts(
+                    db,
+                    run_id=candidate_id,
+                    code=run.error_code
+                    or (
+                        "AGENT_CANCELLED"
+                        if run.status == "cancelled"
+                        else "AGENT_EXECUTION_INTERRUPTED"
+                    ),
+                )
                 db.commit()
                 continue
-            interrupt_attempts(db, run_id=candidate_id, code="AGENT_LEASE_EXPIRED")
             if job.attempts >= MAX_ATTEMPTS:
+                # SQLite ignores FOR UPDATE. Recheck availability in the write
+                # itself before failing a candidate another connection changed.
+                changed = (
+                    db.query(AgentJob)
+                    .filter(
+                        AgentJob.run_id == candidate_id,
+                        _available(now),
+                        AgentJob.attempts >= MAX_ATTEMPTS,
+                    )
+                    .update({"status": "failed"}, synchronize_session=False)
+                )
+                if changed != 1:
+                    db.rollback()
+                    continue
+                interrupt_attempts(db, run_id=candidate_id, code="AGENT_LEASE_EXPIRED")
                 _fail(run, job, "AGENT_ATTEMPTS_EXHAUSTED")
                 db.commit()
                 continue
             token = str(uuid4())
             changed = (
                 db.query(AgentJob)
-                .filter(AgentJob.run_id == candidate_id, _available(now))
+                .filter(
+                    AgentJob.run_id == candidate_id,
+                    _available(now),
+                    AgentJob.attempts < MAX_ATTEMPTS,
+                )
                 .update(
                     {
                         "status": "running",
@@ -159,10 +203,14 @@ def claim_job(factory, *, run_id=None, now=None):
                     synchronize_session=False,
                 )
             )
+            if changed != 1:
+                db.rollback()
+                continue
+            # Only the winning claimant may close the preceding lease's calls.
+            interrupt_attempts(db, run_id=candidate_id, code="AGENT_LEASE_EXPIRED")
             event = deepcopy(job.event_json)
             db.commit()
-            if changed:
-                return {"run_id": candidate_id, "user_id": user_id, "token": token, "event": event}
+            return {"run_id": candidate_id, "user_id": user_id, "token": token, "event": event}
     return None
 
 

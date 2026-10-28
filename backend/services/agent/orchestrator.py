@@ -309,11 +309,19 @@ def retry_run(
         if stage == "confirm"
         else "drafting"
     )
-    state["processing"] = True
     event = (
         {"kind": "confirm", "request_id": state["confirmation"]["request_id"]}
         if stage == "confirm" and state.get("confirmation")
         else {"kind": "retry"}
+    )
+    # Results can commit before a worker/checkpoint failure. Replaying their
+    # waiting node performs no generation, so retain its ready-for-input state.
+    # The queued/running job still keeps the API busy until recovery finishes.
+    state["processing"] = not (
+        target == "diagnosing"
+        and bool(state.get("questions"))
+        or target == "awaiting_confirmation"
+        and event["kind"] != "confirm"
     )
     commit_command(db, run, state=state, status=transition(run.status, target).value, event=event)
     return dispatch(db, user_id=user_id, run_id=run_id, generator=generator, deferred=deferred)
