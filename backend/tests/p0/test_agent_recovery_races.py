@@ -6,7 +6,7 @@ import pytest
 from sqlalchemy.orm import Query, sessionmaker
 
 from models import AgentJob, AgentRun, AgentStepAttempt
-from services.agent import job_execution, jobs, workflow
+from services.agent import job_execution, jobs, run_store, workflow
 from services.agent.job_execution import execute_claim
 from services.agent.orchestrator import cancel_run, retry_run, start_onboarding
 from services.agent.presentation import serialize_run
@@ -156,3 +156,95 @@ def test_terminal_failure_survives_lost_job_acknowledgement(db_session, auth_use
         failed = db.get(AgentRun, run_id)
         assert (failed.version, failed.error_code, failed.retryable, failed.state_json) == before
         assert failed.status == db.get(AgentJob, run_id).status == "failed"
+
+
+def test_takeover_preserves_failure_committed_after_candidate_read(
+    db_session, auth_user, monkeypatch
+):
+    run = start_onboarding(
+        db_session, user_id=auth_user.id, request=onboarding_request(False), deferred=True
+    )
+    run_id = run.id
+    db_session.commit()
+    factory = sessionmaker(bind=db_session.get_bind(), expire_on_commit=False)
+    claim = jobs.claim_job(factory)
+    with factory() as db:
+        job = db.get(AgentJob, run_id)
+        job.attempts = jobs.MAX_ATTEMPTS
+        expires = job.lease_until
+        db.commit()
+    first = Query.first
+    armed = True
+    expected = None
+
+    def fail_after_read(query):
+        nonlocal armed, expected
+        row = first(query)
+        if armed and isinstance(row, AgentJob) and query._for_update_arg is not None:
+            armed = False
+            # The old worker validated its lease before expiry, then committed
+            # its business failure after the takeover read, losing only the ack.
+            with factory() as other:
+                snapshot = run_store._snapshot(other.get(AgentRun, run_id))
+                jobs.guard_claim(other, claim, now=expires - timedelta(seconds=1))
+                failed = run_store._mark_failed(
+                    other, snapshot, code="PERMANENT_MODEL_ERROR", retryable=False
+                )
+                expected = (failed.version, failed.error_code, failed.retryable, failed.state_json)
+        return row
+
+    monkeypatch.setattr(Query, "first", fail_after_read)
+    assert jobs.claim_job(factory, now=expires + timedelta(seconds=1)) is None
+    assert not armed
+    # A fresh scan can acknowledge the terminal result without rewriting it.
+    assert jobs.claim_job(factory, now=expires + timedelta(seconds=1)) is None
+    with factory() as db:
+        failed = db.get(AgentRun, run_id)
+        assert (failed.version, failed.error_code, failed.retryable, failed.state_json) == expected
+        assert db.get(AgentJob, run_id).status == "failed"
+
+
+def test_terminal_candidate_cannot_acknowledge_a_new_retry(db_session, auth_user, monkeypatch):
+    user_id = auth_user.id
+    run = start_onboarding(
+        db_session, user_id=user_id, request=onboarding_request(False), deferred=True
+    )
+    run_id = run.id
+    db_session.commit()
+    factory = sessionmaker(bind=db_session.get_bind(), expire_on_commit=False)
+    claim = jobs.claim_job(factory)
+    with factory() as db:
+        snapshot = run_store._snapshot(db.get(AgentRun, run_id))
+        run_store._mark_failed(db, snapshot, code="MODEL_UNAVAILABLE", retryable=True)
+        expires = db.get(AgentJob, run_id).lease_until
+    now = expires + timedelta(seconds=1)
+    # Availability timestamps are scheduling hints, not command identities.
+    # Commands accepted within the same clock tick must still be distinguished.
+    monkeypatch.setattr(jobs, "utcnow", lambda: now)
+    first = Query.first
+    armed = True
+
+    def retry_after_read(query):
+        nonlocal armed
+        row = first(query)
+        if armed and isinstance(row, AgentJob) and query._for_update_arg is not None:
+            armed = False
+            assert jobs.claim_job(factory, now=now) is None
+            with factory() as other:
+                retry_run(other, user_id=user_id, run_id=run_id, deferred=True)
+        return row
+
+    monkeypatch.setattr(Query, "first", retry_after_read)
+    assert jobs.claim_job(factory, now=now) is None
+    assert not armed
+    with factory() as db:
+        assert db.get(AgentRun, run_id).status == "drafting"
+        job = db.get(AgentJob, run_id)
+        assert job.status == "queued" and job.event_json == {"kind": "retry"}
+        assert job.attempts == 0 and job.lease_token is None
+    replacement = jobs.claim_job(factory, now=now)
+    assert replacement and replacement["token"] != claim["token"]
+    execute_claim(factory, replacement, generator=FakeGenerator())
+    with factory() as db:
+        assert db.get(AgentRun, run_id).status == "awaiting_confirmation"
+        assert db.get(AgentJob, run_id).status == "waiting"

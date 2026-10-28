@@ -135,6 +135,20 @@ def claim_job(factory, *, run_id=None, now=None):
             if job is None:
                 db.rollback()
                 continue
+            # FOR UPDATE is ignored on SQLite. Fence the business snapshot too:
+            # a result or a new command may commit after the candidate reads.
+            # This write holds the snapshot stable through the job CAS/commit.
+            changed = (
+                db.query(AgentRun)
+                .filter_by(id=candidate_id, user_id=user_id, version=run.version, status=run.status)
+                .update(
+                    {"version": AgentRun.version, "updated_at": AgentRun.updated_at},
+                    synchronize_session=False,
+                )
+            )
+            if changed != 1:
+                db.rollback()
+                continue
             if run.status in {"cancelled", "completed", "failed"}:
                 # A business terminal result may precede the job acknowledgement.
                 # Preserve that result, including its original retry policy.
