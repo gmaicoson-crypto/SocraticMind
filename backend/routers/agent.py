@@ -20,6 +20,7 @@ from schemas.agent import (
 )
 from schemas.mastery import StartAssessmentRequest
 from services.assessments import (
+    can_retry_assessment,
     cancel_assessment,
     retry_assessment,
     start_assessment,
@@ -120,7 +121,12 @@ def serialize_run(run: AgentRun) -> AgentRunResponse:
             }
     error = None
     if run.error_code:
-        error = {"code": run.error_code, "retryable": bool(run.retryable)}
+        error = {
+            "code": run.error_code,
+            "retryable": (
+                can_retry_assessment(run) if run.run_type == "assessment" else bool(run.retryable)
+            ),
+        }
     return AgentRunResponse(
         run_id=run.id,
         type=run.run_type,

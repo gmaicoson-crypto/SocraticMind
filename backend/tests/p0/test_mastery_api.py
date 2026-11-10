@@ -1,9 +1,12 @@
 import json
 
+import pytest
 from sqlalchemy import event
 
-from models import User
+from models import AgentRun, AssessmentAttempt, ChatMessage, MasteryEvent, User
 from routers.agent import get_agent_generator
+from services import assessments
+from services.agent.structured_ai import StructuredAIError
 from tests.p0.test_assessment_service import AssessmentGenerator, create_assessable_node
 
 
@@ -59,6 +62,79 @@ def test_assessment_api_and_answer_protocol(app, client, db_session, auth_user):
     assert node_payload["mastery_source"] == "assessment"
     assert node_payload["assessment_result"]["passed"] is True
     assert node_payload["assessment_result"]["scores"] == run["result"]["scores"]
+
+
+@pytest.mark.parametrize("failure_stage", ["model", "score_save", "mastery"])
+def test_assessment_retry_reuses_all_three_answers(
+    app, client, db_session, auth_user, monkeypatch, failure_stage
+):
+    node, _ = create_assessable_node(db_session, auth_user)
+    generate = AssessmentGenerator()
+    error_code = "AI_OUTPUT_LIMIT" if failure_stage == "model" else "ASSESSMENT_SERVER_ERROR"
+
+    def generator(schema, messages, context):
+        if failure_stage == "model" and context.call_type == "assessment_score":
+            raise StructuredAIError(error_code, "truncated", retryable=False)
+        return generate(schema, messages, context)
+
+    def fail_after(operation):
+        def failing(*args, **kwargs):
+            operation(*args, **kwargs)
+            raise RuntimeError("temporary server failure")
+
+        return failing
+
+    with monkeypatch.context() as patch:
+        if failure_stage == "score_save":
+            patch.setattr(
+                assessments,
+                "upsert_assessment_memories",
+                fail_after(assessments.upsert_assessment_memories),
+            )
+        elif failure_stage == "mastery":
+            patch.setattr(assessments, "record_mastery", fail_after(assessments.record_mastery))
+        app.dependency_overrides[get_agent_generator] = lambda: generator
+        started = client.post(
+            "/api/agent/assessments",
+            json={"node_id": node.id, "request_id": "api-retry", "session_id": "retry-session"},
+        )
+        assert started.status_code == 201
+        run = started.json()
+        run_path = f"/api/agent/runs/{run['run_id']}"
+        answers = ["first answer", "second answer", "third answer"]
+        for answer in answers:
+            response = client.post(
+                f"{run_path}/answers",
+                json={
+                    "step_id": run["step"]["step_id"],
+                    "version": run["version"],
+                    "answer": answer,
+                },
+            )
+            assert response.status_code == 200
+            run = response.json()
+
+    assert run["status"] == "failed"
+    assert run["error"] == {"code": error_code, "retryable": True}
+    assert run["step"] is None
+    if failure_stage == "model":
+        # Runs persisted before this fix may have the old non-retryable flag.
+        db_session.get(AgentRun, run["run_id"]).retryable = False
+        db_session.commit()
+    assert client.get(run_path).json()["error"]["retryable"] is True
+    app.dependency_overrides[get_agent_generator] = lambda: generate
+    calls_before_retry = len(generate.calls)
+    recovered = client.post(f"{run_path}/retry")
+    assert recovered.status_code == 200
+    completed = recovered.json()
+    assert completed["run_id"] == run["run_id"]
+    assert completed["status"] == "completed"
+    assert [score["answer"] for score in completed["result"]["scores"]] == answers
+    assert len(generate.calls) - calls_before_retry == (0 if failure_stage == "mastery" else 1)
+    assert db_session.query(AssessmentAttempt).one().status == "completed"
+    assert db_session.query(MasteryEvent).count() == 1
+    assert db_session.query(ChatMessage).filter_by(message_type="assessment_result").count() == 1
+    assert db_session.query(ChatMessage).filter_by(message_type="agent_answer").count() == 3
 
 
 def test_legacy_results_recover_saved_question_and_answer_text(client, db_session, auth_user):

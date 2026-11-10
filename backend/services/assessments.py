@@ -1,5 +1,8 @@
 import json
+import logging
 from copy import deepcopy
+from dataclasses import replace
+from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
@@ -11,6 +14,7 @@ from schemas.structured_ai import AssessmentQuestions, AssessmentScore, LegacyAs
 from services.agent.run_store import (
     Generator,
     RunSnapshot,
+    _conditional_save,
     _invoke,
     _load_owned,
     _snapshot,
@@ -20,6 +24,20 @@ from services.agent.structured_ai import StructuredAIError, high_risk_notice
 from services.mastery import record_mastery
 from services.assessment_results import assessment_result_payload, scores_match_frozen_rubrics
 from services.memories import upsert_assessment_memories
+
+
+log = logging.getLogger(__name__)
+SCORING_RETRY_CODES = {"AI_REQUEST_FAILED", "AI_OUTPUT_LIMIT"}
+
+
+def can_retry_assessment(run: AgentRun) -> bool:
+    return run.status == AgentRunStatus.FAILED.value and (
+        bool(run.retryable)
+        or (
+            (run.state_json or {}).get("processing_stage") == "assessment_score"
+            and run.error_code in SCORING_RETRY_CODES
+        )
+    )
 
 
 def _owned_node(db: Session, user_id: int, node_id: int) -> Node:
@@ -273,7 +291,9 @@ def start_assessment(
     return _generate_assessment_questions(db, snapshot, generator)
 
 
-def _score_assessment(db: Session, snapshot: RunSnapshot, generator: Generator | None) -> AgentRun:
+def _score_assessment(
+    db: Session, snapshot: RunSnapshot, generator: Generator | None
+) -> RunSnapshot:
     state = deepcopy(snapshot.state)
     weighted = state.get("scoring_version") == 2
     messages = [
@@ -313,16 +333,13 @@ def _score_assessment(db: Session, snapshot: RunSnapshot, generator: Generator |
             ),
         },
     ]
-    try:
-        scored = _invoke(
-            generator,
-            AssessmentScore if weighted else LegacyAssessmentScore,
-            messages,
-            snapshot,
-            "assessment_score",
-        )
-    except StructuredAIError as error:
-        return _fail_assessment(db, snapshot, code=error.code, retryable=error.retryable)
+    scored = _invoke(
+        generator,
+        AssessmentScore if weighted else LegacyAssessmentScore,
+        messages,
+        snapshot,
+        "assessment_score",
+    )
 
     score = scored.value
     params = state["params"]
@@ -331,10 +348,9 @@ def _score_assessment(db: Session, snapshot: RunSnapshot, generator: Generator |
     if scored_question_ids != expected_question_ids or (
         weighted and not scores_match_frozen_rubrics(score, state["questions"])
     ):
-        return _fail_assessment(
-            db,
-            snapshot,
-            code="ASSESSMENT_SCORE_INVALID",
+        raise StructuredAIError(
+            "ASSESSMENT_SCORE_INVALID",
+            "评分结果与原题量规不一致",
             retryable=True,
         )
     professional_review_required = bool(
@@ -373,8 +389,6 @@ def _score_assessment(db: Session, snapshot: RunSnapshot, generator: Generator |
     attempt.scores_json = result["scores"]
     attempt.total_score = score.total_score
     attempt.evidence = score.evidence
-    from datetime import datetime, timezone
-
     attempt.completed_at = datetime.now(timezone.utc)
     node = db.get(Node, params["node_id"])
     from services.reviews import enqueue_wrong_answers
@@ -413,58 +427,65 @@ def _score_assessment(db: Session, snapshot: RunSnapshot, generator: Generator |
         db.rollback()
         raise ApiError(status_code=409, code="AGENT_STATE_CONFLICT", message="评估流程已更新")
     db.commit()
+    return replace(
+        snapshot,
+        version=next_version,
+        state=state,
+        token_usage=snapshot.token_usage + scored.token_usage,
+        latency_ms=snapshot.latency_ms + scored.latency_ms,
+    )
 
-    if passed:
-        try:
+
+def _complete_assessment(
+    db: Session, snapshot: RunSnapshot, generator: Generator | None
+) -> AgentRun:
+    try:
+        if snapshot.state["processing_stage"] == "assessment_score":
+            snapshot = _score_assessment(db, snapshot, generator)
+        if snapshot.state["processing_stage"] == "assessment_mastery":
+            attempt = _attempt_for_run(db, snapshot.id)
             record_mastery(
                 db,
                 user_id=snapshot.user_id,
-                node_id=params["node_id"],
+                node_id=attempt.node_id,
                 source=MasterySource.ASSESSMENT,
                 request_id=f"assessment-{attempt.id}",
                 assessment_id=attempt.id,
             )
-        except ApiError as error:
-            checkpoint = RunSnapshot(
-                id=snapshot.id,
-                user_id=snapshot.user_id,
-                status=AgentRunStatus.ASSESSING.value,
-                version=next_version,
-                state=state,
-                model=snapshot.model,
-                token_usage=snapshot.token_usage + scored.token_usage,
-                latency_ms=snapshot.latency_ms + scored.latency_ms,
-            )
-            return _fail_assessment(
-                db,
-                checkpoint,
-                code=error.code,
-                retryable=False,
-                mark_attempt_failed=False,
-            )
-
-    state["processing"] = False
-    state["processing_stage"] = None
-    updated = (
-        db.query(AgentRun)
-        .filter(
-            AgentRun.id == snapshot.id,
-            AgentRun.user_id == snapshot.user_id,
-            AgentRun.version == next_version,
+        _conditional_save(
+            db,
+            snapshot,
+            status=AgentRunStatus.COMPLETED,
+            state={**snapshot.state, "processing": False, "processing_stage": None},
         )
-        .update(
-            {
-                AgentRun.status: AgentRunStatus.COMPLETED.value,
-                AgentRun.state_json: state,
-                AgentRun.version: next_version + 1,
-            },
-            synchronize_session=False,
+    except StructuredAIError as error:
+        return _fail_assessment(
+            db,
+            snapshot,
+            code=error.code,
+            retryable=error.retryable or error.code in SCORING_RETRY_CODES,
         )
-    )
-    if updated != 1:
+    except ApiError as error:
+        if error.code == "AGENT_STATE_CONFLICT":
+            raise
         db.rollback()
-        raise ApiError(status_code=409, code="AGENT_STATE_CONFLICT", message="评估流程已更新")
-    db.commit()
+        return _fail_assessment(
+            db,
+            snapshot,
+            code=error.code,
+            retryable=bool(error.retryable or error.status_code >= 500),
+            mark_attempt_failed=snapshot.state["processing_stage"] == "assessment_score",
+        )
+    except Exception:
+        db.rollback()
+        log.exception("assessment completion failed run_id=%s", snapshot.id)
+        return _fail_assessment(
+            db,
+            snapshot,
+            code="ASSESSMENT_SERVER_ERROR",
+            retryable=True,
+            mark_attempt_failed=snapshot.state["processing_stage"] == "assessment_score",
+        )
     return _load_owned(db, snapshot.user_id, snapshot.id)
 
 
@@ -523,7 +544,7 @@ def submit_assessment_answer(
     run.state_json = state
     snapshot = _snapshot(run)
     db.commit()
-    return _score_assessment(db, snapshot, generator)
+    return _complete_assessment(db, snapshot, generator)
 
 
 def retry_assessment(
@@ -534,11 +555,7 @@ def retry_assessment(
     generator: Generator | None = None,
 ) -> AgentRun:
     run = _load_owned(db, user_id, run_id, for_update=True)
-    if (
-        run.run_type != AgentRunType.ASSESSMENT.value
-        or run.status != AgentRunStatus.FAILED.value
-        or not run.retryable
-    ):
+    if run.run_type != AgentRunType.ASSESSMENT.value or not can_retry_assessment(run):
         db.rollback()
         raise ApiError(
             status_code=409,
@@ -553,14 +570,14 @@ def retry_assessment(
     run.retryable = None
     state["processing"] = True
     run.state_json = state
-    attempt = _attempt_for_run(db, run.id)
-    attempt.status = AssessmentStatus.ACTIVE.value
+    if stage in {"assessment_questions", "assessment_score"}:
+        _attempt_for_run(db, run.id).status = AssessmentStatus.ACTIVE.value
     snapshot = _snapshot(run)
     db.commit()
     if stage == "assessment_questions":
         return _generate_assessment_questions(db, snapshot, generator)
-    if stage == "assessment_score":
-        return _score_assessment(db, snapshot, generator)
+    if stage in {"assessment_score", "assessment_mastery", "assessment_complete"}:
+        return _complete_assessment(db, snapshot, generator)
     return _fail_assessment(db, snapshot, code="ASSESSMENT_STAGE_UNKNOWN", retryable=False)
 
 

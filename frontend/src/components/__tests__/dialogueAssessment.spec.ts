@@ -12,9 +12,11 @@ import * as agentApi from '../../api/agent'
 import { chatStream, deleteChatSession } from '../../api/chat'
 import { getNodes, getTopics } from '../../api/topic'
 import { getTodayPlan } from '../../api/plans'
+import { getStreak, recordToday } from '../../api/progress'
 import { getAttachmentCapabilities } from '../../api/attachments'
 import { attachmentCapabilities } from '../../test/fixtures/attachments'
 import type { AgentRun, AssessmentResult } from '../../types/learningAgent'
+import { setAuth } from '../../utils/token'
 
 vi.mock('../../api/agent', () => ({
   startAssessment: vi.fn(),
@@ -34,6 +36,16 @@ vi.mock('../../api/chat', () => ({
 }))
 vi.mock('../../api/topic', () => ({ getNodes: vi.fn(), getTopics: vi.fn() }))
 vi.mock('../../api/plans', () => ({ getTodayPlan: vi.fn() }))
+vi.mock('../../api/sessionTitles', () => ({
+  getSessionTitles: vi.fn().mockResolvedValue([]),
+  requestSessionTitle: vi.fn(async (sessionId: string) => ({
+    session_id: sessionId,
+    title: 'Redis',
+    status: 'ready',
+    retry_pending: false,
+  })),
+  renameSessionTitle: vi.fn(),
+}))
 vi.mock('../../api/attachments', () => ({
   getAttachmentCapabilities: vi.fn(),
 }))
@@ -79,6 +91,21 @@ const result: AssessmentResult = {
   next_actions: ['continue_learning'],
 }
 const wrappers: ReturnType<typeof mount>[] = []
+
+function signInLearner() {
+  const user = {
+    id: 1,
+    username: 'learner',
+    email: 'learner@example.com',
+    avatar_url: '',
+    ai_avatar_url: '',
+    bio: '',
+    daily_goal: 30,
+    ai_style: '',
+  }
+  setAuth('test-token', user, false)
+  useLearningStore().setUserInfo(user)
+}
 
 async function mountDialogue(previousResult = false) {
   const learning = useLearningStore()
@@ -197,6 +224,7 @@ describe('persistent assessment overlay', () => {
 
   afterEach(() => {
     wrappers.splice(0).forEach((wrapper) => wrapper.unmount())
+    sessionStorage.clear()
   })
 
   it('opens historical results only from the node card and closes them when the node changes', async () => {
@@ -307,6 +335,87 @@ describe('persistent assessment overlay', () => {
     expect(input.props('input')).toBe('')
   })
 
+  it.each(['assessment', 'onboarding'] as const)(
+    'submits all %s answers with one daily progress sync',
+    async (type) => {
+      signInLearner()
+      const { input } = type === 'assessment' ? await mountAssessment() : await mountDialogue()
+      const current: AgentRun = type === 'assessment' ? run : { ...run, type, status: 'diagnosing' }
+      if (type === 'onboarding') useAgentStore().run = current
+
+      for (let question = 1; question <= 3; question++) {
+        vi.mocked(agentApi.answerAgentRun).mockResolvedValueOnce({
+          ...current,
+          version: question + 1,
+          ...(question < 3
+            ? { step: { ...run.step!, step_id: `q${question + 1}`, current: question + 1 } }
+            : { step: null, status: 'completed', result: type === 'assessment' ? result : null }),
+        })
+        await input.get('textarea').setValue(`第 ${question} 题的答案`)
+        await input.get('textarea').trigger('keydown.enter')
+        await flushPromises()
+      }
+      expect(agentApi.answerAgentRun).toHaveBeenCalledTimes(3)
+      expect(recordToday).toHaveBeenCalledOnce()
+      expect(getStreak).toHaveBeenCalledOnce()
+    },
+  )
+
+  it('restores an onboarding run when returning from the saved normal mode', async () => {
+    signInLearner()
+    const session = createDefaultSession('socratic')
+    const onboarding = { ...run, type: 'onboarding', status: 'diagnosing' } as const
+    localStorage.setItem('sm_socratic_sessions', JSON.stringify([session]))
+    localStorage.setItem('sm_socratic_cur', session.id)
+    localStorage.setItem('sm_chat_mode', 'normal')
+    localStorage.setItem('sm_agent_runs_1', JSON.stringify({ [session.id]: onboarding.run_id }))
+    vi.mocked(agentApi.getAgentRun).mockResolvedValue(onboarding)
+    const wrapper = mount(SocraticDialogue)
+    wrappers.push(wrapper)
+    const input = wrapper.getComponent(DialogueInputBar)
+    await flushPromises()
+    expect(input.props('chatMode')).toBe('normal')
+    expect(agentApi.getAgentRun).not.toHaveBeenCalled()
+
+    input.vm.$emit('update:chatMode', 'socratic')
+    await flushPromises()
+    expect(agentApi.getAgentRun).toHaveBeenLastCalledWith(onboarding.run_id)
+    expect(wrapper.get('.step-prompt').text()).toBe(onboarding.step!.prompt)
+  })
+
+  it('records a new learning day when a dialogue stays open past server midnight', async () => {
+    signInLearner()
+    const dayEnds = Date.now() + 60_000
+    const now = vi.spyOn(Date, 'now').mockReturnValue(dayEnds - 1)
+    vi.mocked(recordToday)
+      .mockResolvedValueOnce(dayEnds)
+      .mockResolvedValueOnce(dayEnds + 86_400_000)
+    try {
+      const { input } = await mountDialogue()
+      const send = async (text: string) => {
+        await input.get('textarea').setValue(text)
+        await input.get('textarea').trigger('keydown.enter')
+        await flushPromises()
+        const callbacks = vi.mocked(chatStream).mock.calls.at(-1)![1]
+        callbacks.onChunk('回复')
+        callbacks.onDone()
+        await flushPromises()
+      }
+
+      await send('午夜前的问题')
+      await send('同一天的问题')
+      expect(recordToday).toHaveBeenCalledOnce()
+      expect(getStreak).toHaveBeenCalledOnce()
+
+      now.mockReturnValue(dayEnds)
+      await send('新一天的问题')
+      expect(recordToday).toHaveBeenCalledTimes(2)
+      expect(getStreak).toHaveBeenCalledTimes(2)
+    } finally {
+      now.mockRestore()
+    }
+  })
+
   it('prevents mode, session, retry and graph actions from dismissing an unfinished assessment', async () => {
     const { wrapper, list, input, history, learning, session, otherSession } =
       await mountAssessment()
@@ -333,6 +442,71 @@ describe('persistent assessment overlay', () => {
     expect(history.props('currentSessionId')).toBe(session.id)
     expect(useAgentStore().run?.run_id).toBe(run.run_id)
   })
+
+  it.each(['scoring failure', 'lost response'])(
+    'retries the same assessment after a third-answer %s',
+    async (failure) => {
+      const thirdQuestion: AgentRun = {
+        ...run,
+        version: 3,
+        step: { ...run.step!, step_id: 'q3', current: 3 },
+      }
+      const failed: AgentRun = {
+        ...run,
+        version: 5,
+        status: 'failed',
+        step: null,
+        error: { code: 'AI_OUTPUT_LIMIT', retryable: true },
+      }
+      vi.mocked(agentApi.startAssessment).mockResolvedValueOnce(thirdQuestion)
+      if (failure === 'lost response') {
+        vi.mocked(agentApi.answerAgentRun).mockRejectedValueOnce(new Error('Network error'))
+        vi.mocked(agentApi.getAgentRun).mockResolvedValueOnce({
+          ...failed,
+          version: 4,
+          status: 'assessing',
+          error: null,
+        })
+        vi.mocked(agentApi.getAgentRun).mockResolvedValueOnce(failed)
+      } else {
+        vi.mocked(agentApi.answerAgentRun).mockResolvedValueOnce(failed)
+      }
+      vi.mocked(agentApi.retryAgentRun).mockResolvedValueOnce({
+        ...failed,
+        version: 8,
+        status: 'completed',
+        result,
+        error: null,
+      })
+      const { wrapper, input } = await mountAssessment()
+      await input.get('textarea').setValue('第三题答案')
+      await input.get('textarea').trigger('keydown.enter')
+      await flushPromises()
+      if (failure === 'lost response') {
+        const refresh = wrapper.get('.assessment-overlay .agent-error button')
+        expect(refresh.text()).toBe('刷新评估状态')
+        await refresh.trigger('click')
+        await flushPromises()
+        expect(agentApi.retryAgentRun).not.toHaveBeenCalled()
+      }
+      const retry = wrapper.get('.assessment-overlay .agent-error button')
+      expect(retry.text()).toBe('重试评估')
+      expect(wrapper.get('.assessment-overlay').text()).toContain('放弃评估')
+      expect(input.props('sendDisabled')).toBe(true)
+      await retry.trigger('click')
+      await flushPromises()
+      expect(agentApi.retryAgentRun).toHaveBeenCalledWith(run.run_id)
+      expect(agentApi.answerAgentRun).toHaveBeenCalledExactlyOnceWith(run.run_id, {
+        step_id: 'q3',
+        version: 3,
+        answer: '第三题答案',
+      })
+      expect(wrapper.find('.assessment-overlay').exists()).toBe(false)
+      expect(document.querySelector('.assessment-result-dialog')?.textContent).toContain(
+        result.evidence,
+      )
+    },
+  )
 
   it('keeps a failed assessment locked and visible until retry or explicit abandonment', async () => {
     vi.mocked(agentApi.answerAgentRun).mockResolvedValueOnce({
@@ -387,6 +561,7 @@ describe('persistent assessment overlay', () => {
   })
 
   it('removes the question overlay and restores normal chat when assessment completes', async () => {
+    signInLearner()
     vi.mocked(agentApi.answerAgentRun).mockResolvedValueOnce({
       ...run,
       status: 'completed',
@@ -414,6 +589,8 @@ describe('persistent assessment overlay', () => {
     await input.get('textarea').trigger('keydown.enter')
     await flushPromises()
     expect(chatStream).toHaveBeenCalledTimes(1)
+    expect(recordToday).toHaveBeenCalledOnce()
+    expect(getStreak).toHaveBeenCalledOnce()
   })
 
   it('keeps a closed result hidden after node refresh, session reentry and page reload', async () => {

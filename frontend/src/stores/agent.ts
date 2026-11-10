@@ -37,6 +37,9 @@ export const useAgentStore = defineStore('agent', () => {
   const canRetry = computed(
     () => run.value?.status === 'failed' && Boolean(run.value.error?.retryable),
   )
+  const canRefreshAssessment = computed(
+    () => run.value?.type === 'assessment' && run.value.status === 'assessing' && !run.value.step,
+  )
   const requestIds = new Map<string, string>()
   let activeRunMutation: Promise<AgentRun | null> | null = null
   let activeMasteryMutation: Promise<MasteryResult | null> | null = null
@@ -47,7 +50,7 @@ export const useAgentStore = defineStore('agent', () => {
     error.value = response.error
       ? {
           code: response.error.code,
-          message: '流程执行失败，请重试',
+          message: response.error.retryable ? '流程执行失败，请重试' : '流程执行失败',
           retryable: response.error.retryable,
         }
       : null
@@ -79,12 +82,16 @@ export const useAgentStore = defineStore('agent', () => {
     }
   }
 
-  function mutateRun(request: () => Promise<AgentRun>, refreshOnConflict = true) {
+  function mutateRun(
+    request: () => Promise<AgentRun>,
+    refreshOnConflict = true,
+    recoverAssessment = false,
+  ) {
     if (activeRunMutation) return activeRunMutation
     const epoch = runEpoch
     submitting.value = true
     error.value = null
-    const currentRunId = run.value?.run_id
+    const currentRun = run.value
     let operation: Promise<AgentRun | null> | null = null
     operation = (async () => {
       try {
@@ -95,9 +102,14 @@ export const useAgentStore = defineStore('agent', () => {
         if (epoch !== runEpoch) return null
         const problem = parseApiError(cause)
         error.value = problem
-        if (problem.status === 409 && currentRunId && refreshOnConflict) {
+        const conflict = problem.status === 409 && refreshOnConflict
+        const uncertain = recoverAssessment && (!problem.status || problem.status >= 500)
+        if (currentRun && (conflict || uncertain)) {
           try {
-            run.value = await getAgentRun(currentRunId)
+            const latest = await getAgentRun(currentRun.run_id)
+            if (epoch !== runEpoch) return null
+            if (recoverAssessment && latest.version > currentRun.version) return acceptRun(latest)
+            if (conflict) run.value = latest
           } catch {
             // Preserve the conflict as the actionable error if refresh also fails.
           }
@@ -134,12 +146,15 @@ export const useAgentStore = defineStore('agent', () => {
   function answer(answerText: string) {
     const current = run.value
     if (!current?.step) return Promise.resolve(null)
-    return mutateRun(() =>
-      answerAgentRun(current.run_id, {
-        step_id: current.step!.step_id,
-        version: current.version,
-        answer: answerText,
-      }),
+    return mutateRun(
+      () =>
+        answerAgentRun(current.run_id, {
+          step_id: current.step!.step_id,
+          version: current.version,
+          answer: answerText,
+        }),
+      true,
+      current.type === 'assessment' && current.step.current === current.step.total,
     )
   }
 
@@ -165,9 +180,15 @@ export const useAgentStore = defineStore('agent', () => {
   }
 
   function retry() {
-    if (!run.value) return Promise.resolve(null)
+    const current = run.value
+    if (!current) return Promise.resolve(null)
+    if (canRefreshAssessment.value) return mutateRun(() => getAgentRun(current.run_id))
     retrying.value = true
-    return mutateRun(() => retryAgentRun(run.value!.run_id)).finally(() => {
+    return mutateRun(
+      () => retryAgentRun(current.run_id),
+      true,
+      current.type === 'assessment',
+    ).finally(() => {
       retrying.value = false
     })
   }
@@ -254,6 +275,7 @@ export const useAgentStore = defineStore('agent', () => {
     preview,
     result,
     canRetry,
+    canRefreshAssessment,
     restoreRun,
     beginOnboarding,
     beginTopicPlan,

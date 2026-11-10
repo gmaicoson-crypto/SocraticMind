@@ -509,13 +509,13 @@ def sync_agent_run_message(
         message_type = "plan_preview"
         content = "学习计划预览已生成"
         detail = {"preview": preview}
-    elif result and payload["type"] == "assessment":
-        message_type = "assessment_result"
-        content = "节点评估已完成"
-        detail = {"result": result}
-    elif result:
-        message_type = "agent_result"
-        content = "学习计划已创建"
+    elif result and not (payload["type"] == "assessment" and error and error["retryable"]):
+        if payload["type"] == "assessment":
+            message_type = "assessment_result"
+            content = "节点评估已完成"
+        else:
+            message_type = "agent_result"
+            content = "学习计划已创建"
         detail = {"result": result}
     elif payload["status"] in {"failed", "cancelled"}:
         message_type = "agent_status"

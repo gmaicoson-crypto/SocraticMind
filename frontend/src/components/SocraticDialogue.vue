@@ -137,15 +137,17 @@
             <strong>{{
               startingAssessment
                 ? '评估中，请稍候…'
-                : (agentStore.error?.message ?? '评估尚未完成，请重试或放弃评估。')
+                : agentStore.retrying
+                  ? '正在重试评估…'
+                  : (agentStore.error?.message ?? '正在处理评估，可刷新查看进度。')
             }}</strong>
             <div>
               <button
-                v-if="agentStore.canRetry"
+                v-if="agentStore.canRetry || agentStore.canRefreshAssessment"
                 :disabled="agentStore.submitting"
                 @click="retryAgentFlow"
               >
-                重试
+                {{ agentStore.canRefreshAssessment ? '刷新评估状态' : '重试评估' }}
               </button>
               <button :disabled="agentStore.submitting" @click="cancelAgentFlow">放弃评估</button>
             </div>
