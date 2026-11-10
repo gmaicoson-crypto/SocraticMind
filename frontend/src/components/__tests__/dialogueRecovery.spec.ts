@@ -9,7 +9,12 @@ import DialogueInputBar from '../dialogue/DialogueInputBar.vue'
 import MessageList from '../dialogue/MessageList.vue'
 import { cancelChatStream, chatStream, getAllMessages, getChatRequestState } from '../../api/chat'
 import { webSnapshot } from '../../test/fixtures/webSearch'
-import { setupDialogueContext, mountDialogue, currentCall } from './dialogueContext.setup'
+import {
+  setupDialogueContext,
+  mountDialogue,
+  currentCall,
+  storedNormalReply,
+} from './dialogueContext.setup'
 
 vi.mock('../../api/chat', () => ({
   chatStream: vi.fn(),
@@ -65,14 +70,14 @@ describe('chat request recovery', () => {
     })
   }
 
-  it.each(['reload', 'switch'] as const)(
+  it.each(['reload', 'switch', 'late sign-in'] as const)(
     'restores a signed-in learning session after %s before accepting another question',
     async (entry) => {
-      signIn()
+      if (entry !== 'late sign-in') signIn()
       const session = createDefaultSession('socratic')
       const previous = createDefaultSession('socratic')
       localStorage.setItem('sm_socratic_sessions', JSON.stringify([session, previous]))
-      localStorage.setItem('sm_socratic_cur', entry === 'reload' ? session.id : previous.id)
+      localStorage.setItem('sm_socratic_cur', entry === 'switch' ? previous.id : session.id)
       localStorage.setItem('sm_pending_chat_requests', JSON.stringify({ [session.id]: 'pending' }))
       vi.mocked(getChatRequestState).mockResolvedValue({
         request_id: 'pending',
@@ -89,6 +94,13 @@ describe('chat request recovery', () => {
         }
         expect(getChatRequestState).toHaveBeenCalledExactlyOnceWith('pending')
         expect(wrapper.findComponent(MessageList).props('isThinking')).toBe(true)
+        if (entry === 'late sign-in') {
+          signIn()
+          await flushPromises()
+          expect(getChatRequestState).toHaveBeenNthCalledWith(2, 'pending')
+          expect(wrapper.findComponent(MessageList).props('isThinking')).toBe(true)
+          expect(cancelChatStream).not.toHaveBeenCalled()
+        }
         expect(chatStream).not.toHaveBeenCalled()
       } finally {
         wrapper.unmount()
@@ -97,7 +109,7 @@ describe('chat request recovery', () => {
     },
   )
 
-  it('selects the target learning session before opening its node stream', async () => {
+  it.each([false, true])('opens the target session with recovery=%s', async (recovering) => {
     signIn()
     const oldSession = createDefaultSession('socratic')
     Object.assign(oldSession, { topicId: 1, topicTitle: '旧主题', nodeKey: 'old-node' })
@@ -105,6 +117,13 @@ describe('chat request recovery', () => {
     Object.assign(nextSession, { topicId: 2, topicTitle: '新主题', nodeKey: 'new-node' })
     localStorage.setItem('sm_socratic_sessions', JSON.stringify([oldSession, nextSession]))
     localStorage.setItem('sm_socratic_cur', oldSession.id)
+    if (recovering) {
+      localStorage.setItem(
+        'sm_pending_chat_requests',
+        JSON.stringify({ [nextSession.id]: 'pending' }),
+      )
+      vi.mocked(getChatRequestState).mockImplementationOnce(() => new Promise(() => {}))
+    }
     const store = useLearningStore()
     store.topics = [
       { id: '1', title: '旧主题', emoji: '', nodes: 1, mastered: 0 },
@@ -125,8 +144,16 @@ describe('chat request recovery', () => {
       }
       store.activeTopicId = '2'
       store.nodes = [node]
+      if (recovering) store.requestTopicOverview(2)
       store.requestNodeDialogue(node)
       await flushPromises()
+      if (recovering) {
+        expect(getChatRequestState).toHaveBeenCalledExactlyOnceWith('pending')
+        expect(wrapper.findComponent(MessageList).props('isThinking')).toBe(true)
+        expect(chatStream).not.toHaveBeenCalled()
+        expect(cancelChatStream).not.toHaveBeenCalled()
+        return
+      }
       expect(chatStream).toHaveBeenCalledOnce()
       expect(currentCall()[0]).toMatchObject({
         sessionId: nextSession.id,
@@ -154,7 +181,7 @@ describe('chat request recovery', () => {
     expect(chatStream).not.toHaveBeenCalled()
   })
 
-  it.each(['abort', 'switch', 'unmount'] as const)(
+  it.each(['abort', 'switch', 'unmount', 'round trip'] as const)(
     'ignores a recovery poll that completes after %s',
     async (exit) => {
       vi.useFakeTimers()
@@ -162,7 +189,7 @@ describe('chat request recovery', () => {
       try {
         let completePoll!: (state: Awaited<ReturnType<typeof getChatRequestState>>) => void
         vi.mocked(getChatRequestState)
-          .mockResolvedValueOnce({ request_id: 'recover', status: 'generating' })
+          .mockImplementationOnce(async (request_id) => ({ request_id, status: 'generating' }))
           .mockImplementationOnce(
             () =>
               new Promise((resolve) => {
@@ -175,22 +202,43 @@ describe('chat request recovery', () => {
         input.vm.$emit('update:input', '下一问')
         input.vm.$emit('send')
         await flushPromises()
-        currentCall()[1].onError(new TypeError('Failed to fetch'))
+        const [request, callbacks] = currentCall()
+        callbacks.onError(new TypeError('Failed to fetch'))
         await flushPromises()
         expect(wrapper.findComponent(MessageList).props('isThinking')).toBe(true)
         await vi.advanceTimersByTimeAsync(2000)
         expect(getChatRequestState).toHaveBeenCalledTimes(2)
-        if (exit === 'unmount') wrapper.unmount()
-        else if (exit === 'switch') input.vm.$emit('update:chatMode', 'socratic')
+        if (exit === 'unmount') {
+          wrapper.unmount()
+          wrapper = undefined
+        } else if (exit === 'switch' || exit === 'round trip')
+          input.vm.$emit('update:chatMode', 'socratic')
         else input.vm.$emit('abort')
         await flushPromises()
-        completePoll({ request_id: 'recover', status: 'generating' })
+        const pending = JSON.parse(localStorage.getItem('sm_pending_chat_requests')!)
+        if (exit === 'abort') {
+          expect(cancelChatStream).toHaveBeenCalledExactlyOnceWith(
+            mounted.session.id,
+            request.requestId,
+          )
+          expect(pending[mounted.session.id]).toBeUndefined()
+        } else {
+          expect(cancelChatStream).not.toHaveBeenCalled()
+          expect(pending[mounted.session.id]).toBe(request.requestId)
+        }
+        if (exit === 'round trip') {
+          vi.mocked(getChatRequestState).mockImplementationOnce(() => new Promise(() => {}))
+          input.vm.$emit('update:chatMode', 'normal')
+          await flushPromises()
+        }
+        completePoll({ request_id: request.requestId, status: 'complete' })
         await flushPromises()
         await vi.advanceTimersByTimeAsync(10000)
-        expect(getChatRequestState).toHaveBeenCalledTimes(2)
-        if (exit !== 'unmount') {
+        expect(getChatRequestState).toHaveBeenCalledTimes(exit === 'round trip' ? 3 : 2)
+        expect(getAllMessages).not.toHaveBeenCalled()
+        if (wrapper) {
           const list = wrapper.findComponent(MessageList)
-          expect(list.props('isThinking')).toBe(false)
+          expect(list.props('isThinking')).toBe(exit === 'round trip')
           expect(list.props('streamingText')).toBe('')
         }
       } finally {
@@ -200,6 +248,98 @@ describe('chat request recovery', () => {
       }
     },
   )
+
+  it.each([
+    ['mode', 'recovering'],
+    ['session', 'recovering'],
+    ['route', 'recovering'],
+    ['mode', 'streaming'],
+    ['route', 'streaming'],
+  ] as const)('resumes the same reply after a %s change while %s', async (destination, phase) => {
+    vi.useFakeTimers()
+    let wrapper: Awaited<ReturnType<typeof mountDialogue>>['wrapper'] | undefined
+    try {
+      const mounted = await mountDialogue()
+      wrapper = mounted.wrapper
+      const sessionId = mounted.session.id
+      const input = () => wrapper!.findComponent(DialogueInputBar)
+      const list = () => wrapper!.findComponent(MessageList)
+      input().vm.$emit('update:input', '下一问')
+      input().vm.$emit('send')
+      await flushPromises()
+      const [request, callbacks] = currentCall()
+      const request_id = request.requestId
+      const msg_ids = { user: 13, ai: 14 }
+      const recovering = phase === 'recovering'
+      const completesWhileAway = recovering && destination === 'route'
+      const statusApi = vi.mocked(getChatRequestState)
+      const generating = { request_id, status: 'generating', msg_ids }
+      if (recovering) statusApi.mockResolvedValueOnce(generating)
+      if (!completesWhileAway) statusApi.mockResolvedValueOnce(generating)
+      statusApi.mockResolvedValueOnce({ request_id, status: 'complete', msg_ids })
+      callbacks.onMsgIds?.(13, 14)
+      callbacks.onChunk('部分回答')
+      if (recovering) callbacks.onError({ code: 'CHAT_STREAM_DISCONNECTED', message: '连接中断' })
+      await flushPromises()
+      expect(list().props('isThinking')).toBe(true)
+
+      if (destination === 'mode') input().vm.$emit('update:chatMode', 'socratic')
+      else if (destination === 'session')
+        wrapper.findComponent(DialogueHistoryPanel).vm.$emit('newSession')
+      else {
+        window.dispatchEvent(new Event('pagehide'))
+        wrapper.unmount()
+        wrapper = undefined
+      }
+      await flushPromises()
+      await vi.advanceTimersByTimeAsync(10000)
+      expect(request.controller?.signal.aborted).toBe(true)
+      expect(getChatRequestState).toHaveBeenCalledTimes(recovering ? 1 : 0)
+      expect(cancelChatStream).not.toHaveBeenCalled()
+      expect(JSON.parse(localStorage.getItem('sm_pending_chat_requests')!)[sessionId]).toBe(
+        request_id,
+      )
+
+      vi.mocked(getAllMessages).mockResolvedValueOnce(storedNormalReply(sessionId, '完整回答'))
+      if (destination === 'mode') input().vm.$emit('update:chatMode', 'normal')
+      else if (destination === 'session')
+        wrapper!.findComponent(DialogueHistoryPanel).vm.$emit('switch', sessionId)
+      else {
+        const learningSession = createDefaultSession('socratic')
+        Object.assign(learningSession, { topicId: 1, topicTitle: '学习主题' })
+        localStorage.setItem('sm_socratic_sessions', JSON.stringify([learningSession]))
+        const store = useLearningStore()
+        vi.spyOn(store, 'setActiveTopic').mockImplementation(async (id) => {
+          store.activeTopicId = id
+        })
+        wrapper = mount(SocraticDialogue, { global: { stubs: { teleport: true } } })
+        expect(store.activeTopicId).toBe('1')
+      }
+      await flushPromises()
+      expect(input().props('chatMode')).toBe('normal')
+      expect(getChatRequestState).toHaveBeenLastCalledWith(request_id)
+      if (!completesWhileAway) {
+        expect(list().props('isThinking')).toBe(true)
+        expect(list().props('streamingText')).toBe(recovering ? '部分回答' : '')
+        await vi.advanceTimersByTimeAsync(2000)
+      }
+      expect(list().props('isThinking')).toBe(false)
+      expect(
+        list()
+          .props('messages')
+          .filter((message) => message.db_id === 14),
+      ).toEqual([expect.objectContaining({ text: '完整回答' })])
+      expect(
+        JSON.parse(localStorage.getItem('sm_pending_chat_requests')!)[sessionId],
+      ).toBeUndefined()
+      expect(chatStream).toHaveBeenCalledTimes(1)
+      expect(cancelChatStream).not.toHaveBeenCalled()
+    } finally {
+      wrapper?.unmount()
+      vi.mocked(getChatRequestState).mockReset()
+      vi.useRealTimers()
+    }
+  })
 
   it.each(['confirmed', 'failed'] as const)(
     'keeps the new request recoverable after a late %s cancellation',
@@ -329,12 +469,12 @@ describe('chat request recovery', () => {
   })
 
   it('uses ids discovered during failed request recovery to retry the same question', async () => {
-    vi.mocked(getChatRequestState).mockResolvedValueOnce({
-      request_id: 'recover',
+    vi.mocked(getChatRequestState).mockImplementationOnce(async (request_id) => ({
+      request_id,
       status: 'failed',
       msg_ids: { user: 13, ai: 14 },
       error: { message: '模型暂时不可用', retryable: true },
-    })
+    }))
     const { wrapper, session } = await mountDialogue()
     const input = wrapper.findComponent(DialogueInputBar)
     input.vm.$emit('update:input', '下一问')
@@ -380,12 +520,12 @@ describe('chat request recovery', () => {
   })
 
   it('polls an accepted request after disconnection without starting a second generation', async () => {
-    vi.mocked(getChatRequestState).mockResolvedValue({
-      request_id: 'placeholder',
+    vi.mocked(getChatRequestState).mockImplementationOnce(async (request_id) => ({
+      request_id,
       status: 'generating',
       preparation: { completed: 1, total: 3 },
       msg_ids: { user: 13, ai: 14 },
-    })
+    }))
     const { wrapper } = await mountDialogue()
     const input = wrapper.findComponent(DialogueInputBar)
     input.vm.$emit('update:input', '总结资料')
@@ -483,19 +623,23 @@ describe('chat request recovery', () => {
     wrapper.unmount()
   })
 
-  it.each(['complete', 'abort'] as const)(
+  it.each(['complete', 'abort', 'already complete', 'history failed'] as const)(
     'restores a disconnected partial reply once and clears the live row after %s',
     async (outcome) => {
       vi.useFakeTimers()
       let wrapper: Awaited<ReturnType<typeof mountDialogue>>['wrapper'] | undefined
       try {
         vi.mocked(getChatRequestState)
-          .mockResolvedValueOnce({
-            request_id: 'recover',
+          .mockImplementationOnce(async (request_id) => ({
+            request_id,
             status: 'generating',
             msg_ids: { user: 13, ai: 14 },
-          })
-          .mockResolvedValueOnce({ request_id: 'recover', status: 'complete' })
+          }))
+          .mockImplementation(async (request_id) => ({
+            request_id,
+            status: 'complete',
+            msg_ids: { user: 13, ai: 14 },
+          }))
         const mounted = await mountDialogue()
         wrapper = mounted.wrapper
         const input = wrapper.findComponent(DialogueInputBar)
@@ -526,26 +670,26 @@ describe('chat request recovery', () => {
           expect(list.props('messages').at(-1)?.text).toBe('部分回答')
           return
         }
-        const stored = {
-          node_key: 'normal',
-          mode: 'normal',
-          topic_id: null,
-          session_id: mounted.session.id,
-          message_type: 'chat' as const,
-          created_at: '2026-01-01T00:00:03Z',
+        const sessionId = mounted.session.id
+        const pending = () =>
+          JSON.parse(localStorage.getItem('sm_pending_chat_requests')!)[sessionId]
+        const history = vi.mocked(getAllMessages)
+        history.mockResolvedValue(storedNormalReply(sessionId, '服务端完整回答'))
+        if (outcome === 'already complete') {
+          vi.mocked(cancelChatStream).mockResolvedValueOnce({ status: 'complete' })
+          input.vm.$emit('abort')
+        } else {
+          if (outcome === 'history failed') history.mockRejectedValueOnce(new Error('历史暂不可用'))
+          await vi.advanceTimersByTimeAsync(2000)
         }
-        vi.mocked(getAllMessages).mockResolvedValue([
-          { ...stored, id: 13, role: 'user', content: '下一问', metadata: null },
-          {
-            ...stored,
-            id: 14,
-            role: 'ai',
-            content: '服务端完整回答',
-            metadata: { status: 'complete', user_message_id: 13 },
-          },
-        ])
-        await vi.advanceTimersByTimeAsync(2000)
+        if (outcome === 'history failed') {
+          expect(pending()).toBe(call[0].requestId)
+          expect(list.props('isThinking')).toBe(true)
+          await vi.advanceTimersByTimeAsync(5000)
+        }
         await flushPromises()
+        expect(pending()).toBeUndefined()
+        expect(wrapper.text()).not.toContain('回复已停止')
         expect(list.props('isThinking')).toBe(false)
         expect(list.props('streamingText')).toBe('')
         expect(list.props('streamingMessageId')).toBeUndefined()

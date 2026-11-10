@@ -171,8 +171,8 @@ export function extractTopic(text: string): string {
   return cleaned.length >= 2 ? cleaned : ''
 }
 
-export function isNewTopicIntent(text: string): boolean {
-  return topicIntentPrefix.test(text.trim()) && extractTopic(text).length >= 2
+export function isNewTopicIntent(text: string, acceptBareTopic = false): boolean {
+  return (acceptBareTopic || topicIntentPrefix.test(text.trim())) && extractTopic(text).length >= 2
 }
 
 export function isConfirmation(text: string): boolean {

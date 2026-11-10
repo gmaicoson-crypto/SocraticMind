@@ -42,6 +42,7 @@ export function useDialogueState(view: {
     normalSessions,
     socraticCurrentId,
     normalCurrentId,
+    chatMode,
     createDefaultSession,
     saveSessions,
     disposeSessionPersistence,
@@ -129,8 +130,6 @@ export function useDialogueState(view: {
   const startingAssessment = ref(false)
 
   const currentTopicId = computed(() => Number(store.activeTopicId) || 0)
-
-  const chatMode = ref<'socratic' | 'normal'>('socratic')
 
   const aiStyleOptions = ['温和', '标准', '严格'] as const
 

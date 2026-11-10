@@ -33,6 +33,27 @@ export function currentCall() {
   return vi.mocked(chatStream).mock.calls.at(-1)!
 }
 
+export function storedNormalReply(sessionId: string, reply: string) {
+  const stored = {
+    node_key: 'normal',
+    mode: 'normal',
+    topic_id: null,
+    session_id: sessionId,
+    message_type: 'chat' as const,
+    created_at: '2026-01-01T00:00:03Z',
+  }
+  return [
+    { ...stored, id: 13, role: 'user' as const, content: '下一问', metadata: null },
+    {
+      ...stored,
+      id: 14,
+      role: 'ai' as const,
+      content: reply,
+      metadata: { status: 'complete', user_message_id: 13 },
+    },
+  ]
+}
+
 export function setupDialogueContext() {
   beforeEach(() => {
     localStorage.clear()

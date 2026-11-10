@@ -15,6 +15,7 @@ type Context = Pick<
   | 'blockDuringAssessment'
   | 'isGenerating'
   | 'isThinking'
+  | 'activeStream'
   | 'currentSession'
   | 'input'
   | 'chatMode'
@@ -53,6 +54,7 @@ export function useDialogueSend(context: Context) {
     blockDuringAssessment,
     isGenerating,
     isThinking,
+    activeStream,
     currentSession,
     input,
     chatMode,
@@ -92,7 +94,7 @@ export function useDialogueSend(context: Context) {
 
   function sendChoiceText(choiceText: string) {
     if (blockDuringAssessment()) return
-    if (isGenerating.value) return
+    if (isGenerating.value || activeStream.value?.recovering) return
     if (isThinking.value) abortChat()
 
     const msgs = currentSession.value?.messages
@@ -126,7 +128,8 @@ export function useDialogueSend(context: Context) {
       return
     }
     const v = input.value.trim()
-    const newTopicIntent = !options?.topicFollowUp && isNewTopicIntent(v)
+    const acceptBareTopic = currentSession.value?.topicId == null && !store.activeNode
+    const newTopicIntent = !options?.topicFollowUp && isNewTopicIntent(v, acceptBareTopic)
     if (
       (!v && (!attachmentsEnabled.value || !attachmentDrafts.drafts.value.length)) ||
       isThinking.value ||
@@ -155,9 +158,7 @@ export function useDialogueSend(context: Context) {
       return
     }
 
-    if (chatMode.value === 'socratic') {
-      store.recordLearning()
-    }
+    if (chatMode.value === 'socratic') void store.recordLearning()
 
     if (chatMode.value === 'socratic' && agentStore.run?.step && activeAgentRun.value) {
       const runId = agentStore.run.run_id
@@ -237,12 +238,9 @@ export function useDialogueSend(context: Context) {
     }
 
     if (newTopicIntent) {
-      const topicName = extractTopic(v)
-      if (topicName.length >= 2) {
-        agentStore.openOnboarding(topicName)
-        scrollToBottom()
-        return
-      }
+      agentStore.openOnboarding(extractTopic(v))
+      scrollToBottom()
+      return
     }
 
     if (currentSession.value?.topicId == null && store.activeNode) {
@@ -258,8 +256,8 @@ export function useDialogueSend(context: Context) {
     if (!store.activeNode) {
       const boundTitle = currentSession.value?.topicTitle
       const hint = boundTitle
-        ? `这是「**${boundTitle}**」的专属对话。请在右侧图谱中点击一个节点，针对该主题的具体知识点来对话 👉`
-        : '请先在右侧图谱中点击一个节点，我们针对具体知识点来对话 👉'
+        ? `这是「**${boundTitle}**」的专属对话。请双击右侧图谱中的节点，进入该节点的学习对话。`
+        : '请告诉我你想学习或练习的主题，例如「前端面试练习」。'
       pushMessage({ role: 'ai', text: hint, time: now() })
       scrollToBottom()
       return
@@ -268,7 +266,7 @@ export function useDialogueSend(context: Context) {
     if (currentSession.value?.topicId && !store.nodes.some((n) => n.id === store.activeNode!.id)) {
       pushMessage({
         role: 'ai',
-        text: `当前对话绑定的是「**${currentSession.value.topicTitle}**」主题，请在该主题的图谱里选一个节点继续。`,
+        text: `当前对话绑定的是「**${currentSession.value.topicTitle}**」主题。请双击该主题图谱中的节点继续对话。`,
         time: now(),
       })
       scrollToBottom()

@@ -9,12 +9,15 @@ const STORAGE_KEYS = {
   normal: 'sm_normal_sessions',
   socraticCurrent: 'sm_socratic_cur',
   normalCurrent: 'sm_normal_cur',
+  mode: 'sm_chat_mode',
 } as const
 
 export const SOCRATIC_WELCOME_TEXT =
   '你好！我是 Socrates，你的 AI 学习导师 ✦\n\n告诉我你想学什么，我来为你生成专属知识图谱，然后引导你一步步掌握它。'
 const NORMAL_WELCOME_TEXT =
   '你好！我是你的 AI 助手 💬\n\n有任何问题都可以直接问我，我会直接给出答案。'
+const TOPIC_WELCOME_HINT = '双击右侧知识图谱中的节点进入对话，或继续提问深入这个主题。'
+const LEGACY_TOPIC_WELCOME_HINT = '点击右侧知识图谱中的节点开始学习，或继续提问深入这个主题。'
 
 export function createWelcomeMessage(mode: ChatMode, text?: string): Message {
   return {
@@ -23,6 +26,20 @@ export function createWelcomeMessage(mode: ChatMode, text?: string): Message {
     time: now(),
     metadata: { is_welcome: true },
   }
+}
+
+export function createTopicWelcomeMessage(title: string): Message {
+  return createWelcomeMessage(
+    'socratic',
+    `这是关于「**${title}**」的专属学习对话 ✦\n\n${TOPIC_WELCOME_HINT}`,
+  )
+}
+
+function topicWelcomeHeading(text: string) {
+  const heading = text.match(/^这是关于「\*\*[\s\S]+\*\*」的专属学习对话 ✦\n\n/)?.[0]
+  if (!heading) return null
+  const hint = text.slice(heading.length)
+  return hint === TOPIC_WELCOME_HINT || hint === LEGACY_TOPIC_WELCOME_HINT ? heading : null
 }
 
 export function isWelcomeMessage(message: Message): boolean {
@@ -38,9 +55,7 @@ export function isWelcomeMessage(message: Message): boolean {
     message.metadata?.is_welcome === true ||
     message.text === SOCRATIC_WELCOME_TEXT ||
     message.text === NORMAL_WELCOME_TEXT ||
-    /^这是关于「\*\*[\s\S]+\*\*」的专属学习对话 ✦\n\n点击右侧知识图谱中的节点开始学习，或继续提问深入这个主题。$/.test(
-      message.text,
-    ) ||
+    Boolean(topicWelcomeHeading(message.text)) ||
     /^你刚才学习的是「\*\*[\s\S]+\*\*」。这个新对话要继续该主题，还是创建一个全新的学习主题呢？$/.test(
       message.text,
     )
@@ -51,7 +66,11 @@ export function normalizeWelcomeMessages(messages: Message[]): Message[] {
   let welcome: Message | undefined
   const conversation = messages.filter((message) => {
     if (!isWelcomeMessage(message)) return true
-    welcome ??= message
+    if (!welcome) {
+      const heading = topicWelcomeHeading(message.text)
+      const text = heading ? heading + TOPIC_WELCOME_HINT : message.text
+      welcome = text === message.text ? message : { ...message, text }
+    }
     return false
   })
   if (!welcome || (messages[0] === welcome && conversation.length === messages.length - 1))
@@ -133,6 +152,9 @@ export function useChatSessions() {
   const normalSessions = ref(loadSessions(STORAGE_KEYS.normal, 'normal'))
   const socraticCurrentId = ref(loadCurrentId(STORAGE_KEYS.socraticCurrent, socraticSessions.value))
   const normalCurrentId = ref(loadCurrentId(STORAGE_KEYS.normalCurrent, normalSessions.value))
+  const chatMode = ref<ChatMode>(
+    localStorage.getItem(STORAGE_KEYS.mode) === 'normal' ? 'normal' : 'socratic',
+  )
   let saveTimer: ReturnType<typeof setTimeout> | null = null
 
   function persistSessions() {
@@ -140,6 +162,7 @@ export function useChatSessions() {
     localStorage.setItem(STORAGE_KEYS.normal, serializeSessions(normalSessions.value))
     localStorage.setItem(STORAGE_KEYS.socraticCurrent, socraticCurrentId.value)
     localStorage.setItem(STORAGE_KEYS.normalCurrent, normalCurrentId.value)
+    localStorage.setItem(STORAGE_KEYS.mode, chatMode.value)
   }
 
   function saveSessions(immediate = false) {
@@ -158,6 +181,7 @@ export function useChatSessions() {
     normalSessions,
     socraticCurrentId,
     normalCurrentId,
+    chatMode,
     createDefaultSession,
     saveSessions,
     disposeSessionPersistence,

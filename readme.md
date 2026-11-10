@@ -287,7 +287,7 @@ python scripts/check_attachment_runtime.py
 ### AI 对话流程
 
 ```text
-用户选择知识节点
+用户双击知识图谱中的节点进入对话
    ↓
 前端携带节点信息与历史对话发起请求
    ↓

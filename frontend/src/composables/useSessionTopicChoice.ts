@@ -52,7 +52,8 @@ export function useSessionTopicChoice(options: SessionTopicChoiceOptions) {
     if (!session?.awaitingTopicChoice || session.suggestedTopicId == null) return false
 
     const continuePrevious = /^A[.、\s]/i.test(value) || /继续|刚才|上次|原主题/.test(value)
-    const chooseNew = /^B[.、\s]/i.test(value) || isNewTopicIntent(value)
+    const choseNewTopicOption =
+      /^B[.、\s]/i.test(value) || /^(创建|重新创建)?新(的)?主题(对话)?$/.test(value.trim())
 
     if (continuePrevious) {
       const topic = topics().find((item) => Number(item.id) === session.suggestedTopicId)
@@ -74,15 +75,13 @@ export function useSessionTopicChoice(options: SessionTopicChoiceOptions) {
       await setActiveTopic(topic.id)
       pushMessage({
         role: 'ai',
-        text: `好的，这个对话将继续学习「**${topic.title}**」。请选择右侧知识图谱中的节点开始提问。`,
+        text: `好的，这个对话将继续学习「**${topic.title}**」。请双击右侧知识图谱中的节点，进入该节点的学习对话。`,
         time: now(),
       })
       return true
     }
 
-    if (chooseNew) {
-      const choseNewTopicOption =
-        /^B[.、\s]/i.test(value) || /^(创建|重新创建)?新(的)?主题(对话)?$/.test(value.trim())
+    if (choseNewTopicOption || isNewTopicIntent(value, true)) {
       const newTopicRequest = session.messages.at(-1)
       session.messages = [
         createWelcomeMessage('socratic'),

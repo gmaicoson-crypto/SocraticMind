@@ -3,6 +3,7 @@ from copy import deepcopy
 import logging
 import re
 from time import perf_counter, monotonic
+from sqlalchemy.orm import Session
 from ai.agent import ChatStreamError
 from models import ChatSession
 from models.progress import ChatMessage
@@ -22,12 +23,13 @@ from .events import stream_events
 log = logging.getLogger(__name__)
 
 
-def generate(context: ChatStreamContext, runtime: ChatStreamDependencies):
-    req, db, started = context.req, context.db, context.started
+def generate(db: Session, context: ChatStreamContext, runtime: ChatStreamDependencies):
+    req = context.req
     model_id, node_label, node_sub = context.model_id, context.node_label, context.node_sub
-    quote_source, prepared = context.quote_source, context.prepared
+    prepared = context.prepared
     has_attachment_context = context.has_attachment_context
-    context_args, context_session_factory = context.context_args, context.context_session_factory
+    context_args = context.context_args.copy()
+    context_session_factory = context.context_session_factory
     user_id, session_pk = context.user_id, context.session_pk
     generation_token = context.generation_token
     model_user_input = context.model_user_input
@@ -121,6 +123,10 @@ def generate(context: ChatStreamContext, runtime: ChatStreamDependencies):
                 message="本次生成已停止",
                 retryable=True,
             )
+        quote_source = (
+            db.get(ChatMessage, req.quote_source_id) if req.quote_source_id is not None else None
+        )
+        context_args["quote_source"] = quote_source
         if has_attachment_context:
             from services.attachments.context import (
                 iter_prepare_attachments,
@@ -135,9 +141,12 @@ def generate(context: ChatStreamContext, runtime: ChatStreamDependencies):
                     "ai_message_id": ids["ai"],
                 }
             )
+            context_session = db.get(ChatSession, session_pk)
+            if context_session is None:
+                check_active()
             for update in iter_prepare_attachments(
                 db,
-                session=started.session,
+                session=context_session,
                 user_message_id=ids["user"],
                 model_id=model_id,
                 user_input=model_user_input,
@@ -422,25 +431,6 @@ def generate(context: ChatStreamContext, runtime: ChatStreamDependencies):
         yield web_event({"type": "web_sources", "web": web, "final": True})
         yield event({"request_state": {"status": "complete"}})
         yield "data: [DONE]\n\n"
-    except GeneratorExit:
-        finish_chat_turn(
-            db,
-            user_id=user_id,
-            request_id=req.request_id,
-            generation_token=generation_token,
-            content="".join(full_text),
-            status="interrupted",
-            error_code="CLIENT_DISCONNECTED",
-            web=web,
-        )
-        checkpoint_interrupted_content(
-            db,
-            user_id=user_id,
-            request_id=req.request_id,
-            generation_token=generation_token,
-            content="".join(full_text),
-        )
-        raise
     except Exception as error:
         known_error = isinstance(error, (ApiError, ChatStreamError))
         code = error.code if known_error else "AI_STREAM_ERROR"

@@ -1,4 +1,4 @@
-import { watch, onMounted, onBeforeUnmount } from 'vue'
+import { watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import type { DialogueSession as Session } from '../../types'
 import type { DialogueState } from './useDialogueState'
 import type { useDialogueStreaming } from './useDialogueStreaming'
@@ -31,9 +31,6 @@ type Context = Pick<
   | 'chatError'
   | 'retryRequest'
   | 'retryUserMessage'
-  | 'clearStreamingState'
-  | 'streamEpoch'
-  | 'streamControl'
   | 'agentStore'
   | 'rebuildFromBackend'
   | 'sessionTitles'
@@ -42,7 +39,7 @@ type Context = Pick<
   | 'assessmentActive'
   | 'disposeSessionPersistence'
 > &
-  Pick<ReturnType<typeof useDialogueStreaming>, 'cancelActiveStream'> &
+  Pick<ReturnType<typeof useDialogueStreaming>, 'resetStreamForNavigation'> &
   Pick<ReturnType<typeof useDialogueAgent>, 'assessmentFlow' | 'onboardingFlow'> &
   Pick<ReturnType<typeof useDialogueSend>, 'streamOverview'>
 
@@ -72,9 +69,6 @@ export function useDialogueNavigation(context: Context) {
     chatError,
     retryRequest,
     retryUserMessage,
-    clearStreamingState,
-    streamEpoch,
-    streamControl,
     agentStore,
     rebuildFromBackend,
     sessionTitles,
@@ -82,13 +76,14 @@ export function useDialogueNavigation(context: Context) {
     findOrCreateTopicSession,
     assessmentActive,
     disposeSessionPersistence,
-    cancelActiveStream,
+    resetStreamForNavigation,
     assessmentFlow,
     onboardingFlow,
     streamOverview,
   } = context
 
   let isHydrated = false
+  let draftSessionId: string | null = null
 
   function switchSession(id: string) {
     if (id === currentSessionId.value) return
@@ -133,7 +128,7 @@ export function useDialogueNavigation(context: Context) {
     scrollToBottom()
   }
 
-  function resetSessionInteraction() {
+  function resetSessionInteraction({ preserveDraft = false } = {}) {
     assessmentResult.value = null
     assessmentHistoryOpen.value = false
     editingSessionId.value = null
@@ -141,16 +136,20 @@ export function useDialogueNavigation(context: Context) {
     sessionNameError.value = ''
     activeReplacementMessage.value = null
     clearQuote()
-    cancelActiveStream()
+    resetStreamForNavigation()
     chatError.value = ''
     retryRequest.value = null
     retryUserMessage.value = null
-    streamEpoch.value += 1
-    streamControl.abortRequest()
-    clearStreamingState()
     agentStore.clearRun()
-    agentStore.closeOnboarding()
-    agentStore.closeTopicPlan()
+    if (!preserveDraft) {
+      draftSessionId = null
+      agentStore.closeOnboarding()
+      agentStore.closeTopicPlan()
+    }
+  }
+
+  function isDraftSession() {
+    return chatMode.value === 'socratic' && currentSessionId.value === draftSessionId
   }
 
   function persistBeforePageHide() {
@@ -161,7 +160,10 @@ export function useDialogueNavigation(context: Context) {
     saveSessions(true)
     window.addEventListener('pagehide', persistBeforePageHide)
     syncSessionTopic(currentSocraticSession.value)
-    isHydrated = true
+    // The initial graph sync should preserve the restored chat mode.
+    void nextTick(() => {
+      isHydrated = true
+    })
   })
 
   watch(
@@ -179,43 +181,32 @@ export function useDialogueNavigation(context: Context) {
     chatMode.value = mode
   }
 
-  watch(chatMode, (mode, previousMode) => {
-    if (mode !== previousMode) resetSessionInteraction()
-
-    scrollToBottom()
-  })
-
   watch(
-    () => agentStore.onboardingTopic,
-    (topic) => {
-      if (!topic) return
-      chatMode.value = 'socratic'
-      if (currentSocraticSession.value?.topicId != null) {
-        const session = createDefaultSession('socratic')
+    [() => agentStore.onboardingTopic, () => agentStore.topicPlanDraft],
+    ([topic, draft]) => {
+      if (!topic && !draft) {
+        draftSessionId = null
+        return
+      }
+      let session = currentSocraticSession.value
+      if (draft) {
+        session = findOrCreateTopicSession(draft.topicId)
+      } else if (session.topicId != null) {
+        session = createDefaultSession('socratic')
         session.awaitingTopicChoice = false
         socraticSessions.value.unshift(session)
-        socraticCurrentId.value = session.id
-        saveSessions()
       }
-      syncSessionTopic(currentSocraticSession.value)
-      resetScrollToBottom()
-    },
-  )
-
-  watch(
-    () => agentStore.topicPlanDraft,
-    (draft) => {
-      if (!draft) return
+      draftSessionId = session.id
       chatMode.value = 'socratic'
-      const session = findOrCreateTopicSession(draft.topicId)
-      syncSessionTopic(session)
       if (socraticCurrentId.value !== session.id) {
         socraticCurrentId.value = session.id
         showHistory.value = false
         saveSessions()
       }
+      syncSessionTopic(session)
       resetScrollToBottom()
     },
+    { immediate: true },
   )
 
   watch(
@@ -229,20 +220,35 @@ export function useDialogueNavigation(context: Context) {
   )
 
   watch(
-    [() => store.userInfo?.id, socraticCurrentId],
-    async ([userId]) => {
-      if (!userId) return
-      resetSessionInteraction()
+    [
+      () => store.userInfo?.id,
+      chatMode,
+      () => (chatMode.value === 'socratic' ? socraticCurrentId.value : null),
+    ],
+    async ([userId, mode], [previousUserId, previousMode], onCleanup) => {
+      const modeChanged = previousMode != null && mode !== previousMode
+      if (!modeChanged && userId === previousUserId && (!userId || mode === 'normal')) return
+      const sameUser = previousUserId == null || userId === previousUserId
+      resetSessionInteraction({ preserveDraft: sameUser && isDraftSession() })
+      if (modeChanged) {
+        saveSessions()
+        scrollToBottom()
+      }
+      if (!userId || mode !== 'socratic') return
+      let stale = false
+      onCleanup(() => {
+        stale = true
+      })
       const restoredAssessment = await assessmentFlow.restore()
-      if (!restoredAssessment) await onboardingFlow.restore()
-      scrollToBottom()
+      if (!stale && !restoredAssessment) await onboardingFlow.restore()
+      if (!stale) scrollToBottom()
     },
     { immediate: true },
   )
 
   watch(
     [() => store.activeTopicId, chatMode],
-    async ([activeTopicId, mode], previous) => {
+    async ([activeTopicId, mode], previous, onCleanup) => {
       if (assessmentActive.value) {
         const topicId = currentSocraticSession.value?.topicId
         if (topicId && activeTopicId !== String(topicId)) {
@@ -254,7 +260,7 @@ export function useDialogueNavigation(context: Context) {
       }
       const previousTopicId = previous?.[0]
       if (mode !== 'socratic') {
-        if (previousTopicId !== undefined && activeTopicId !== previousTopicId) {
+        if (isHydrated && previousTopicId !== undefined && activeTopicId !== previousTopicId) {
           chatMode.value = 'socratic'
         }
         return
@@ -274,7 +280,15 @@ export function useDialogueNavigation(context: Context) {
       if (store.pendingTopicOverviewId === numId && isHydrated) {
         const title = store.topics.find((t) => Number(t.id) === numId)?.title
         store.requestTopicOverview(null)
-        if (title) await streamOverview('topic', title)
+        if (!title) return
+        const sessionId = currentSessionId.value
+        let stale = false
+        onCleanup(() => {
+          stale = true
+        })
+        // Let the target session claim its pending recovery before auto-sending.
+        await nextTick()
+        if (!stale && currentSessionId.value === sessionId) await streamOverview('topic', title)
       }
     },
     { immediate: true },
@@ -320,9 +334,7 @@ export function useDialogueNavigation(context: Context) {
   onBeforeUnmount(() => {
     window.removeEventListener('pagehide', persistBeforePageHide)
     disposeSessionPersistence()
-    cancelActiveStream()
-    streamEpoch.value += 1
-    streamControl.abortRequest()
+    resetStreamForNavigation()
   })
 
   return {

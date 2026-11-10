@@ -87,6 +87,7 @@ describe('conversation openings across refreshes', () => {
     const sessions = setup()
     const session = sessions.history.findOrCreateTopicSession(1)
     const opening = { ...session.messages[0], metadata: undefined }
+    expect(opening.text).toContain('双击右侧知识图谱中的节点进入对话')
     // The opening can be newer than server replies when an older cache is recovered.
     opening.time = '2099-01-01T00:00:00Z'
     session.messages = [opening]
@@ -102,6 +103,30 @@ describe('conversation openings across refreshes', () => {
       '历史回答',
     ])
     sessions.disposeSessionPersistence()
+  })
+
+  it('updates the old topic opening in local storage while preserving saved replies', () => {
+    const session = createDefaultSession('socratic')
+    const opening: Message = {
+      role: 'ai',
+      text: '这是关于「**RAG**」的专属学习对话 ✦\n\n点击右侧知识图谱中的节点开始学习，或继续提问深入这个主题。',
+      time: '23:59',
+    }
+    const reply = { ...opening, db_id: 12 }
+    session.messages = [reply, opening]
+    localStorage.setItem('sm_socratic_sessions', JSON.stringify([session]))
+
+    const sessions = setup()
+    const restored = sessions.socraticSessions.value[0].messages
+    expect(restored).toEqual([
+      {
+        ...opening,
+        text: '这是关于「**RAG**」的专属学习对话 ✦\n\n双击右侧知识图谱中的节点进入对话，或继续提问深入这个主题。',
+      },
+      reply,
+    ])
+    const cached = JSON.parse(localStorage.getItem('sm_socratic_sessions')!) as DialogueSession[]
+    expect(cached[0].messages).toEqual(restored)
   })
 
   it('keeps the topic-choice opening before a saved continuation question', async () => {

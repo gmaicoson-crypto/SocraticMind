@@ -1,10 +1,8 @@
 from dataclasses import dataclass
 from typing import Any, Callable
-from sqlalchemy.orm import Session, sessionmaker
-from models.progress import ChatMessage
+from sqlalchemy.orm import sessionmaker
 from schemas.chat import ChatRequest
 from services.chat_context import PreparedChatContext
-from services.chat_lifecycle import StartedChatTurn
 
 
 @dataclass(frozen=True)
@@ -21,12 +19,9 @@ class ChatStreamDependencies:
 @dataclass(frozen=True)
 class ChatStreamContext:
     req: ChatRequest
-    db: Session
-    started: StartedChatTurn
     model_id: str
     node_label: str
     node_sub: str
-    quote_source: ChatMessage | None
     prepared: PreparedChatContext | None
     has_attachment_context: bool
     context_args: dict

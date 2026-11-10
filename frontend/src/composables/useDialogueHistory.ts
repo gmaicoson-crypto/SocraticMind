@@ -3,7 +3,7 @@ import { getAllMessages } from '../api/chat'
 import type { DialogueSession, Message, Topic } from '../types'
 import { genId, now, nowDate, parseSessionDate } from '../utils/chat'
 import { randomAiAvatar } from '../utils/avatarPresets'
-import { createWelcomeMessage, normalizeWelcomeMessages } from './useChatSessions'
+import { createTopicWelcomeMessage, normalizeWelcomeMessages } from './useChatSessions'
 
 interface DialogueHistoryOptions {
   socraticSessions: Ref<DialogueSession[]>
@@ -118,12 +118,7 @@ export function useDialogueHistory(options: DialogueHistoryOptions) {
       id: genId(),
       name: '新对话',
       aiAvatarUrl: randomAiAvatar('socratic'),
-      messages: [
-        createWelcomeMessage(
-          'socratic',
-          `这是关于「**${title}**」的专属学习对话 ✦\n\n点击右侧知识图谱中的节点开始学习，或继续提问深入这个主题。`,
-        ),
-      ],
+      messages: [createTopicWelcomeMessage(title)],
       updatedAt: nowDate(),
       topicId,
       topicTitle: topic?.title,
@@ -132,10 +127,31 @@ export function useDialogueHistory(options: DialogueHistoryOptions) {
     return session
   }
 
-  async function rebuildFromBackend() {
+  async function rebuildFromBackend(
+    canApply?: () => boolean,
+    expectedReply?: { sessionId: string; messageId: number },
+  ) {
     try {
-      const backendMessages = await getAllMessages(500, 0)
-      if (!backendMessages.length) return
+      const pageSize = 500
+      let page = await getAllMessages(pageSize, 0)
+      if (canApply?.() === false) return false
+      const backendMessages = [...page]
+      if (expectedReply) {
+        while (
+          !page.some(
+            (message) =>
+              message.id === expectedReply.messageId &&
+              message.session_id === expectedReply.sessionId &&
+              message.role === 'ai',
+          )
+        ) {
+          if (page.length < pageSize) return false
+          page = await getAllMessages(pageSize, backendMessages.length)
+          if (canApply?.() === false) return false
+          backendMessages.push(...page)
+        }
+      }
+      if (!backendMessages.length) return true
       const messagesById = new Map(backendMessages.map((message) => [message.id, message]))
       const chatRequestFor = (
         message: (typeof backendMessages)[number],
@@ -293,8 +309,10 @@ export function useDialogueHistory(options: DialogueHistoryOptions) {
       socraticSessions.value = rebuildMode('socratic', socraticSessions.value)
       normalSessions.value = rebuildMode('normal', normalSessions.value)
       saveSessions()
+      return true
     } catch (error) {
       console.warn('从数据库加载历史消息失败', error)
+      return false
     }
   }
 

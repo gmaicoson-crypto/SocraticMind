@@ -91,6 +91,31 @@ describe('restoring message order', () => {
 })
 
 describe('restoring server managed context', () => {
+  it('loads older pages when the completed reply is outside the first page', async () => {
+    const { sessions, history } = createHistory()
+    const latest = Array.from({ length: 500 }, (_, index) =>
+      stored({ id: 600 - index, session_id: 'newer-session' }),
+    )
+    const reply = stored({ id: 12, role: 'ai', content: '恢复的完整回答' })
+    vi.mocked(getAllMessages)
+      .mockResolvedValueOnce(latest)
+      .mockResolvedValueOnce([reply, stored({})])
+
+    const restored = await history.rebuildFromBackend(undefined, {
+      sessionId: 'session',
+      messageId: 12,
+    })
+
+    expect(restored).toBe(true)
+    expect(getAllMessages).toHaveBeenLastCalledWith(500, 500)
+    expect(
+      sessions.value.find((session) => session.id === 'session')?.messages.at(-1),
+    ).toMatchObject({
+      db_id: 12,
+      text: '恢复的完整回答',
+    })
+  })
+
   it('replaces cached superseded replies and restores the original request for later regeneration', async () => {
     const { sessions, history } = createHistory()
     vi.mocked(getAllMessages).mockResolvedValue([

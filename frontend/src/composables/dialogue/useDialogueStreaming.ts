@@ -64,26 +64,34 @@ export function useDialogueStreaming(context: Context) {
   const { pendingRequests, rememberRequest, recoverRequest, stopRecovery } =
     useDialogueRecovery(context)
 
-  function cancelActiveStream(): Promise<boolean> {
+  async function cancelActiveStream() {
     const stream = activeStream.value
     activeStream.value = null
-    if (!stream) return Promise.resolve(true)
-    return cancelChatStream(stream.sessionId, stream.requestId)
-      .then((response) => {
-        stream.cancelled = true
-        rememberRequest(stream.sessionId, null, stream.requestId)
-        stream.onCancelled?.(response?.msg_ids)
-        return true
-      })
-      .catch((error) => {
-        if (
-          currentSession.value?.id === stream.sessionId &&
-          pendingRequests()[stream.sessionId] === stream.requestId
-        ) {
-          chatError.value = `停止请求未确认：${chatErrorMessage(error)}`
-        }
-        return false
-      })
+    if (!stream) return 'cancelled'
+    try {
+      const response = await cancelChatStream(stream.sessionId, stream.requestId)
+      if (response?.status === 'complete') return 'complete'
+      stream.cancelled = true
+      rememberRequest(stream.sessionId, null, stream.requestId)
+      stream.onCancelled?.(response?.msg_ids)
+      return 'cancelled'
+    } catch (error) {
+      if (
+        currentSession.value?.id === stream.sessionId &&
+        pendingRequests()[stream.sessionId] === stream.requestId
+      ) {
+        chatError.value = `停止请求未确认：${chatErrorMessage(error)}`
+      }
+      return 'unconfirmed'
+    }
+  }
+
+  function resetStreamForNavigation() {
+    stopRecovery()
+    // Detach the view from the request. Its persisted ID lets recovery reattach.
+    streamEpoch.value += 1
+    streamControl.abortRequest()
+    clearStreamingState()
   }
 
   function beginStream(sessionId: string, requestId: string = crypto.randomUUID()): StreamContext {
@@ -122,14 +130,24 @@ export function useDialogueStreaming(context: Context) {
     const replacing = stoppingStream?.replacing
     const onPartial = stoppingStream?.onPartial
     retryRequest.value = null
-    chatError.value = '回复已停止。'
+    chatError.value = ''
+    stopRecovery()
     const cancellation = cancelActiveStream()
     const stoppedEpoch = ++streamEpoch.value
-    void cancellation.then(() => {
-      if (streamEpoch.value === stoppedEpoch && !isThinking.value) {
-        retryRequest.value = stoppingStream?.retry ?? null
-        retryUserMessage.value = stoppingStream?.userMessage ?? null
+    void cancellation.then((outcome) => {
+      if (streamEpoch.value !== stoppedEpoch || isThinking.value) return
+      if (outcome === 'complete' && stoppingStream) {
+        recoverRequest(
+          stoppingStream.sessionId,
+          stoppingStream.requestId,
+          stoppedEpoch,
+          stoppingStream,
+        )
+        return
       }
+      if (outcome === 'cancelled') chatError.value = '回复已停止。'
+      retryRequest.value = stoppingStream?.retry ?? null
+      retryUserMessage.value = stoppingStream?.userMessage ?? null
     })
     streamControl.abortRequest()
     const partial = streamingText.value.trim()
@@ -153,7 +171,7 @@ export function useDialogueStreaming(context: Context) {
   }
 
   function streamDialogue(request: DialogueRequest): Promise<void> {
-    if (blockDuringAssessment()) return Promise.resolve()
+    if (blockDuringAssessment() || activeStream.value?.recovering) return Promise.resolve()
     const session = currentSession.value
     if (!session) return Promise.resolve()
     // Freeze ids before dispatch; retry closures never read the current input draft.
@@ -396,9 +414,7 @@ export function useDialogueStreaming(context: Context) {
   }
 
   return {
-    cancelActiveStream,
-    beginStream,
-    isCurrentStream,
+    resetStreamForNavigation,
     abortChat,
     streamDialogue,
     checkStreamingChoices,

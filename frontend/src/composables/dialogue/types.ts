@@ -8,6 +8,7 @@ export interface StreamContext {
   requestId: string
   controller: AbortController
   replacing: boolean
+  recovering?: true
   retry?: () => void
   userMessage?: Message
   onRecovered?: (ids: { user: number; ai: number }) => void

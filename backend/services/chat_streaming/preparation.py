@@ -10,14 +10,15 @@ from models.user import User
 from core.errors import ApiError
 from core.context_budget import ContextWindowExceeded, count_method
 from services.chat_titles import schedule_title
-from services.chat_lifecycle import begin_chat_turn, finish_chat_turn
+from services.chat_lifecycle import begin_chat_turn, finish_chat_turn, get_chat_turn
 from services.attachments.service import summaries_for_messages
+from services.web_search_executor import CapacityExceeded
 
 from schemas.chat import ChatRequest
 from core.user_llm import load_user_profiles
 from typing import Callable
 from .types import ChatStreamContext, ChatStreamDependencies
-from .generation import generate
+from .delivery import start_generation
 from .events import stream_events
 
 log = logging.getLogger(__name__)
@@ -188,7 +189,6 @@ def prepare_chat_stream(
         ai_style=req.ai_style,
         kind=req.kind,
         regenerate=req.regenerate_message_id is not None,
-        quote_source=quote_source,
     )
     from models.attachment import Attachment
 
@@ -208,7 +208,9 @@ def prepare_chat_stream(
         prepared = (
             None
             if has_attachment_context
-            else assemble_chat_context(db, session=started.session, **context_args)
+            else assemble_chat_context(
+                db, session=started.session, quote_source=quote_source, **context_args
+            )
         )
     except Exception as error:
         finish_chat_turn(
@@ -245,18 +247,15 @@ def prepare_chat_stream(
         count_method(model_id),
         prepared.omitted_history if prepared else False,
     )
-    context_session_factory = sessionmaker(bind=db.get_bind())
+    context_session_factory = sessionmaker(bind=db.get_bind(), autoflush=False)
     # No request-scoped read transaction is held while waiting for the provider.
     db.commit()
 
     context = ChatStreamContext(
         req=req,
-        db=db,
-        started=started,
         model_id=model_id,
         node_label=node_label,
         node_sub=node_sub,
-        quote_source=quote_source,
         prepared=prepared,
         has_attachment_context=has_attachment_context,
         context_args=context_args,
@@ -268,8 +267,38 @@ def prepare_chat_stream(
         ids=ids,
         initial_web=initial_web,
     )
+    try:
+        events = start_generation(context, runtime)
+    except CapacityExceeded:
+        finish_chat_turn(
+            db,
+            user_id=user_id,
+            request_id=req.request_id,
+            generation_token=generation_token,
+            content="",
+            status="failed",
+            error_code="AI_BUSY",
+        )
+        turn = get_chat_turn(db, user_id=user_id, request_id=req.request_id)
+        status = "interrupted" if turn is None or turn.status == "interrupted" else "failed"
+        events = iter(
+            (
+                event({"msg_ids": ids}),
+                event({"request_state": {"status": status}}),
+                event(
+                    {
+                        "error": {
+                            "code": "AI_BUSY",
+                            "message": "当前生成请求较多，请稍后重试。",
+                            "retryable": True,
+                        }
+                    }
+                ),
+                "data: [DONE]\n\n",
+            )
+        )
     return StreamingResponse(
-        generate(context, runtime),
+        events,
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",

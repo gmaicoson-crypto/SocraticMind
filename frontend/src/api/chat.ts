@@ -143,7 +143,6 @@ export async function chatStream(request: ChatStreamRequest, callbacks: ChatStre
     () => {
       notifyError(new ChatStreamError('等待回复超时，请重试。', 'CHAT_STREAM_TIMEOUT'))
       controller.abort()
-      void cancelChatStream(sessionId, requestId).catch(() => {})
     },
     5 * 60 * 1000,
   )
