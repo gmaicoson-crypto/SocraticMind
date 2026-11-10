@@ -27,6 +27,7 @@ describe('ModelSelector', () => {
 
   afterEach(() => {
     document.body.innerHTML = ''
+    vi.useRealTimers()
     vi.restoreAllMocks()
   })
 
@@ -35,11 +36,12 @@ describe('ModelSelector', () => {
     const wrapper = mount(ModelSelector)
     await flushPromises()
 
-    expect(wrapper.find('select').exists()).toBe(true)
-    expect(wrapper.find('option[value=""]').text()).toBe('选择模型')
-    expect(wrapper.findAll('option')).toHaveLength(2)
+    expect(wrapper.get('.model-selector').text()).toBe('选择模型')
+    await wrapper.get('.model-selector').trigger('click')
+    expect(wrapper.findAll('.model-option')).toHaveLength(0)
+    expect(wrapper.get('.model-actions button:disabled').text()).toBe('编辑模型')
 
-    await wrapper.get('select').setValue('__add__')
+    await wrapper.get('.model-actions button').trigger('click')
     await flushPromises()
     expect(document.querySelector('.model-dialog h2')?.textContent).toBe('添加模型')
     expect(document.querySelector('.model-overlay')).not.toBeNull()
@@ -53,13 +55,14 @@ describe('ModelSelector', () => {
     wrapper.unmount()
   })
 
-  it('groups environment and user models and switches between them', async () => {
+  it('shows one list of model names with separate actions and switches models', async () => {
     vi.mocked(getLLMModels).mockResolvedValue([
-      { id: 'env:first', name: '系统模型 A', model: 'official-a', source: 'environment' },
+      { id: 'default', name: '默认模型', model: 'official-a', source: 'environment' },
+      { id: 'env:second', name: 'official-b', model: 'official-b', source: 'environment' },
       {
         id: 'custom:second',
         name: '个人模型',
-        model: 'official-b',
+        model: 'custom-model',
         base_url: 'https://b.test/v1',
         source: 'custom',
       },
@@ -67,23 +70,104 @@ describe('ModelSelector', () => {
     const wrapper = mount(ModelSelector)
     await flushPromises()
 
-    expect(wrapper.findAll('option').map((option) => option.text())).toEqual([
-      '选择模型',
-      '系统模型 A',
+    const trigger = wrapper.get('.model-selector')
+    await trigger.trigger('click')
+    expect(wrapper.findAll('.model-option').map((option) => option.text())).toEqual([
+      'official-a',
+      'official-b',
       '个人模型',
+    ])
+    expect(wrapper.findAll('.model-actions button').map((button) => button.text())).toEqual([
       '添加模型',
+      '编辑模型',
     ])
-    expect(wrapper.findAll('optgroup').map((group) => group.attributes('label'))).toEqual([
-      '系统模型',
-      '我的模型',
-    ])
-    expect(useModelsStore().selectedModelId).toBe('env:first')
-    await wrapper.get('select').setValue('custom:second')
+    expect(wrapper.get('.model-option[aria-pressed="true"]').text()).toBe('official-a')
+    expect(wrapper.get('.model-actions button:disabled').text()).toBe('编辑模型')
+    expect(useModelsStore().selectedModelId).toBe('default')
+    expect(trigger.attributes('title')).toBe('official-a')
+    await wrapper.get('.model-option[title="official-b"]').trigger('click')
+    expect(useModelsStore().selectedModelId).toBe('env:second')
+    expect(trigger.attributes('title')).toBe('official-b')
+    expect(trigger.attributes('aria-expanded')).toBe('false')
+    await trigger.trigger('click')
+    await wrapper.get('.model-option[title="个人模型"]').trigger('click')
     expect(useModelsStore().selectedModelId).toBe('custom:second')
-    expect(wrapper.find('option[value="__manage__"]').exists()).toBe(true)
-    await wrapper.get('select').setValue('env:first')
-    expect(useModelsStore().selectedModelId).toBe('env:first')
-    expect(wrapper.find('option[value="__manage__"]').exists()).toBe(false)
+    expect(trigger.attributes('title')).toBe('个人模型')
+    await trigger.trigger('click')
+    expect(wrapper.find('.model-actions button:disabled').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('supports keyboard navigation, Escape and outside dismissal', async () => {
+    vi.mocked(getLLMModels).mockResolvedValue([
+      { id: 'default', name: '默认模型', model: 'official-a', source: 'environment' },
+    ])
+    const wrapper = mount(ModelSelector, { attachTo: document.body })
+    await flushPromises()
+    const trigger = wrapper.get<HTMLButtonElement>('.model-selector')
+    trigger.element.focus()
+    await trigger.trigger('keydown', { key: 'ArrowDown' })
+    const selected = wrapper.get('.model-option[aria-pressed="true"]')
+    expect(document.activeElement).toBe(selected.element)
+    await selected.trigger('keydown', { key: 'ArrowDown' })
+    const addButton = wrapper.get('.model-actions button')
+    expect(document.activeElement).toBe(addButton.element)
+    await addButton.trigger('keydown', { key: 'Escape' })
+    expect(trigger.attributes('aria-expanded')).toBe('false')
+    expect(document.activeElement).toBe(trigger.element)
+
+    await trigger.trigger('click')
+    document.body.dispatchEvent(new Event('pointerdown', { bubbles: true }))
+    await flushPromises()
+    expect(trigger.attributes('aria-expanded')).toBe('false')
+    wrapper.unmount()
+  })
+
+  it('opens to the right on mouse hover and stays open across the pointer gap', async () => {
+    vi.mocked(getLLMModels).mockResolvedValue([])
+    const wrapper = mount(ModelSelector, { attachTo: document.body })
+    await flushPromises()
+    vi.useFakeTimers()
+    const root = wrapper.get('.model-selector-wrap')
+    const trigger = wrapper.get<HTMLButtonElement>('.model-selector')
+    vi.spyOn(trigger.element, 'getBoundingClientRect').mockReturnValue(
+      new DOMRect(100, 350, 120, 24),
+    )
+    const outside = document.createElement('button')
+    document.body.append(outside)
+    outside.focus()
+
+    await root.trigger('pointerenter', { pointerType: 'mouse' })
+    const panel = wrapper.get<HTMLElement>('.model-panel')
+    expect(panel.element.style.left).toBe('226px')
+    expect(document.activeElement).toBe(outside)
+    await root.trigger('pointerleave', { pointerType: 'mouse' })
+    vi.advanceTimersByTime(90)
+    await root.trigger('pointerenter', { pointerType: 'mouse' })
+    vi.advanceTimersByTime(180)
+    expect(wrapper.find('.model-panel').exists()).toBe(true)
+
+    await root.trigger('pointerleave', { pointerType: 'mouse' })
+    await vi.advanceTimersByTimeAsync(180)
+    expect(wrapper.find('.model-panel').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('keeps the panel in the viewport and opens on tap for touch input', async () => {
+    vi.mocked(getLLMModels).mockResolvedValue([])
+    const wrapper = mount(ModelSelector)
+    await flushPromises()
+    const trigger = wrapper.get<HTMLButtonElement>('.model-selector')
+    vi.spyOn(trigger.element, 'getBoundingClientRect').mockReturnValue(
+      new DOMRect(window.innerWidth - 124, 350, 120, 24),
+    )
+    await wrapper.get('.model-selector-wrap').trigger('pointerenter', { pointerType: 'touch' })
+    expect(wrapper.find('.model-panel').exists()).toBe(false)
+
+    await trigger.trigger('click')
+    const panel = wrapper.get<HTMLElement>('.model-panel')
+    expect(panel.element.style.left).toBe(`${window.innerWidth - 228}px`)
+    expect(panel.element.style.bottom).toBe(`${window.innerHeight - 344}px`)
     wrapper.unmount()
   })
 
@@ -110,8 +194,10 @@ describe('ModelSelector', () => {
     const wrapper = mount(ModelSelector)
     await flushPromises()
 
-    await wrapper.get('select').setValue('custom:mine')
-    await wrapper.get('select').setValue('__manage__')
+    await wrapper.get('.model-selector').trigger('click')
+    await wrapper.get('.model-option[title="我的模型"]').trigger('click')
+    await wrapper.get('.model-selector').trigger('click')
+    await wrapper.get('.model-actions button:last-child').trigger('click')
     await flushPromises()
     expect(document.querySelector('.model-dialog h2')?.textContent).toBe('编辑模型')
     expect((document.querySelector('.model-form input') as HTMLInputElement).value).toBe(
@@ -134,7 +220,8 @@ describe('ModelSelector', () => {
     })
     expect(useModelsStore().selectedModel?.name).toBe('更新后的模型')
 
-    await wrapper.get('select').setValue('__manage__')
+    await wrapper.get('.model-selector').trigger('click')
+    await wrapper.get('.model-actions button:last-child').trigger('click')
     await flushPromises()
     const deleteButton = document.querySelector('.delete-button') as HTMLButtonElement
     deleteButton.click()
@@ -156,7 +243,8 @@ describe('ModelSelector', () => {
     })
     const wrapper = mount(ModelSelector)
     await flushPromises()
-    await wrapper.get('select').setValue('__add__')
+    await wrapper.get('.model-selector').trigger('click')
+    await wrapper.get('.model-actions button').trigger('click')
     await flushPromises()
 
     const fields = [...document.querySelectorAll<HTMLInputElement>('.model-form input')]
