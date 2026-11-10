@@ -18,20 +18,23 @@
       </label>
       <label class="field">
         <span>成果类型</span>
-        <select v-model="form.outcome_type" name="outcome_type">
-          <option v-for="option in outcomes" :key="option.value" :value="option.value">
-            {{ option.label }}
-          </option>
-        </select>
+        <BaseSelect
+          v-model="form.outcome_type"
+          name="outcome_type"
+          label="成果类型"
+          :options="outcomes"
+          :disabled="busy"
+        />
       </label>
       <label class="field">
         <span>当前熟悉度</span>
-        <select v-model="form.familiarity" name="familiarity">
-          <option value="new">全新接触</option>
-          <option value="beginner">入门</option>
-          <option value="intermediate">有基础</option>
-          <option value="advanced">较熟练</option>
-        </select>
+        <BaseSelect
+          v-model="form.familiarity"
+          name="familiarity"
+          label="当前熟悉度"
+          :options="familiarities"
+          :disabled="busy"
+        />
       </label>
       <label class="field">
         <span>每日分钟</span>
@@ -70,6 +73,7 @@ import { reactive, watch } from 'vue'
 import type { OnboardingInput, OutcomeType } from '../../types/learningAgent'
 import BaseButton from '../ui/BaseButton.vue'
 import BaseInput from '../ui/BaseInput.vue'
+import BaseSelect from '../ui/BaseSelect.vue'
 
 const props = withDefaults(
   defineProps<{
@@ -100,6 +104,13 @@ const outcomes: { value: OutcomeType; label: string }[] = [
   { value: 'expression', label: '表达输出' },
   { value: 'creation', label: '创作实践' },
   { value: 'mixed', label: '综合目标' },
+]
+
+const familiarities: { value: OnboardingInput['familiarity']; label: string }[] = [
+  { value: 'new', label: '全新接触' },
+  { value: 'beginner', label: '入门' },
+  { value: 'intermediate', label: '有基础' },
+  { value: 'advanced', label: '较熟练' },
 ]
 
 const browserTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
@@ -179,8 +190,7 @@ h3 {
 .field-wide {
   grid-column: 1 / -1;
 }
-.field :deep(.ui-input),
-select {
+.field :deep(.ui-input) {
   width: 100%;
   min-width: 0;
   height: 30px;

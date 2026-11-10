@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createPinia } from 'pinia'
 import Home from '../Home.vue'
+import { useLearningStore } from '../../stores/learning'
 
 vi.mock('../../composables/useStudyTimer', () => ({ useStudyTimer: vi.fn() }))
 
@@ -36,12 +37,14 @@ describe('Home plan tab', () => {
   })
 
   it('switches between dialogue and the shared workspace on narrow screens', async () => {
+    const pinia = createPinia()
+    const learning = useLearningStore(pinia)
+    learning.recommendations = [{ title: 'Rust', emoji: 'R', reason: 'Systems' }]
     const wrapper = mount(Home, {
       global: {
-        plugins: [createPinia()],
+        plugins: [pinia],
         stubs: {
           TopBar: true,
-          Sidebar: true,
           SocraticDialogue: true,
           KnowledgeGraph: true,
           NotesPanel: true,
@@ -54,5 +57,9 @@ describe('Home plan tab', () => {
     await wrapper.findAll('.mobile-pane-tabs button')[1].trigger('click')
     expect(wrapper.find('.dialogue-col').classes()).toContain('mobile-hidden')
     expect(wrapper.find('.right-col').classes()).not.toContain('mobile-hidden')
+    await wrapper.get('.recommend-row').trigger('click')
+    expect(wrapper.find('.dialogue-col').classes()).not.toContain('mobile-hidden')
+    expect(wrapper.find('.right-col').classes()).toContain('mobile-hidden')
+    wrapper.unmount()
   })
 })

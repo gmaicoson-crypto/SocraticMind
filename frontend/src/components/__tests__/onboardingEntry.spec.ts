@@ -3,6 +3,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import Sidebar from '../Sidebar.vue'
 import SocraticDialogue from '../SocraticDialogue.vue'
+import OnboardingForm from '../agent/OnboardingForm.vue'
 import { createDefaultSession } from '../../composables/useChatSessions'
 import { useAgentStore } from '../../stores/agent'
 import { useLearningStore } from '../../stores/learning'
@@ -23,6 +24,10 @@ vi.mock('../../api/chat', () => ({
 vi.mock('../../api/progress', () => ({
   getStreak: vi.fn().mockResolvedValue({ streak: 0, total_days: 0, recent: [] }),
   recordToday: vi.fn().mockResolvedValue(undefined),
+}))
+
+vi.mock('../../api/sessionTitles', () => ({
+  getSessionTitles: vi.fn().mockResolvedValue([]),
 }))
 
 vi.mock('../../api/attachments', () => ({
@@ -77,6 +82,49 @@ describe('onboarding entry points', () => {
     expect(agent.onboardingTopic).toBe('Rust')
     dialogue.unmount()
   })
+
+  it.each([
+    ['socratic', false],
+    ['normal', false],
+    ['normal', true],
+  ] as const)(
+    'opens a sidebar recommendation from %s mode with dialogue mount deferred: %s',
+    async (mode, deferredMount) => {
+      const learning = useLearningStore()
+      learning.recommendations = [{ title: 'Rust', emoji: 'R', reason: 'Systems' }]
+      learning.setUserInfo({
+        id: 1,
+        username: 'learner',
+        email: 'learner@example.com',
+        avatar_url: '',
+        ai_avatar_url: '',
+        bio: '',
+        daily_goal: 30,
+        ai_style: '',
+      })
+      const previous = seedTopicDialogue()
+      localStorage.setItem('sm_chat_mode', mode)
+      const sidebar = mount(Sidebar)
+      const mounted = deferredMount ? null : mount(SocraticDialogue)
+      await flushPromises()
+
+      await sidebar.get('.recommend-row').trigger('click')
+      const dialogue = mounted ?? mount(SocraticDialogue)
+      try {
+        await flushPromises()
+        const card = dialogue.getComponent(OnboardingForm)
+        expect(card.props('topic')).toBe('Rust')
+        expect(card.props('sessionId')).not.toBe(previous.id)
+        expect(learning.activeTopicId).toBe('')
+
+        await dialogue.get('button[title="新建对话"]').trigger('click')
+        expect(dialogue.findComponent(OnboardingForm).exists()).toBe(false)
+      } finally {
+        sidebar.unmount()
+        dialogue.unmount()
+      }
+    },
+  )
 
   it('toggles the sidebar and persists the collapsed state', async () => {
     const pinia = createPinia()
@@ -144,7 +192,7 @@ describe('onboarding entry points', () => {
     dialogue.unmount()
   })
 
-  function mountTopicDialogue() {
+  function seedTopicDialogue() {
     const learning = useLearningStore()
     learning.topics = [{ id: '7', title: 'RAG', nodes: 1, mastered: 0, emoji: 'R' }]
     learning.activeTopicId = '7'
@@ -160,8 +208,51 @@ describe('onboarding entry points', () => {
     }
     localStorage.setItem('sm_socratic_sessions', JSON.stringify([session]))
     localStorage.setItem('sm_socratic_cur', session.id)
+    return session
+  }
+
+  function mountTopicDialogue() {
+    const session = seedTopicDialogue()
     return { dialogue: mount(SocraticDialogue), session }
   }
+
+  it.each([false, true])(
+    'opens a bare learning goal with prior topic: %s',
+    async (hasPriorTopic) => {
+      const dialogue = hasPriorTopic ? mountTopicDialogue().dialogue : mount(SocraticDialogue)
+      await flushPromises()
+      if (hasPriorTopic) await dialogue.get('button[title="新建对话"]').trigger('click')
+
+      const textarea = dialogue.get('textarea')
+      await textarea.setValue('前端面试练习')
+      await textarea.trigger('keydown.enter')
+      await flushPromises()
+
+      expect(useAgentStore().onboardingTopic).toBe('前端面试练习')
+      expect(dialogue.get('.onboarding-form h3').text()).toBe('前端面试练习')
+      expect(dialogue.text()).not.toContain('请双击右侧图谱中的节点')
+      expect(chatStream).not.toHaveBeenCalled()
+      dialogue.unmount()
+    },
+  )
+
+  it('routes bare text to the selected node in a bound learning dialogue', async () => {
+    const { dialogue, session } = mountTopicDialogue()
+    await flushPromises()
+    const textarea = dialogue.get('textarea')
+    await textarea.setValue('检索器原理')
+    await textarea.trigger('keydown.enter')
+    await flushPromises()
+
+    expect(useAgentStore().onboardingTopic).toBeNull()
+    expect(vi.mocked(chatStream).mock.calls[0]?.[0]).toMatchObject({
+      userInput: '检索器原理',
+      topicId: 7,
+      nodeKey: 'retrieval',
+      sessionId: session.id,
+    })
+    dialogue.unmount()
+  })
 
   it('sends topic recommendations as follow-ups and refreshes after three completed turns', async () => {
     vi.mocked(getSuggestions)

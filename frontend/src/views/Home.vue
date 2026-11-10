@@ -2,7 +2,7 @@
   <div class="app-shell">
     <TopBar />
     <div class="app-body">
-      <Sidebar />
+      <Sidebar @recommendation-opened="mobilePane = 'dialogue'" />
       <main class="app-main" ref="mainRef">
         <div class="mobile-pane-tabs" aria-label="移动端主视图">
           <button :class="{ active: mobilePane === 'dialogue' }" @click="mobilePane = 'dialogue'">

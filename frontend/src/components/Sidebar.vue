@@ -143,6 +143,7 @@ import { useUiStore } from '../stores/ui'
 
 const TopicManager = defineAsyncComponent(() => import('./navigation/TopicManager.vue'))
 
+const emit = defineEmits<{ recommendationOpened: [] }>()
 const store = useLearningStore()
 const uiStore = useUiStore()
 const showManager = ref(false)
@@ -185,6 +186,7 @@ async function refreshRecommend() {
 
 function handleRecommend(title: string) {
   const opened = store.openOnboarding(title)
+  if (opened) emit('recommendationOpened')
   showToastMsg(opened ? `请完善《${title}》的学习目标` : '请先完成当前学习流程')
 }
 
