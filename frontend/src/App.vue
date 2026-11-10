@@ -13,9 +13,9 @@ import { getToken, updateUser } from './utils/token'
 
 const store = useLearningStore()
 const models = useModelsStore()
+store.loadUserFromStorage()
 
 onMounted(async () => {
-  store.loadUserFromStorage()
   if (getToken()) {
     const refreshProfile = getMe()
       .then((user) => {
@@ -23,9 +23,10 @@ onMounted(async () => {
         updateUser(user)
       })
       .catch(() => {})
-    await Promise.all([refreshProfile, store.fetchTopics(), models.fetchModels()])
-
-    await store.recordLearning()
+    const syncProgress = store.userInfo?.id
+      ? store.recordLearning()
+      : refreshProfile.then(() => store.recordLearning())
+    await Promise.all([refreshProfile, syncProgress, store.fetchTopics(), models.fetchModels()])
   }
 })
 </script>

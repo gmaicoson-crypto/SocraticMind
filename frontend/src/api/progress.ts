@@ -9,7 +9,8 @@ export interface StreakData {
 }
 
 export async function recordToday() {
-  await api.post('/api/progress/record')
+  const res = await api.post<{ next_record_at_ms?: number }>('/api/progress/record')
+  return res.data.next_record_at_ms
 }
 
 export async function getStreak() {

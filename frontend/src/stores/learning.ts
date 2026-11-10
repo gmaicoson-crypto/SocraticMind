@@ -73,7 +73,6 @@ export const useLearningStore = defineStore('learning', () => {
     clearGraph: topicsStore.clearGraph,
     addMessage: dialogueStore.addMessage,
     requestTopicOverview: dialogueStore.requestTopicOverview,
-    fetchStreak: progressStore.fetchStreak,
     recordLearning: progressStore.recordLearning,
     beginOnboarding: agentStore.beginOnboarding,
     openOnboarding: agentStore.openOnboarding,

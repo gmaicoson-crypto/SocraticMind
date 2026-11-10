@@ -9,7 +9,7 @@
         :mastered-count="stats.mastered_count"
         :topic-count="store.topics.length"
         :chat-count="stats.chat_count"
-        :streak="store.streakData.streak"
+        :streak="stats.streak"
         @back="router.push('/')"
         @edit="showEditModal = true"
       />
@@ -115,7 +115,7 @@ const EditProfileModal = defineAsyncComponent(
 const AgentMemorySection = defineAsyncComponent(
   () => import('../components/profile/AgentMemorySection.vue'),
 )
-import { getProfileStats, recordToday } from '../api/progress'
+import { getProfileStats } from '../api/progress'
 import { loadTodayProgress } from '../utils/dailyGoal'
 import type { ProfileStats } from '../api/progress'
 
@@ -146,17 +146,9 @@ const stats = shallowRef<ProfileStats>({
 })
 
 onMounted(async () => {
+  await store.recordLearning()
   try {
-    await recordToday()
-  } catch (err) {
-    console.warn('记录今日学习失败', err)
-  }
-  try {
-    const data = await getProfileStats()
-    stats.value = data
-
-    store.streakData.streak = data.streak
-    store.streakData.total_days = data.total_days
+    stats.value = await getProfileStats()
   } catch (err) {
     console.error('加载统计数据失败', err)
   }

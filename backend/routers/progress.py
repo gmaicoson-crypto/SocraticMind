@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import String, func
-from datetime import date, timedelta
+from datetime import date, datetime, time, timedelta
 from core.database import get_db
 from core.deps import get_current_user
 from models.user import User
@@ -11,10 +11,6 @@ from models.progress import LearningRecord, ChatMessage
 from models.progress_archive import ArchivedChatActivity, ArchivedMastery
 
 router = APIRouter(prefix="/api/progress", tags=["进度"])
-
-
-def today_str() -> str:
-    return date.today().isoformat()
 
 
 def _compute_streak(learned_dates: set[str]) -> int:
@@ -38,19 +34,25 @@ def record_today(
     db: Session = Depends(get_db),
 ):
     """记录今日打卡，幂等操作：同一天重复调用不会重复写入。"""
-    today = today_str()
+    today = date.today()
+    date_key = today.isoformat()
     exists = (
         db.query(LearningRecord)
         .filter(
             LearningRecord.user_id == current_user.id,
-            LearningRecord.date == today,
+            LearningRecord.date == date_key,
         )
         .first()
     )
     if not exists:
-        db.add(LearningRecord(user_id=current_user.id, date=today))
+        db.add(LearningRecord(user_id=current_user.id, date=date_key))
         db.commit()
-    return {"date": today, "recorded": True}
+    next_day = datetime.combine(today + timedelta(days=1), time.min)
+    return {
+        "date": date_key,
+        "recorded": True,
+        "next_record_at_ms": int(next_day.timestamp() * 1000),
+    }
 
 
 @router.get("/streak")
